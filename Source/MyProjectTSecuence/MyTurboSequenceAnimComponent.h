@@ -15,8 +15,12 @@ class MYPROJECTTSECUENCE_API UMyTurboSequenceAnimComponent : public UActorCompon
 public:
 	// Aquí van las funciones y variables públicas (accesibles desde fuera)
 	UMyTurboSequenceAnimComponent();
+
 	UFUNCTION(BlueprintCallable, Category = "TurboSequence")
 	void SetTurboSequenceAnimation(class UAnimSequence *NewAnimation);
+
+	UFUNCTION(BlueprintCallable, Category = "TurboSequence")
+	void InitializeTurboSequence(class UTurboSequence_MeshAsset_Lf *TSAsset, const FTransform &SpawnTransform);
 
 protected:
 	// Aquí van funciones/variables protegidas (accesibles desde clases hijas)
