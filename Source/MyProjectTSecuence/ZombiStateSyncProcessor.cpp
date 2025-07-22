@@ -4,10 +4,11 @@
 #include "FMassActorFragment.h"
 #include "MyTurboSequenceAnimComponent.h"
 
-// Constructor: define el grupo de ejecución
+// Constructor: define el grupo de ejecución para que se registre automáticamente
 UZombiStateSyncProcessor::UZombiStateSyncProcessor()
 {
-    // ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::SyncWorldToMass;
+    // Se ejecuta después de que Mass Entity actualice los fragmentos
+    ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::SyncWorldToMass;
 }
 
 // Configura el query para requerir el fragmento de estado y el actor asociado
