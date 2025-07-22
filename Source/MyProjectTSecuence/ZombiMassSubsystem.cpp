@@ -16,7 +16,10 @@ UZombiMassSubsystem::UZombiMassSubsystem()
 void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
-    MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+
+    // En UE5.5, el MassEntitySubsystem puede no estar disponible inmediatamente
+    // Lo intentaremos obtener en el primer tick o cuando se necesite
+    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem inicializado - intentando obtener MassEntitySubsystem en el primer uso"));
 }
 
 // Limpieza al destruir el subsystem
@@ -39,10 +42,22 @@ void UZombiMassSubsystem::Deinitialize()
 // Registra un actor zombi en el sistema Mass Entity
 void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
 {
-    if (!MassEntitySubsystem || !ZombiActor)
+    if (!ZombiActor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: MassEntitySubsystem o ZombiActor es null"));
+        UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: ZombiActor es null"));
         return;
+    }
+
+    // Intenta obtener el MassEntitySubsystem si no lo tenemos
+    if (!MassEntitySubsystem)
+    {
+        MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+        if (!MassEntitySubsystem)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: MassEntitySubsystem no disponible"));
+            return;
+        }
+        UE_LOG(LogTemp, Log, TEXT("MassEntitySubsystem obtenido en RegisterZombiEntity"));
     }
 
     // Verifica que el actor tenga el componente de animación
