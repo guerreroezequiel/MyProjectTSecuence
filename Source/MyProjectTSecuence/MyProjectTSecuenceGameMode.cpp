@@ -3,6 +3,7 @@
 #include "MyProjectTSecuenceGameMode.h"
 #include "MyProjectTSecuenceCharacter.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/Engine.h"
 
 AMyProjectTSecuenceGameMode::AMyProjectTSecuenceGameMode()
 {
@@ -11,5 +12,22 @@ AMyProjectTSecuenceGameMode::AMyProjectTSecuenceGameMode()
 	if (PlayerPawnBPClass.Class != NULL)
 	{
 		DefaultPawnClass = PlayerPawnBPClass.Class;
+	}
+}
+
+void AMyProjectTSecuenceGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Obtiene el ZombiMassSubsystem
+	ZombiMassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>();
+
+	if (ZombiMassSubsystem)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem inicializado correctamente"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener ZombiMassSubsystem"));
 	}
 }

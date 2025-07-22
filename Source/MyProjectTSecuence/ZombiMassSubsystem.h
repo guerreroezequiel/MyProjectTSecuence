@@ -3,13 +3,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/GameInstanceSubsystem.h"
+#include "Subsystems/WorldSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "ZombiMassSubsystem.generated.h"
 
 // Subsystem que maneja el registro de entidades zombi en el sistema Mass Entity
 UCLASS()
-class MYPROJECTTSECUENCE_API UZombiMassSubsystem : public UGameInstanceSubsystem
+class MYPROJECTTSECUENCE_API UZombiMassSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
 

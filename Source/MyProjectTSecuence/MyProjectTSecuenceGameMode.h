@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "ZombiMassSubsystem.h"
 #include "MyProjectTSecuenceGameMode.generated.h"
 
 UCLASS(minimalapi)
@@ -13,7 +14,12 @@ class AMyProjectTSecuenceGameMode : public AGameModeBase
 
 public:
 	AMyProjectTSecuenceGameMode();
+
+protected:
+	// Referencia al ZombiMassSubsystem
+	UPROPERTY()
+	UZombiMassSubsystem *ZombiMassSubsystem;
+
+	// Se llama cuando el GameMode inicia
+	virtual void BeginPlay() override;
 };
-
-
-

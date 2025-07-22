@@ -1,14 +1,13 @@
 // Fill out your copyright notice in the Description page of Project Settings.
-#include "MassExecutionContext.h"
 #include "ZombiStateSyncProcessor.h"
+#include "MassExecutionContext.h"
 #include "FMassActorFragment.h"
 #include "MyTurboSequenceAnimComponent.h"
 
-// Constructor: define el grupo de ejecución para que se registre automáticamente
+// Constructor: sin grupo de ejecución específico
 UZombiStateSyncProcessor::UZombiStateSyncProcessor()
 {
-    // Se ejecuta después de que Mass Entity actualice los fragmentos
-    ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::SyncWorldToMass;
+    // Se ejecutará en el grupo por defecto automáticamente
 }
 
 // Configura el query para requerir el fragmento de estado y el actor asociado

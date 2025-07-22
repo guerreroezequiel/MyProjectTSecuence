@@ -42,7 +42,7 @@ void AZombiTestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
     // Desregistra del sistema Mass si está registrado
     if (bRegisteredInMass)
     {
-        if (UZombiMassSubsystem *MassSubsystem = GetGameInstance()->GetSubsystem<UZombiMassSubsystem>())
+        if (UZombiMassSubsystem *MassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>())
         {
             MassSubsystem->UnregisterZombiEntity(this);
         }
@@ -106,7 +106,7 @@ void AZombiTestActor::RegisterInMassSystem()
     if (bRegisteredInMass)
         return;
 
-    UZombiMassSubsystem *MassSubsystem = GetGameInstance()->GetSubsystem<UZombiMassSubsystem>();
+    UZombiMassSubsystem *MassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>();
     if (MassSubsystem)
     {
         MassSubsystem->RegisterZombiEntity(this);

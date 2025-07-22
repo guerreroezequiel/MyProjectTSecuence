@@ -16,7 +16,7 @@ UZombiMassSubsystem::UZombiMassSubsystem()
 void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
-    MassEntitySubsystem = Collection.InitializeDependency<UMassEntitySubsystem>();
+    MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 }
 
 // Limpieza al destruir el subsystem
@@ -53,9 +53,8 @@ void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
         return;
     }
 
-    // Crea la entidad Mass
+    // Crea la entidad Mass usando el método más simple de UE5.5
     FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
-    FMassEntityHandle EntityHandle = EntityManager.CreateEntity();
 
     // Crea los fragmentos con los datos iniciales
     FZombiStateFragment StateFragment;
@@ -63,9 +62,23 @@ void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
 
     FZombiActorFragment ActorFragment(ZombiActor);
 
-    // Agrega los fragmentos a la entidad
-    EntityManager.AddFragment<FZombiStateFragment>(EntityHandle, StateFragment);
-    EntityManager.AddFragment<FZombiActorFragment>(EntityHandle, ActorFragment);
+    // Crea la entidad con los fragmentos ya instanciados (método correcto de UE5.5)
+    TArray<FInstancedStruct> FragmentList;
+
+    // Instancia el fragmento de estado
+    FInstancedStruct StateFragmentInstance;
+    StateFragmentInstance.InitializeAs<FZombiStateFragment>();
+    StateFragmentInstance.GetMutable<FZombiStateFragment>() = StateFragment;
+    FragmentList.Add(StateFragmentInstance);
+
+    // Instancia el fragmento de actor
+    FInstancedStruct ActorFragmentInstance;
+    ActorFragmentInstance.InitializeAs<FZombiActorFragment>();
+    ActorFragmentInstance.GetMutable<FZombiActorFragment>() = ActorFragment;
+    FragmentList.Add(ActorFragmentInstance);
+
+    // Crea la entidad con los fragmentos
+    FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
 
     // Guarda la referencia para poder desregistrar después
     RegisteredEntities.Add(ZombiActor, EntityHandle);
