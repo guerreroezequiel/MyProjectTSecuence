@@ -4,6 +4,8 @@
 #include "MyProjectTSecuenceCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
+#include "MassEntitySubsystem.h"
+#include "ZombiSpawnerSubsystem.h"
 
 AMyProjectTSecuenceGameMode::AMyProjectTSecuenceGameMode()
 {
@@ -29,5 +31,17 @@ void AMyProjectTSecuenceGameMode::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener ZombiMassSubsystem"));
+	}
+
+	// Obtiene el ZombiSpawnerSubsystem
+	ZombiSpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>();
+
+	if (ZombiSpawnerSubsystem)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem inicializado correctamente"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener ZombiSpawnerSubsystem"));
 	}
 }

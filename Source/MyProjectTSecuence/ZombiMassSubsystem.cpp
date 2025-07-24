@@ -4,8 +4,14 @@
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
 #include "ZombiStateFragment.h"
-#include "FMassActorFragment.h"
-#include "MyTurboSequenceAnimComponent.h"
+#include "ZombiMovementFragment.h"
+#include "ZombiTurboSequenceFragment.h"
+#include "ZombiMovementProcessor.h"
+#include "ZombiTurboSequenceProcessor.h"
+#include "ZombiUpdateProcessor.h"
+#include "MassExecutionContext.h"
+#include "TurboSequence_MeshAsset_Lf.h"
+#include "ZombiUpdateProcessor.h"
 
 // Constructor del subsystem
 UZombiMassSubsystem::UZombiMassSubsystem()
@@ -16,38 +22,30 @@ UZombiMassSubsystem::UZombiMassSubsystem()
 void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
+}
 
-    // En UE5.5, el MassEntitySubsystem puede no estar disponible inmediatamente
-    // Lo intentaremos obtener en el primer tick o cuando se necesite
-    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem inicializado - intentando obtener MassEntitySubsystem en el primer uso"));
+// Se ejecuta cuando el mundo está listo
+void UZombiMassSubsystem::OnWorldBeginPlay(UWorld &InWorld)
+{
+    Super::OnWorldBeginPlay(InWorld);
+
+    // Registra los procesadores de Mass Entity
+    RegisterMassProcessors();
 }
 
 // Limpieza al destruir el subsystem
 void UZombiMassSubsystem::Deinitialize()
 {
     // Desregistra todas las entidades antes de destruir
-    for (const auto &Pair : RegisteredEntities)
-    {
-        if (Pair.Key && MassEntitySubsystem)
-        {
-            FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
-            EntityManager.DestroyEntity(Pair.Value);
-        }
-    }
-    RegisteredEntities.Empty();
+    ClearAllEntities();
 
     Super::Deinitialize();
 }
 
-// Registra un actor zombi en el sistema Mass Entity
-void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
+// Registra una entidad zombi en el sistema Mass Entity (nuevo método sin Actors)
+FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnLocation,
+                                                           UTurboSequence_MeshAsset_Lf *TurboSequenceAsset)
 {
-    if (!ZombiActor)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: ZombiActor es null"));
-        return;
-    }
-
     // Intenta obtener el MassEntitySubsystem si no lo tenemos
     if (!MassEntitySubsystem)
     {
@@ -55,17 +53,8 @@ void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
         if (!MassEntitySubsystem)
         {
             UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: MassEntitySubsystem no disponible"));
-            return;
+            return FMassEntityHandle();
         }
-        UE_LOG(LogTemp, Log, TEXT("MassEntitySubsystem obtenido en RegisterZombiEntity"));
-    }
-
-    // Verifica que el actor tenga el componente de animación
-    UMyTurboSequenceAnimComponent *AnimComp = ZombiActor->FindComponentByClass<UMyTurboSequenceAnimComponent>();
-    if (!AnimComp)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Actor %s no tiene componente MyTurboSequenceAnimComponent"), *ZombiActor->GetName());
-        return;
     }
 
     // Crea la entidad Mass usando el método más simple de UE5.5
@@ -73,9 +62,21 @@ void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
 
     // Crea los fragmentos con los datos iniciales
     FZombiStateFragment StateFragment;
-    StateFragment.State = AnimComp->CurrentState;
+    StateFragment.State = EZombiState::Idle; // Estado inicial
 
-    FZombiActorFragment ActorFragment(ZombiActor);
+    FZombiMovementFragment MovementFragment;
+    MovementFragment.Position = SpawnLocation;
+    MovementFragment.Rotation = GenerateRandomRotation();
+    MovementFragment.MovementCenter = SpawnLocation;
+    MovementFragment.MovementRadius = 500.0f;
+    MovementFragment.MovementSpeed = FMath::RandRange(80.0f, 120.0f);
+    MovementFragment.RotationSpeed = FMath::RandRange(60.0f, 120.0f);
+    MovementFragment.DirectionChangeInterval = FMath::RandRange(2.0f, 5.0f);
+
+    FZombiTurboSequenceFragment TurboSequenceFragment;
+    TurboSequenceFragment.TurboSequenceAsset = TurboSequenceAsset;
+    TurboSequenceFragment.bIsVisualInstanceValid = false;
+    TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // Distribuye en 4 grupos
 
     // Crea la entidad con los fragmentos ya instanciados (método correcto de UE5.5)
     TArray<FInstancedStruct> FragmentList;
@@ -86,40 +87,128 @@ void UZombiMassSubsystem::RegisterZombiEntity(AActor *ZombiActor)
     StateFragmentInstance.GetMutable<FZombiStateFragment>() = StateFragment;
     FragmentList.Add(StateFragmentInstance);
 
-    // Instancia el fragmento de actor
-    FInstancedStruct ActorFragmentInstance;
-    ActorFragmentInstance.InitializeAs<FZombiActorFragment>();
-    ActorFragmentInstance.GetMutable<FZombiActorFragment>() = ActorFragment;
-    FragmentList.Add(ActorFragmentInstance);
+    // Instancia el fragmento de movimiento
+    FInstancedStruct MovementFragmentInstance;
+    MovementFragmentInstance.InitializeAs<FZombiMovementFragment>();
+    MovementFragmentInstance.GetMutable<FZombiMovementFragment>() = MovementFragment;
+    FragmentList.Add(MovementFragmentInstance);
 
-    // Crea la entidad con los fragmentos
+    // Instancia el fragmento de TurboSequence
+    FInstancedStruct TurboSequenceFragmentInstance;
+    TurboSequenceFragmentInstance.InitializeAs<FZombiTurboSequenceFragment>();
+    TurboSequenceFragmentInstance.GetMutable<FZombiTurboSequenceFragment>() = TurboSequenceFragment;
+    FragmentList.Add(TurboSequenceFragmentInstance);
+
+    // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
 
-    // Guarda la referencia para poder desregistrar después
-    RegisteredEntities.Add(ZombiActor, EntityHandle);
+    // Guarda la referencia para limpieza
+    RegisteredEntities.Add(EntityHandle);
 
-    UE_LOG(LogTemp, Log, TEXT("Entidad zombi registrada: %s"), *ZombiActor->GetName());
+    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Entidad creada exitosamente - Handle: %d, Total entidades: %d"),
+           EntityHandle.Index, RegisteredEntities.Num());
+
+    return EntityHandle;
 }
 
-// Desregistra un actor zombi del sistema Mass Entity
-void UZombiMassSubsystem::UnregisterZombiEntity(AActor *ZombiActor)
+// Desregistra una entidad zombi
+void UZombiMassSubsystem::UnregisterZombiEntity(FMassEntityHandle EntityHandle)
 {
-    if (!MassEntitySubsystem || !ZombiActor)
+    if (!EntityHandle.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No se puede desregistrar entidad: Handle inválido"));
+        return;
+    }
+
+    if (!MassEntitySubsystem)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No se puede desregistrar entidad: MassEntitySubsystem no disponible"));
+        return;
+    }
+
+    FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    EntityManager.DestroyEntity(EntityHandle);
+
+    // Remueve de la lista de entidades registradas
+    RegisteredEntities.Remove(EntityHandle);
+
+    UE_LOG(LogTemp, Log, TEXT("Entidad zombi desregistrada del Mass Entity System - Handle: %d"), EntityHandle.Index);
+}
+
+// Limpia todas las entidades registradas
+void UZombiMassSubsystem::ClearAllEntities()
+{
+    if (!MassEntitySubsystem)
     {
         return;
     }
 
-    // Busca la entidad en el mapa
-    FMassEntityHandle *EntityHandle = RegisteredEntities.Find(ZombiActor);
-    if (EntityHandle)
+    FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+
+    for (const FMassEntityHandle &EntityHandle : RegisteredEntities)
     {
-        // Destruye la entidad
-        FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
-        EntityManager.DestroyEntity(*EntityHandle);
+        if (EntityHandle.IsValid())
+        {
+            EntityManager.DestroyEntity(EntityHandle);
+        }
+    }
 
-        // Remueve del mapa
-        RegisteredEntities.Remove(ZombiActor);
+    RegisteredEntities.Empty();
 
-        UE_LOG(LogTemp, Log, TEXT("Entidad zombi desregistrada: %s"), *ZombiActor->GetName());
+    UE_LOG(LogTemp, Log, TEXT("Todas las entidades zombi eliminadas del Mass Entity System"));
+}
+
+// Genera una rotación aleatoria
+FRotator UZombiMassSubsystem::GenerateRandomRotation() const
+{
+    return FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
+}
+
+// Registra los procesadores de Mass Entity
+void UZombiMassSubsystem::RegisterMassProcessors()
+{
+    // Evita ejecutar esto múltiples veces
+    if (bProcessorsRegistered)
+    {
+        return;
+    }
+
+    if (!MassEntitySubsystem)
+    {
+        MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+    }
+
+    if (MassEntitySubsystem)
+    {
+        // Los procesadores Mass Entity se registran automáticamente cuando están en el proyecto
+        // Solo necesitamos verificar que el sistema Mass Entity esté funcionando
+        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
+
+        bProcessorsRegistered = true;
+        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores Mass Entity disponibles automáticamente"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ZombiMassSubsystem: No se pudo obtener MassEntitySubsystem"));
+    }
+}
+
+// Ejecuta los procesadores manualmente cada frame (DEPRECATED - Ahora se ejecutan automáticamente)
+void UZombiMassSubsystem::ExecuteProcessorsManually(float DeltaTime)
+{
+    // Los procesadores ahora se ejecutan automáticamente por el sistema Mass Entity
+    // Este método se mantiene por compatibilidad pero no hace nada
+
+    // Log temporal para verificar que el sistema está funcionando
+    static float LogTimer = 0.0f;
+    LogTimer += DeltaTime;
+    if (LogTimer >= 2.0f)
+    {
+        if (MassEntitySubsystem)
+        {
+            FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema funcionando - Entidades registradas: %d"), RegisteredEntities.Num());
+        }
+        LogTimer = 0.0f;
     }
 }
