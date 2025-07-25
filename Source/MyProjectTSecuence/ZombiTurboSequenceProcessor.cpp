@@ -18,6 +18,8 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Constructor llamado - Procesador creado"));
 }
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
@@ -29,10 +31,24 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
     // Query para controlar animaciones con Blend Space (temporalmente deshabilitada)
     // VisualInstanceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     // VisualInstanceQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: ConfigureQueries completado"));
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    const float DeltaTime = Context.GetDeltaTimeSeconds();
+
+    // Logging para verificar ejecución
+    static float LogTimer = 0.0f;
+    LogTimer += DeltaTime;
+
+    if (LogTimer >= 5.0f)
+    {
+        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %.3f"), DeltaTime);
+        LogTimer = 0.0f;
+    }
+
     // Sincronizar transformaciones
     TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                           {
@@ -55,6 +71,12 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
                     TurboSequenceFragment.MeshData,
                     MeshTransform);
+                
+                if (LogTimer == 0.0f) // Solo loggear una vez por ciclo
+                {
+                    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Sincronizando transformación para entidad en posición %s"), 
+                           *MovementFragment.Position.ToString());
+                }
             }
         } });
 
