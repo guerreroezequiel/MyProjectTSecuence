@@ -45,6 +45,9 @@ private:
 	void UpdateTurboSequenceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
 									  const FZombiStateFragment &StateFragment);
 
+	// Busca una animación por nombre en el asset de TurboSequence
+	UAnimSequence *FindAnimationByName(UTurboSequence_MeshAsset_Lf *Asset, const FString &AnimationName);
+
 	// Destruye una instancia visual de TurboSequence
 	void DestroyTurboSequenceInstance(const FZombiTurboSequenceFragment &TurboSequenceFragment,
 									  UWorld *World);

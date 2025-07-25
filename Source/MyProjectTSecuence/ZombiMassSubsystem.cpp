@@ -16,12 +16,25 @@
 // Constructor del subsystem
 UZombiMassSubsystem::UZombiMassSubsystem()
 {
+    // Configuración básica del subsystem
 }
 
 // Inicialización: obtiene referencia al Mass Entity Subsystem
 void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
+
+    // Obtiene el MassEntitySubsystem
+    MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+
+    if (MassEntitySubsystem)
+    {
+        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ZombiMassSubsystem: No se pudo obtener MassEntitySubsystem"));
+    }
 }
 
 // Se ejecuta cuando el mundo está listo

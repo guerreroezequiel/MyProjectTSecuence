@@ -205,6 +205,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
                         TurboSequenceFragment->MeshData = MeshData;
                         TurboSequenceFragment->bIsVisualInstanceValid = true;
                         TurboSequenceFragment->UpdateGroupIndex = FMath::RandRange(0, 3);
+                        TurboSequenceFragment->TurboSequenceAsset = ZombiTurboSequenceAsset;
 
                         // UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Fragmento visual actualizado para entidad %d"), EntityHandle.Index);
                     }

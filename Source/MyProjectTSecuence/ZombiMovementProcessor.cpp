@@ -6,43 +6,22 @@
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 
-// Constructor del procesador
+// Constructor del procesador de movimiento
 UZombiMovementProcessor::UZombiMovementProcessor()
 {
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Constructor iniciado"));
-
-    // Configuración correcta para procesadores Mass Entity en UE5.5.4
-    ExecutionFlags = (int32)(EProcessorExecutionFlags::All);
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ExecutionFlags configurado"));
-
+    // Configuración para registro automático en UE5.5.4
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ProcessingPhase configurado"));
-
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ExecutionOrder configurado"));
-
     bRequiresGameThreadExecution = false;
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: bRequiresGameThreadExecution configurado"));
-
     bAutoRegisterWithProcessingPhases = true;
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: bAutoRegisterWithProcessingPhases configurado"));
-
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Constructor completado - Procesador creado"));
 }
 
 // Configura el query para requerir los fragmentos de movimiento y estado
 void UZombiMovementProcessor::ConfigureQueries()
 {
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ConfigureQueries iniciado"));
-
     MovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Requerimiento MovementFragment agregado"));
-
     MovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Requerimiento StateFragment agregado"));
-
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Query configurado correctamente (registro automático)"));
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ConfigureQueries completado"));
 }
 
 // Ejecuta el procesamiento de movimiento para todas las entidades
@@ -50,18 +29,9 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Execute iniciado"));
-
     // Procesa todas las entidades que cumplen el query
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Antes de ForEachEntityChunk"));
-
-    // Verificar si el query está registrado correctamente
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Verificando query antes de usar"));
-
     MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                      {
-        UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Dentro de ForEachEntityChunk - %d entidades"), Context.GetNumEntities());
-        
         const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
         const TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
@@ -130,8 +100,6 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 UpdateTurboSequenceInstance(MovementFragment);
             }
         } });
-
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Execute completado"));
 }
 
 // Genera una dirección aleatoria para el movimiento

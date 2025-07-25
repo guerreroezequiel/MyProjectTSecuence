@@ -22,15 +22,19 @@ void UZombiUpdateProcessor::ConfigureQueries()
     // Este procesador no necesita queries específicos
 }
 
+// Ejecuta el procesamiento de Update Groups
 void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
+
+    // Procesa cada grupo de actualización de TurboSequence
     for (int32 GroupIndex = 0; GroupIndex < NUM_UPDATE_GROUPS; ++GroupIndex)
     {
         SolveUpdateGroup(GroupIndex, DeltaTime);
     }
 }
 
+// Resuelve un grupo específico de actualización
 void UZombiUpdateProcessor::SolveUpdateGroup(int32 GroupIndex, float DeltaTime)
 {
     // Configura el contexto de actualización para este grupo
@@ -38,8 +42,5 @@ void UZombiUpdateProcessor::SolveUpdateGroup(int32 GroupIndex, float DeltaTime)
 
     // Resuelve las animaciones para este grupo
     // Esta es la llamada esencial para que TurboSequence funcione correctamente
-    // Por ahora, comentamos esta llamada hasta que resolvamos el problema de contexto
-    // ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
-
-    UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: SolveUpdateGroup llamado para grupo %d"), GroupIndex);
+    ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
 }

@@ -26,6 +26,7 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	int32 UpdateGroupIndex = 0;
 
 	// Asset de TurboSequence usado para esta instancia
+	// Las animaciones se manejan por nombre desde este asset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	class UTurboSequence_MeshAsset_Lf *TurboSequenceAsset = nullptr;
 };

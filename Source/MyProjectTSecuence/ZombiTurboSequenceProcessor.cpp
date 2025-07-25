@@ -163,59 +163,159 @@ void UZombiTurboSequenceProcessor::UpdateTurboSequenceAnimation(const FZombiTurb
         return;
     }
 
-    // Configuración de reproducción de animación
+    // Validación adicional para evitar crashes
+    if (!TurboSequenceFragment.TurboSequenceAsset)
+    {
+        return;
+    }
+
+    // Configuración de reproducción de animación usando la API correcta de TurboSequence
     FTurboSequence_AnimPlaySettings_Lf PlaySettings;
     PlaySettings.AnimationSpeed = 1.0f;
     PlaySettings.AnimationWeight = 1.0f;
+    PlaySettings.AnimationPlayTimeInSeconds = 0.0f;
+    PlaySettings.StartTransitionTimeInSeconds = 0.1f;
+    PlaySettings.EndTransitionTimeInSeconds = 0.1f;
+    PlaySettings.RootMotionMode = ETurboSequence_RootMotionMode_Lf::None;
+    PlaySettings.AnimationManagementMode = ETurboSequence_ManagementMode_Lf::Auto;
 
-    // Determina qué animación reproducir según el estado lógico
-    UAnimSequence *AnimationToPlay = nullptr;
-
+    FString AnimationName;
     switch (StateFragment.State)
     {
     case EZombiState::Idle:
-        // Por ahora usamos una animación por defecto - deberías asignar IdleAnim en el fragmento
-        // AnimationToPlay = TurboSequenceFragment.IdleAnimation;
+        AnimationName = TEXT("MM_Idle");
         break;
     case EZombiState::Walk:
-        // Por ahora usamos una animación por defecto - deberías asignar WalkAnim en el fragmento
-        // AnimationToPlay = TurboSequenceFragment.WalkAnimation;
+        AnimationName = TEXT("MM_Walk_Fwd");
         break;
     case EZombiState::Chase:
-        // AnimationToPlay = TurboSequenceFragment.ChaseAnimation;
-        break;
+        AnimationName = TEXT("MM_Walk_Fwd");
+        break; // Usar Walk_Fwd para Chase por ahora
     case EZombiState::Attack:
-        // AnimationToPlay = TurboSequenceFragment.AttackAnimation;
-        break;
+        AnimationName = TEXT("MM_Land");
+        break; // Usar Land para Attack por ahora
     case EZombiState::Hit:
-        // AnimationToPlay = TurboSequenceFragment.HitAnimation;
-        break;
+        AnimationName = TEXT("MM_Land");
+        break; // Usar Land para Hit por ahora
     case EZombiState::Death:
-        // AnimationToPlay = TurboSequenceFragment.DeathAnimation;
+        AnimationName = TEXT("MM_Land");
+        break; // Usar Land para Death por ahora
+    default:
+        AnimationName = TEXT("MM_Idle");
         break;
     }
 
-    // Si tenemos una animación válida, la reproducimos
+    UAnimSequence *AnimationToPlay = FindAnimationByName(TurboSequenceFragment.TurboSequenceAsset, AnimationName);
+
     if (AnimationToPlay)
     {
-        ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-            TurboSequenceFragment.MeshData,
-            AnimationToPlay,
-            PlaySettings);
+        // Validación adicional antes de reproducir
+        if (AnimationToPlay->GetPlayLength() > 0.0f)
+        {
+            // Usar la API correcta de TurboSequence
+            try
+            {
+                // Usar PlayAnimation_Concurrent con la configuración correcta
+                FTurboSequence_AnimMinimalCollection_Lf AnimationCollection =
+                    ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                        TurboSequenceFragment.MeshData,
+                        AnimationToPlay,
+                        PlaySettings);
+
+                static float LogTimer = 0.0f;
+                static float LastTime = 0.0f;
+                float CurrentTime = FPlatformTime::Seconds();
+                LogTimer += (CurrentTime - LastTime);
+                LastTime = CurrentTime;
+
+                if (LogTimer >= 10.0f)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Reproduciendo animación '%s' para estado %d (Collection válida: %s)"),
+                           *AnimationName, (int32)StateFragment.State,
+                           AnimationCollection.IsAnimCollectionValid() ? TEXT("Sí") : TEXT("No"));
+                    LogTimer = 0.0f;
+                }
+            }
+            catch (...)
+            {
+                UE_LOG(LogTemp, Error, TEXT("ZombiTurboSequenceProcessor: Error al reproducir animación '%s'"), *AnimationName);
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("ZombiTurboSequenceProcessor: Animación '%s' tiene duración 0"), *AnimationName);
+        }
     }
     else
     {
-        // Log temporal para verificar que se está llamando esta función
         static float LogTimer = 0.0f;
         static float LastTime = 0.0f;
         float CurrentTime = FPlatformTime::Seconds();
         LogTimer += (CurrentTime - LastTime);
         LastTime = CurrentTime;
 
-        if (LogTimer >= 5.0f)
+        if (LogTimer >= 15.0f)
         {
-            UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Estado actual: %d, pero no hay animación asignada"), (int32)StateFragment.State);
+            UE_LOG(LogTemp, Warning, TEXT("ZombiTurboSequenceProcessor: No se encontró animación '%s' para estado %d"),
+                   *AnimationName, (int32)StateFragment.State);
             LogTimer = 0.0f;
         }
     }
+}
+
+// Busca una animación por nombre en el asset de TurboSequence
+UAnimSequence *UZombiTurboSequenceProcessor::FindAnimationByName(UTurboSequence_MeshAsset_Lf *Asset, const FString &AnimationName)
+{
+    if (!Asset)
+    {
+        return nullptr;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Buscando animación '%s' en asset '%s'"),
+           *AnimationName, *Asset->GetName());
+
+    // Buscar en AnimationLibrary con validaciones estrictas
+    if (Asset->AnimationLibrary && IsValid(Asset->AnimationLibrary))
+    {
+        // Validación adicional para evitar crash
+        if (Asset->AnimationLibrary->Animations.Num() > 0)
+        {
+            for (const FAnimationLibraryItem_Lf &AnimItem : Asset->AnimationLibrary->Animations)
+            {
+                if (AnimItem.Animation && IsValid(AnimItem.Animation) && AnimItem.Animation->GetName().Contains(AnimationName))
+                {
+                    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Encontrada animación '%s' en AnimationLibrary"),
+                           *AnimationName);
+                    return AnimItem.Animation;
+                }
+            }
+        }
+    }
+
+    // Buscar en OverrideDefaultAnimation
+    if (Asset->OverrideDefaultAnimation && IsValid(Asset->OverrideDefaultAnimation))
+    {
+        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Usando OverrideDefaultAnimation para '%s'"),
+               *AnimationName);
+        return Asset->OverrideDefaultAnimation;
+    }
+
+    // Si no encontramos la animación específica, usar la primera disponible como fallback
+    if (Asset->AnimationLibrary && IsValid(Asset->AnimationLibrary) && Asset->AnimationLibrary->Animations.Num() > 0)
+    {
+        for (const FAnimationLibraryItem_Lf &AnimItem : Asset->AnimationLibrary->Animations)
+        {
+            if (AnimItem.Animation && IsValid(AnimItem.Animation))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ZombiTurboSequenceProcessor: Usando animación fallback '%s' para '%s'"),
+                       *AnimItem.Animation->GetName(), *AnimationName);
+                return AnimItem.Animation;
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("ZombiTurboSequenceProcessor: No se encontró animación '%s' en asset '%s'"),
+           *AnimationName, *Asset->GetName());
+
+    return nullptr;
 }
