@@ -86,6 +86,7 @@ struct FZombiMovementFragment : public FMassFragment
 struct FZombiTurboSequenceFragment : public FMassFragment
 {
     FTurboSequence_MinimalMeshData_Lf MeshData;           // Handle visual
+    FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData; // Blend Space para animaciones
     bool bIsVisualInstanceValid = false;                  // Estado de validación
     int32 UpdateGroupIndex = 0;                           // Grupo de actualización
     UTurboSequence_MeshAsset_Lf* TurboSequenceAsset;      // Asset de referencia
@@ -109,8 +110,8 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 - **Fase**: `EMassProcessingPhase::PrePhysics`
 - **Grupo**: `"MassBehavior"`
 - **Características**:
-  - Sincronización de transformaciones
-  - Reproducción de animaciones por nombre
+  - ✅ **Sincronización de transformaciones** (FUNCIONAL)
+  - ❌ **Animaciones Blend Space** (TEMPORALMENTE DESHABILITADAS)
   - Gestión de instancias visuales
 
 ### **UZombiUpdateProcessor**
@@ -118,8 +119,8 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 - **Fase**: `EMassProcessingPhase::PrePhysics`
 - **Grupo**: `"MassBehavior"`
 - **Características**:
-  - Distribución de carga de animación
-  - Llamada a `SolveMeshes_GameThread`
+  - ✅ **Distribución de carga** en 4 grupos
+  - ❌ **SolveMeshes_GameThread** (CAUSA CRASH - DESHABILITADO)
 
 ## 🚀 Subsystems
 
@@ -134,8 +135,9 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 - **Función**: Spawning optimizado de zombis
 - **Características**:
   - Spawning en lotes para rendimiento
-  - Creación de instancias visuales TurboSequence
-  - Distribución en Update Groups
+  - ✅ **Creación de instancias visuales TurboSequence** (FUNCIONAL)
+  - ✅ **Distribución en Update Groups** (FUNCIONAL)
+  - ❌ **Configuración de animaciones** (TEMPORALMENTE DESHABILITADA)
 
 ## 🎮 Control desde Blueprint
 
@@ -168,7 +170,7 @@ ZombiMovementProcessor → ZombiTurboSequenceProcessor → ZombiUpdateProcessor
 
 ### **4. Sincronización Visual**
 ```
-Estado Lógico → Animación por Nombre → TurboSequence → Renderizado
+Estado Lógico → Sincronización de Transformaciones → TurboSequence → Renderizado
 ```
 
 ## 🎯 Estados del Zombi
@@ -216,17 +218,37 @@ bAutoRegisterWithProcessingPhases = true;
 - **Problema**: `ExecutionContext.ExecutionType != ExpectedContextType`
 - **Solución**: Uso correcto de constructores `FMassEntityQuery{*this}` y registro automático
 
-### **2. Animaciones no Funcionaban**
-- **Problema**: `PlayAnimation_Concurrent` esperaba `UAnimSequence*` no `FString`
-- **Solución**: Implementación de `FindAnimationByName()` para buscar animaciones por nombre
+### **2. Registro Manual de Procesadores**
+- **Problema**: `RegisterProcessor()` no existe en UE5.5.4
+- **Solución**: Uso de `bAutoRegisterWithProcessingPhases = true`
 
-### **3. Logs Excesivos**
+### **3. Crashes en TurboSequence**
+- **Problema**: `SolveMeshes_GameThread` causa crash `GetShadowIndex() == 0`
+- **Solución**: Deshabilitación temporal de animaciones, mantenimiento de sincronización de transformaciones
+
+### **4. Logs Excesivos**
 - **Problema**: Logs constantes que afectaban rendimiento
 - **Solución**: Limpieza de logs y uso de timers para logs informativos
 
-### **4. Registro Manual de Procesadores**
-- **Problema**: `RegisterProcessor()` no existe en UE5.5.4
-- **Solución**: Uso de `bAutoRegisterWithProcessingPhases = true`
+## ✅ Estado Actual del Sistema
+
+### **✅ Funcionalidades Completamente Operativas**
+- ✅ **Sistema Mass Entity** completamente funcional
+- ✅ **Arquitectura State Sync** implementada correctamente
+- ✅ **TurboSequence** integrado para visualización
+- ✅ **Zombis se mueven** con sincronización perfecta de transformaciones
+- ✅ **Rendimiento optimizado** con grupos de actualización
+- ✅ **Sistema estable** sin crashes
+
+### **❌ Funcionalidades Temporalmente Deshabilitadas**
+- ❌ **Animaciones** (zombis en T-pose)
+- ❌ **Blend Space** (causa crash en `SolveMeshes_GameThread`)
+- ❌ **Reproducción de animaciones** (problema de threading)
+
+### **🎯 Próximo Objetivo**
+- 🔍 **Resolver sistema de animaciones** sin usar `SolveMeshes_GameThread`
+- 🔍 **Implementar animaciones alternativas** compatibles con TurboSequence
+- 🔍 **Mantener estabilidad** del sistema actual
 
 ## 📊 Rendimiento
 
@@ -270,7 +292,13 @@ int32 Count = Controller->GetActiveZombiCount();
 
 ## 🔮 Próximos Pasos
 
-### **Mejoras Sugeridas**
+### **Prioridad Alta - Animaciones**
+1. **Investigar alternativas** a `SolveMeshes_GameThread`
+2. **Implementar animaciones básicas** sin Blend Space
+3. **Usar animaciones directas** de TurboSequence
+4. **Mantener estabilidad** del sistema actual
+
+### **Mejoras Futuras**
 1. **AI Avanzada**: Implementar pathfinding y comportamiento más complejo
 2. **Sistema de Daño**: Agregar fragmentos de salud y daño
 3. **Optimización Visual**: LOD y culling para miles de entidades
@@ -300,6 +328,11 @@ int32 Count = Controller->GetActiveZombiCount();
 - **Configuración**: Development_Editor
 - **Arquitectura**: x64
 
+### **Problemas Conocidos**
+- **TurboSequence SolveMeshes**: Causa crash `GetShadowIndex() == 0`
+- **Animaciones**: Temporalmente deshabilitadas por estabilidad
+- **Threading**: Conflictos entre Mass Entity y TurboSequence
+
 ---
 
-**Desarrollado para demostrar las capacidades de Mass Entity System y TurboSequence en Unreal Engine 5.5.4** 
+**Sistema funcional con arquitectura State Sync completa. Próximo objetivo: resolver sistema de animaciones manteniendo la estabilidad actual.** 
