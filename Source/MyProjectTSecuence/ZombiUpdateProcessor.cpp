@@ -29,20 +29,20 @@ void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExec
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // TEMPORAL: Solo logging, sin llamadas a TurboSequence
+    // Log cada 60 segundos (aproximadamente una vez por minuto)
     static float LogTimer = 0.0f;
     LogTimer += DeltaTime;
 
-    if (LogTimer >= 5.0f)
+    if (LogTimer >= 60.0f)
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Ejecutándose (SolveMeshes deshabilitado por crash) - DeltaTime: %.3f"), DeltaTime);
+        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
         LogTimer = 0.0f;
     }
 
     // TEMPORAL: Comentar SolveMeshes_GameThread porque causa crash
     // ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
 
-    if (LogTimer == 0.0f) // Solo loggear una vez por ciclo
+    if (LogTimer == 0.0f) // Solo loggear cuando se resetea el timer
     {
         UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: SolveMeshes_GameThread temporalmente deshabilitado (causa crash)"));
     }

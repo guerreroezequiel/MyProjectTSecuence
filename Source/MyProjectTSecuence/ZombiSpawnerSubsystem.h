@@ -44,21 +44,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Zombi Spawner")
 	void ClearAllZombis();
 
-private:
-	// Referencia al subsystem de Mass Entity
-	UPROPERTY()
-	TObjectPtr<UMassEntitySubsystem> MassEntitySubsystem;
+	// Procesa reintentos de instancias visuales pendientes
+	void ProcessPendingVisualInstances(float DeltaTime);
 
+private:
 	// Asset de TurboSequence para los zombis
 	UPROPERTY()
 	TObjectPtr<UTurboSequence_MeshAsset_Lf> ZombiTurboSequenceAsset;
 
+	// Referencia al MassEntitySubsystem
+	UPROPERTY()
+	TObjectPtr<UMassEntitySubsystem> MassEntitySubsystem;
+
+	// Lista de entidades spawnadas
+	TArray<FMassEntityHandle> SpawnedEntities;
+
 	// Contador de zombis activos
 	int32 ActiveZombiCount = 0;
 
-	// Lista de entidades Mass creadas por este spawner
-	UPROPERTY()
-	TArray<FMassEntityHandle> SpawnedEntities;
+	// Sistema de reintentos para instancias visuales
+	TArray<FMassEntityHandle> PendingVisualInstances;
+	float RetryTimer = 0.0f;
+	const float RetryInterval = 0.1f; // Reintentar cada 0.1 segundos
 
 	// Mapa de instancias visuales de TurboSequence (EntityHandle -> MeshData)
 	TMap<FMassEntityHandle, FTurboSequence_MinimalMeshData_Lf> VisualInstances;

@@ -133,6 +133,12 @@ void AZombiTestController::Tick(float DeltaTime)
         TickLogTimer = 0.0f;
     }
 
+    // Procesar reintentos de instancias visuales pendientes
+    if (SpawnerSubsystem)
+    {
+        SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
+    }
+
     // Ejecuta los procesadores manualmente cada frame
     if (UZombiMassSubsystem *ZombiMassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>())
     {

@@ -88,7 +88,6 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
 
     FZombiTurboSequenceFragment TurboSequenceFragment;
     TurboSequenceFragment.TurboSequenceAsset = TurboSequenceAsset;
-    TurboSequenceFragment.bIsVisualInstanceValid = false;
     TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // Distribuye en 4 grupos
 
     // Crea la entidad con los fragmentos ya instanciados (método correcto de UE5.5)

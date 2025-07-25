@@ -24,172 +24,82 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
 {
-    // Query para sincronizar transformaciones
+    // Query para sincronizar transformaciones (State Sync)
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     TransformSyncQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadOnly);
 
-    // Query para controlar animaciones con Blend Space (temporalmente deshabilitada)
-    // VisualInstanceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
-    // VisualInstanceQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
+    // TODO: Query para Blend Space (futuro)
+    // BlendSpaceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
+    // BlendSpaceQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
+    // BlendSpaceQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadOnly);
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: ConfigureQueries completado"));
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: ConfigureQueries completado - preparado para Blend Space"));
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Logging para verificar ejecución
+    // Log cada 60 segundos (aproximadamente una vez por minuto)
     static float LogTimer = 0.0f;
     LogTimer += DeltaTime;
 
-    if (LogTimer >= 5.0f)
+    if (LogTimer >= 60.0f)
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %.3f"), DeltaTime);
+        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
         LogTimer = 0.0f;
     }
 
-    // Sincronizar transformaciones
-    TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+    // Sincronizar transformaciones (State Sync)
+    TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
                                           {
-        const TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+        const TConstArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
         const TConstArrayView<FZombiMovementFragment> MovementFragments = Context.GetFragmentView<FZombiMovementFragment>();
-        
-        for (int32 EntityIndex = 0; EntityIndex < Context.GetNumEntities(); ++EntityIndex)
+
+        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
-            FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[EntityIndex];
-            const FZombiMovementFragment& MovementFragment = MovementFragments[EntityIndex];
-            
-            if (TurboSequenceFragment.MeshData.IsMeshDataValid())
+            const FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
+            const FZombiMovementFragment& MovementFragment = MovementFragments[i];
+
+            // Sincronizar transformación
+            ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                TurboSequenceFragment.MeshData,
+                FTransform(FQuat(MovementFragment.Rotation), MovementFragment.Position, FVector::OneVector)
+            );
+
+            if (LogTimer == 0.0f) // Solo loggear cuando se resetea el timer
             {
-                // Sincronizar transformación con TurboSequence
-                FTransform MeshTransform;
-                MeshTransform.SetLocation(MovementFragment.Position);
-                MeshTransform.SetRotation(FQuat(MovementFragment.Rotation));
-                MeshTransform.SetScale3D(FVector::OneVector);
-                
-                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-                    TurboSequenceFragment.MeshData,
-                    MeshTransform);
-                
-                if (LogTimer == 0.0f) // Solo loggear una vez por ciclo
-                {
-                    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Sincronizando transformación para entidad en posición %s"), 
-                           *MovementFragment.Position.ToString());
-                }
+                UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Sincronizando transformación para entidad en posición X=%.3f Y=%.3f Z=%.3f"), 
+                       MovementFragment.Position.X, MovementFragment.Position.Y, MovementFragment.Position.Z);
             }
         } });
 
-    // TEMPORAL: Animaciones deshabilitadas porque SolveMeshes causa crash
-    /*
-    // Controlar animaciones con Blend Space
-    VisualInstanceQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext& Context)
-    {
-        const TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
-        const TConstArrayView<FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
-
-        for (int32 EntityIndex = 0; EntityIndex < Context.GetNumEntities(); ++EntityIndex)
-        {
-            FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[EntityIndex];
-            const FZombiStateFragment& StateFragment = StateFragments[EntityIndex];
-
-            UpdateBlendSpaceAnimation(TurboSequenceFragment, StateFragment);
-        }
-    });
-    */
+    // TODO: Implementar Blend Space Query aquí
+    // BlendSpaceQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext& Context)
+    // {
+    //     // Actualizar Blend Space basado en estado del zombi
+    //     // Esto será implementado cuando resolvamos el problema de animaciones
+    // });
 }
 
+// Implementación de Blend Space Animation (preparada para futuro uso)
 void UZombiTurboSequenceProcessor::UpdateBlendSpaceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                             const FZombiStateFragment &StateFragment)
+                                                             const FZombiStateFragment &StateFragment,
+                                                             const FZombiMovementFragment &MovementFragment)
 {
-    // TEMPORAL: Deshabilitar Blend Space para estabilidad
-    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: UpdateBlendSpaceAnimation temporalmente deshabilitado"));
-    return;
+    // Esta función será implementada cuando resolvamos el problema de animaciones
+    // Enfoque: Blend Space basado en velocidad y estado del zombi
 
-    /*
-    if (!TurboSequenceFragment.MeshData.IsMeshDataValid())
+    if (!TurboSequenceFragment.TurboSequenceAsset)
     {
         return;
     }
 
-    // TEMPORAL: Deshabilitar Blend Space para estabilidad
-    // Una vez que el sistema básico esté estable, implementaremos el Blend Space completo
-    static float LogTimer = 0.0f;
-    static float LastTime = 0.0f;
-    float CurrentTime = FPlatformTime::Seconds();
-    LogTimer += (CurrentTime - LastTime);
-    LastTime = CurrentTime;
+    // TODO: Implementar lógica de Blend Space
+    // - Idle cuando velocidad = 0
+    // - Walk cuando velocidad < threshold
+    // - Run cuando velocidad > threshold
 
-    if (LogTimer >= 15.0f)
-    {
-        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Blend Space temporalmente deshabilitado para estabilidad (Estado: %d)"),
-               (int32)StateFragment.State);
-        LogTimer = 0.0f;
-    }
-
-    // Código comentado temporalmente para evitar crashes
-    // Determinar la posición del Blend Space según el estado
-    FVector3f BlendSpacePosition = FVector3f::ZeroVector;
-
-    switch (StateFragment.State)
-    {
-    case EZombiState::Idle:
-        BlendSpacePosition = FVector3f(0.0f, 0.0f, 0.0f); // Posición central (Idle)
-        break;
-    case EZombiState::Walk:
-        BlendSpacePosition = FVector3f(0.5f, 0.0f, 0.0f); // Posición media (Walk)
-        break;
-    case EZombiState::Chase:
-        BlendSpacePosition = FVector3f(1.0f, 0.0f, 0.0f); // Posición máxima (Run)
-        break;
-    case EZombiState::Attack:
-        BlendSpacePosition = FVector3f(0.0f, 1.0f, 0.0f); // Posición Y (Attack)
-        break;
-    case EZombiState::Hit:
-        BlendSpacePosition = FVector3f(0.0f, 0.5f, 0.0f); // Posición Y media (Hit)
-        break;
-    case EZombiState::Death:
-        BlendSpacePosition = FVector3f(0.0f, 0.0f, 1.0f); // Posición Z (Death)
-        break;
-    default:
-        BlendSpacePosition = FVector3f(0.0f, 0.0f, 0.0f);
-        break;
-    }
-
-    // Si tenemos un Blend Space configurado, ajustar su posición
-    if (TurboSequenceFragment.BlendSpaceData.IsAnimCollectionValid())
-    {
-        ATurboSequence_Manager_Lf::TweakBlendSpace_Concurrent(
-            TurboSequenceFragment.BlendSpaceData,
-            BlendSpacePosition);
-
-        static float LogTimer = 0.0f;
-        static float LastTime = 0.0f;
-        float CurrentTime = FPlatformTime::Seconds();
-        LogTimer += (CurrentTime - LastTime);
-        LastTime = CurrentTime;
-
-        if (LogTimer >= 10.0f)
-        {
-            UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ajustando Blend Space a posición (%.1f, %.1f, %.1f) para estado %d"),
-                   BlendSpacePosition.X, BlendSpacePosition.Y, BlendSpacePosition.Z, (int32)StateFragment.State);
-            LogTimer = 0.0f;
-        }
-    }
-    else
-    {
-        // Si no hay Blend Space configurado, usar animación por defecto
-        static float LogTimer = 0.0f;
-        static float LastTime = 0.0f;
-        float CurrentTime = FPlatformTime::Seconds();
-        LogTimer += (CurrentTime - LastTime);
-        LastTime = CurrentTime;
-
-        if (LogTimer >= 15.0f)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ZombiTurboSequenceProcessor: No hay Blend Space configurado para entidad"));
-            LogTimer = 0.0f;
-        }
-    }
-    */
+    // Por ahora, solo un placeholder para evitar la advertencia de compilación
+    UE_LOG(LogTemp, Verbose, TEXT("ZombiTurboSequenceProcessor: UpdateBlendSpaceAnimation llamada (placeholder)"));
 }
