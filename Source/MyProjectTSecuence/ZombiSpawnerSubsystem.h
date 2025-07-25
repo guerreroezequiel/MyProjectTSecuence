@@ -66,7 +66,10 @@ private:
 	// Crea una entidad Mass con todos los fragmentos necesarios
 	FMassEntityHandle CreateZombiMassEntity(const FVector &SpawnLocation);
 
-	// Genera una posición aleatoria dentro del radio especificado
+	// Configura el Blend Space para una entidad
+	void ConfigureBlendSpaceForEntity(FZombiTurboSequenceFragment &TurboSequenceFragment);
+
+	// Genera una ubicación de spawn aleatoria
 	FVector GenerateRandomSpawnLocation(const FVector &Center, float Radius) const;
 
 	// Genera una rotación aleatoria

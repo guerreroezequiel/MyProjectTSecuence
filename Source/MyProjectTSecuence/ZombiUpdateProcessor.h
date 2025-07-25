@@ -5,6 +5,7 @@
 #include "MassProcessor.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "MassProcessingTypes.h"
+#include "ZombiTurboSequenceFragment.h"
 #include "ZombiUpdateProcessor.generated.h"
 
 // Procesador que maneja Update Groups y llama a SolveMeshes cada frame
@@ -25,6 +26,9 @@ public:
 private:
 	// Número de grupos de actualización para distribuir la carga
 	static const int32 NUM_UPDATE_GROUPS = 4;
+
+	// Query para procesar grupos de actualización de TurboSequence
+	FMassEntityQuery UpdateGroupQuery{*this};
 
 	// Contexto de actualización para TurboSequence
 	FTurboSequence_UpdateContext_Lf UpdateContext;

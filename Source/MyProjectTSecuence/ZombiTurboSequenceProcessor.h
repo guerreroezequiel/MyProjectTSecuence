@@ -3,15 +3,16 @@
 #pragma once
 
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "ZombiTurboSequenceFragment.h"
-#include "ZombiMovementFragment.h"
 #include "ZombiStateFragment.h"
-#include "TurboSequence_Manager_Lf.h"
-#include "MassProcessingTypes.h"
+#include "ZombiMovementFragment.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
-// Procesador que maneja la creación y sincronización de instancias visuales de TurboSequence
-// Sigue el patrón State Sync: solo maneja la parte visual, sin lógica de juego
+/**
+ * Procesador para sincronizar entidades Mass con instancias visuales de TurboSequence
+ * Implementa el patrón State Sync para separar lógica de visualización
+ */
 UCLASS()
 class MYPROJECTTSECUENCE_API UZombiTurboSequenceProcessor : public UMassProcessor
 {
@@ -20,35 +21,23 @@ class MYPROJECTTSECUENCE_API UZombiTurboSequenceProcessor : public UMassProcesso
 public:
 	UZombiTurboSequenceProcessor();
 
-public:
+protected:
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context) override;
-	virtual bool ShouldAllowQueryBasedPruning(const bool bRuntimeMode = true) const override { return false; }
 
 private:
-	// Query para entidades que necesitan instancias visuales - inicializado con el procesador
-	FMassEntityQuery VisualInstanceQuery{*this};
-
-	// Query para entidades que necesitan sincronización de transformación - inicializado con el procesador
+	// Query para sincronizar transformaciones
 	FMassEntityQuery TransformSyncQuery{*this};
 
-	// Crea una instancia visual de TurboSequence
-	void CreateTurboSequenceInstance(FZombiTurboSequenceFragment &TurboSequenceFragment,
-									 const FZombiMovementFragment &MovementFragment,
-									 UWorld *World);
+	// Query para controlar animaciones con Blend Space
+	FMassEntityQuery VisualInstanceQuery{*this};
 
-	// Actualiza la transformación de la instancia visual
-	void UpdateTurboSequenceTransform(const FZombiTurboSequenceFragment &TurboSequenceFragment,
-									  const FZombiMovementFragment &MovementFragment);
+	/**
+	 * Actualiza la animación usando Blend Space según el estado lógico
+	 * Implementa State Sync: el host solo envía estado, el cliente maneja animaciones
+	 */
+	void UpdateBlendSpaceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
+								   const FZombiStateFragment &StateFragment);
 
-	// Actualiza la animación de la instancia visual según el estado lógico
-	void UpdateTurboSequenceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
-									  const FZombiStateFragment &StateFragment);
-
-	// Busca una animación por nombre en el asset de TurboSequence
-	UAnimSequence *FindAnimationByName(UTurboSequence_MeshAsset_Lf *Asset, const FString &AnimationName);
-
-	// Destruye una instancia visual de TurboSequence
-	void DestroyTurboSequenceInstance(const FZombiTurboSequenceFragment &TurboSequenceFragment,
-									  UWorld *World);
+	virtual bool ShouldAllowQueryBasedPruning(const bool bRuntimeMode = true) const override { return false; }
 };

@@ -1,46 +1,49 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ZombiUpdateProcessor.h"
+#include "MassProcessor.h"
 #include "MassExecutionContext.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 
 UZombiUpdateProcessor::UZombiUpdateProcessor()
 {
-    // Configuración correcta para procesadores Mass Entity en UE5.5.4
-    ExecutionFlags = (int32)(EProcessorExecutionFlags::All);
+    // Rehabilitar procesador pero con cuidado
+    // Configuración para registro automático en UE5.5.4
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
     bRequiresGameThreadExecution = false;
-    bAutoRegisterWithProcessingPhases = true;
+    bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
 
     UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Constructor llamado - Procesador creado"));
 }
 
 void UZombiUpdateProcessor::ConfigureQueries()
 {
-    // Este procesador no necesita queries específicos
+    // Query para procesar grupos de actualización de TurboSequence
+    UpdateGroupQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
 }
 
-// Ejecuta el procesamiento de Update Groups
 void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Procesa cada grupo de actualización de TurboSequence
-    for (int32 GroupIndex = 0; GroupIndex < NUM_UPDATE_GROUPS; ++GroupIndex)
+    // TEMPORAL: Solo logging, sin llamadas a TurboSequence
+    static float LogTimer = 0.0f;
+    LogTimer += DeltaTime;
+
+    if (LogTimer >= 5.0f)
     {
-        SolveUpdateGroup(GroupIndex, DeltaTime);
+        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Ejecutándose (SolveMeshes deshabilitado por crash) - DeltaTime: %.3f"), DeltaTime);
+        LogTimer = 0.0f;
     }
-}
 
-// Resuelve un grupo específico de actualización
-void UZombiUpdateProcessor::SolveUpdateGroup(int32 GroupIndex, float DeltaTime)
-{
-    // Configura el contexto de actualización para este grupo
-    UpdateContext.GroupIndex = GroupIndex;
+    // TEMPORAL: Comentar SolveMeshes_GameThread porque causa crash
+    // ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
 
-    // Resuelve las animaciones para este grupo
-    // Esta es la llamada esencial para que TurboSequence funcione correctamente
-    ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
+    if (LogTimer == 0.0f) // Solo loggear una vez por ciclo
+    {
+        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: SolveMeshes_GameThread temporalmente deshabilitado (causa crash)"));
+    }
 }
