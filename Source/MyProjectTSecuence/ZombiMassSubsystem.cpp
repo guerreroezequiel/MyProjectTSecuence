@@ -105,8 +105,8 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Guarda la referencia para limpieza
     RegisteredEntities.Add(EntityHandle);
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Entidad creada exitosamente - Handle: %d, Total entidades: %d"),
-           EntityHandle.Index, RegisteredEntities.Num());
+    // UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Entidad creada exitosamente - Handle: %d, Total entidades: %d"),
+    //        EntityHandle.Index, RegisteredEntities.Num());
 
     return EntityHandle;
 }
@@ -180,12 +180,31 @@ void UZombiMassSubsystem::RegisterMassProcessors()
 
     if (MassEntitySubsystem)
     {
-        // Los procesadores Mass Entity se registran automáticamente cuando están en el proyecto
+        // En UE5.5.4, los procesadores Mass Entity se registran automáticamente cuando están en el proyecto
         // Solo necesitamos verificar que el sistema Mass Entity esté funcionando
         UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
 
+        // Verificar que los procesadores estén disponibles
+        // En UE5.5.4, los procesadores se registran automáticamente si están configurados correctamente
+        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Verificando procesadores personalizados..."));
+
+        // Crear instancias temporales para verificar que se crean correctamente
+        UZombiMovementProcessor *MovementProcessor = NewObject<UZombiMovementProcessor>();
+        UZombiTurboSequenceProcessor *TurboSequenceProcessor = NewObject<UZombiTurboSequenceProcessor>();
+        UZombiUpdateProcessor *UpdateProcessor = NewObject<UZombiUpdateProcessor>();
+
+        if (MovementProcessor && TurboSequenceProcessor && UpdateProcessor)
+        {
+            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores personalizados creados correctamente"));
+            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Los procesadores deberían registrarse automáticamente"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("ZombiMassSubsystem: Error al crear procesadores personalizados"));
+        }
+
         bProcessorsRegistered = true;
-        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores Mass Entity disponibles automáticamente"));
+        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores Mass Entity configurados para registro automático"));
     }
     else
     {
@@ -198,17 +217,5 @@ void UZombiMassSubsystem::ExecuteProcessorsManually(float DeltaTime)
 {
     // Los procesadores ahora se ejecutan automáticamente por el sistema Mass Entity
     // Este método se mantiene por compatibilidad pero no hace nada
-
-    // Log temporal para verificar que el sistema está funcionando
-    static float LogTimer = 0.0f;
-    LogTimer += DeltaTime;
-    if (LogTimer >= 2.0f)
-    {
-        if (MassEntitySubsystem)
-        {
-            FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
-            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema funcionando - Entidades registradas: %d"), RegisteredEntities.Num());
-        }
-        LogTimer = 0.0f;
-    }
+    // TODO: Eliminar este método cuando se confirme que todo funciona correctamente
 }

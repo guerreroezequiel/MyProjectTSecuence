@@ -7,24 +7,24 @@
 
 UZombiUpdateProcessor::UZombiUpdateProcessor()
 {
-    // Se ejecuta al final del frame para resolver todas las animaciones
+    // Configuración correcta para procesadores Mass Entity en UE5.5.4
     ExecutionFlags = (int32)(EProcessorExecutionFlags::All);
-    ExecutionOrder.ExecuteInGroup = TEXT("BehaviorBeginFrame");
+    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+    bRequiresGameThreadExecution = false;
+    bAutoRegisterWithProcessingPhases = true;
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Constructor llamado - Procesador creado"));
 }
 
 void UZombiUpdateProcessor::ConfigureQueries()
 {
     // Este procesador no necesita queries específicos
-    // Solo se ejecuta una vez por frame para resolver Update Groups
 }
 
 void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
-    UWorld *World = GetWorld();
-
-    // Resuelve todos los grupos de actualización
-    // Esto distribuye la carga de procesamiento de animaciones
     for (int32 GroupIndex = 0; GroupIndex < NUM_UPDATE_GROUPS; ++GroupIndex)
     {
         SolveUpdateGroup(GroupIndex, DeltaTime);
@@ -38,5 +38,8 @@ void UZombiUpdateProcessor::SolveUpdateGroup(int32 GroupIndex, float DeltaTime)
 
     // Resuelve las animaciones para este grupo
     // Esta es la llamada esencial para que TurboSequence funcione correctamente
-    ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
+    // Por ahora, comentamos esta llamada hasta que resolvamos el problema de contexto
+    // ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: SolveUpdateGroup llamado para grupo %d"), GroupIndex);
 }

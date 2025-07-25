@@ -71,8 +71,8 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
         RemainingCount -= CurrentBatchSize;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Spawn completado - %d zombis creados exitosamente, Total activos: %d"),
-           SuccessfullySpawned, ActiveZombiCount);
+    // UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Spawn completado - %d zombis creados exitosamente, Total activos: %d"),
+    //        SuccessfullySpawned, ActiveZombiCount);
 }
 
 // Spawna un zombi individual
@@ -186,11 +186,42 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
             FMath::RandRange(0, 3), // Distribuye en 4 grupos
             MeshData);
 
-        // Guarda la referencia de la instancia visual
+        // Guarda la referencia de la instancia visual localmente
         VisualInstances.Add(EntityHandle, MeshData);
 
-        UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Instancia visual creada exitosamente - Instancias totales: %d"),
-               VisualInstances.Num());
+        // Actualiza el fragmento visual de la entidad Mass
+        if (UZombiMassSubsystem *ZombiMassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>())
+        {
+            if (UMassEntitySubsystem *LocalMassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+            {
+                FMassEntityManager &EntityManager = LocalMassEntitySubsystem->GetMutableEntityManager();
+
+                // Actualiza el fragmento visual de la entidad usando la API correcta de UE5.5.4
+                if (EntityManager.IsEntityValid(EntityHandle))
+                {
+                    // Usar MassEntityUtils para acceder al fragmento
+                    if (FZombiTurboSequenceFragment *TurboSequenceFragment = EntityManager.GetFragmentDataPtr<FZombiTurboSequenceFragment>(EntityHandle))
+                    {
+                        TurboSequenceFragment->MeshData = MeshData;
+                        TurboSequenceFragment->bIsVisualInstanceValid = true;
+                        TurboSequenceFragment->UpdateGroupIndex = FMath::RandRange(0, 3);
+
+                        // UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Fragmento visual actualizado para entidad %d"), EntityHandle.Index);
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: Entidad %d no tiene fragmento visual"), EntityHandle.Index);
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: Entidad %d no es válida"), EntityHandle.Index);
+                }
+            }
+        }
+
+        // UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Instancia visual creada exitosamente - Instancias totales: %d"),
+        //        VisualInstances.Num());
     }
     else
     {

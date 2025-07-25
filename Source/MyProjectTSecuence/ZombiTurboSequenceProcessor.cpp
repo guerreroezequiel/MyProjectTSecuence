@@ -5,23 +5,23 @@
 #include "TurboSequence_Manager_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "Engine/Engine.h"
+#include "HAL/PlatformTime.h"
 
 UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
 {
-    // Se ejecuta en el grupo de procesamiento de renderizado por defecto
+    // Configuración correcta para procesadores Mass Entity en UE5.5.4
     ExecutionFlags = (int32)(EProcessorExecutionFlags::All);
-    ExecutionOrder.ExecuteInGroup = TEXT("BehaviorBeginFrame");
+    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+    bRequiresGameThreadExecution = false;
+    bAutoRegisterWithProcessingPhases = true;
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Constructor llamado - Procesador creado"));
 }
 
+// Configura los queries para requerir los fragmentos necesarios
 void UZombiTurboSequenceProcessor::ConfigureQueries()
 {
-    // Evita configurar múltiples veces
-    static bool bConfigured = false;
-    if (bConfigured)
-    {
-        return;
-    }
-
     // Query para entidades que necesitan instancias visuales creadas
     VisualInstanceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     VisualInstanceQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadOnly);
@@ -30,127 +30,35 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
     // Query para entidades que necesitan sincronización de transformación
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadOnly);
+    TransformSyncQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
 
-    bConfigured = true;
-    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Queries configurados correctamente"));
+    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Queries configurados correctamente (registro automático)"));
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
-    // Los procesadores Mass Entity no pueden obtener el mundo directamente
-    // Por ahora, deshabilitamos la creación de instancias visuales hasta que resolvamos esto
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Configura el query si no está configurado
-    static bool bQueryConfigured = false;
-    if (!bQueryConfigured)
-    {
-        ConfigureQueries();
-        bQueryConfigured = true;
-        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Query configurado en Execute"));
-    }
-
-    // Log temporal para verificar que el procesador se ejecuta
-    static float LogTimer = 0.0f;
-    LogTimer += DeltaTime;
-    if (LogTimer >= 3.0f)
-    {
-        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ejecutándose - Entidades: %d"), Context.GetNumEntities());
-
-        // Log adicional para verificar el estado de las instancias visuales
-        if (Context.GetNumEntities() > 0)
-        {
-            TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext &Context)
-                                                  {
-                const TConstArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
-                const TConstArrayView<FZombiMovementFragment> MovementFragments = Context.GetFragmentView<FZombiMovementFragment>();
-                
-                // Cuenta instancias válidas
-                int32 ValidInstances = 0;
-                for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-                {
-                    if (TurboSequenceFragments[i].bIsVisualInstanceValid)
-                    {
-                        ValidInstances++;
-                    }
-                }
-                
-                UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Instancias válidas: %d/%d"), ValidInstances, Context.GetNumEntities());
-                
-                // Muestra información de la primera entidad como ejemplo
-                if (Context.GetNumEntities() > 0)
-                {
-                    const FZombiTurboSequenceFragment& FirstTurbo = TurboSequenceFragments[0];
-                    const FZombiMovementFragment& FirstMovement = MovementFragments[0];
-                    
-                    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Primera entidad - Instancia válida: %s, Posición: %s"), 
-                        FirstTurbo.bIsVisualInstanceValid ? TEXT("Sí") : TEXT("No"),
-                        *FirstMovement.Position.ToString());
-                } });
-        }
-
-        LogTimer = 0.0f;
-    }
-
-    // Por ahora, solo procesamos la sincronización de transformación
-    // La creación de instancias se manejará en el spawner
-
-    // Procesa entidades que necesitan instancias visuales creadas
-    // TEMPORALMENTE DESHABILITADO - Problema con obtención del mundo en procesadores Mass Entity
-    /*
-    VisualInstanceQuery.ForEachEntityChunk(EntityManager, Context, [this, World](FMassExecutionContext &Context)
-                                           {
-        const TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+    // Procesa entidades que necesitan sincronización de transformación y animación
+    TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+                                          {
+        const TConstArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
         const TConstArrayView<FZombiMovementFragment> MovementFragments = Context.GetFragmentView<FZombiMovementFragment>();
         const TConstArrayView<FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
-            FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
+            const FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
             const FZombiMovementFragment& MovementFragment = MovementFragments[i];
             const FZombiStateFragment& StateFragment = StateFragments[i];
 
-            // Solo procesa si el zombi no está muerto
-            if (StateFragment.State != EZombiState::Death)
+            // Actualiza transformación si la instancia visual es válida
+            if (TurboSequenceFragment.bIsVisualInstanceValid)
             {
-                // Crea instancia visual si no existe
-                if (!TurboSequenceFragment.bIsVisualInstanceValid)
-                {
-                    CreateTurboSequenceInstance(TurboSequenceFragment, MovementFragment, World);
-                }
-            }
-            else
-            {
-                // Destruye instancia visual si el zombi está muerto
-                if (TurboSequenceFragment.bIsVisualInstanceValid)
-                {
-                    DestroyTurboSequenceInstance(TurboSequenceFragment, World);
-                }
+                UpdateTurboSequenceTransform(TurboSequenceFragment, MovementFragment);
+                UpdateTurboSequenceAnimation(TurboSequenceFragment, StateFragment);
             }
         } });
-    */
-
-    // Solo ejecuta el query si hay entidades para procesar
-    if (Context.GetNumEntities() > 0)
-    {
-        // Procesa entidades que necesitan sincronización de transformación
-        TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
-                                              {
-		const TConstArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
-		const TConstArrayView<FZombiMovementFragment> MovementFragments = Context.GetFragmentView<FZombiMovementFragment>();
-
-		for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-		{
-			const FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
-			const FZombiMovementFragment& MovementFragment = MovementFragments[i];
-
-			// Actualiza transformación si la instancia visual es válida
-			if (TurboSequenceFragment.bIsVisualInstanceValid)
-			{
-				UpdateTurboSequenceTransform(TurboSequenceFragment, MovementFragment);
-			}
-		} });
-    }
 }
 
 void UZombiTurboSequenceProcessor::CreateTurboSequenceInstance(FZombiTurboSequenceFragment &TurboSequenceFragment,
@@ -244,4 +152,70 @@ void UZombiTurboSequenceProcessor::DestroyTurboSequenceInstance(const FZombiTurb
     ATurboSequence_Manager_Lf::RemoveSkinnedMeshInstance_GameThread(
         TurboSequenceFragment.MeshData,
         World);
+}
+
+// Actualiza la animación de la instancia visual según el estado lógico
+void UZombiTurboSequenceProcessor::UpdateTurboSequenceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                                const FZombiStateFragment &StateFragment)
+{
+    if (!TurboSequenceFragment.MeshData.IsMeshDataValid())
+    {
+        return;
+    }
+
+    // Configuración de reproducción de animación
+    FTurboSequence_AnimPlaySettings_Lf PlaySettings;
+    PlaySettings.AnimationSpeed = 1.0f;
+    PlaySettings.AnimationWeight = 1.0f;
+
+    // Determina qué animación reproducir según el estado lógico
+    UAnimSequence *AnimationToPlay = nullptr;
+
+    switch (StateFragment.State)
+    {
+    case EZombiState::Idle:
+        // Por ahora usamos una animación por defecto - deberías asignar IdleAnim en el fragmento
+        // AnimationToPlay = TurboSequenceFragment.IdleAnimation;
+        break;
+    case EZombiState::Walk:
+        // Por ahora usamos una animación por defecto - deberías asignar WalkAnim en el fragmento
+        // AnimationToPlay = TurboSequenceFragment.WalkAnimation;
+        break;
+    case EZombiState::Chase:
+        // AnimationToPlay = TurboSequenceFragment.ChaseAnimation;
+        break;
+    case EZombiState::Attack:
+        // AnimationToPlay = TurboSequenceFragment.AttackAnimation;
+        break;
+    case EZombiState::Hit:
+        // AnimationToPlay = TurboSequenceFragment.HitAnimation;
+        break;
+    case EZombiState::Death:
+        // AnimationToPlay = TurboSequenceFragment.DeathAnimation;
+        break;
+    }
+
+    // Si tenemos una animación válida, la reproducimos
+    if (AnimationToPlay)
+    {
+        ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+            TurboSequenceFragment.MeshData,
+            AnimationToPlay,
+            PlaySettings);
+    }
+    else
+    {
+        // Log temporal para verificar que se está llamando esta función
+        static float LogTimer = 0.0f;
+        static float LastTime = 0.0f;
+        float CurrentTime = FPlatformTime::Seconds();
+        LogTimer += (CurrentTime - LastTime);
+        LastTime = CurrentTime;
+
+        if (LogTimer >= 5.0f)
+        {
+            UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Estado actual: %d, pero no hay animación asignada"), (int32)StateFragment.State);
+            LogTimer = 0.0f;
+        }
+    }
 }

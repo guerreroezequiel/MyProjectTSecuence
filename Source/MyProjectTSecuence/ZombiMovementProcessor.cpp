@@ -9,26 +9,40 @@
 // Constructor del procesador
 UZombiMovementProcessor::UZombiMovementProcessor()
 {
-    // Se ejecuta en el grupo de procesamiento de movimiento por defecto
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Constructor iniciado"));
+
+    // Configuración correcta para procesadores Mass Entity en UE5.5.4
     ExecutionFlags = (int32)(EProcessorExecutionFlags::All);
-    ExecutionOrder.ExecuteInGroup = TEXT("BehaviorBeginFrame");
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ExecutionFlags configurado"));
+
+    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ProcessingPhase configurado"));
+
+    ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ExecutionOrder configurado"));
+
+    bRequiresGameThreadExecution = false;
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: bRequiresGameThreadExecution configurado"));
+
+    bAutoRegisterWithProcessingPhases = true;
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: bAutoRegisterWithProcessingPhases configurado"));
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Constructor completado - Procesador creado"));
 }
 
 // Configura el query para requerir los fragmentos de movimiento y estado
 void UZombiMovementProcessor::ConfigureQueries()
 {
-    // Evita configurar múltiples veces
-    static bool bConfigured = false;
-    if (bConfigured)
-    {
-        return;
-    }
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ConfigureQueries iniciado"));
 
     MovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
-    MovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Requerimiento MovementFragment agregado"));
 
-    bConfigured = true;
-    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Query configurado correctamente"));
+    MovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Requerimiento StateFragment agregado"));
+
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Query configurado correctamente (registro automático)"));
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: ConfigureQueries completado"));
 }
 
 // Ejecuta el procesamiento de movimiento para todas las entidades
@@ -36,124 +50,88 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Configura el query si no está configurado
-    static bool bQueryConfigured = false;
-    if (!bQueryConfigured)
-    {
-        ConfigureQueries();
-        bQueryConfigured = true;
-        UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Query configurado en Execute"));
-    }
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Execute iniciado"));
 
-    // Log para verificar si el query está funcionando
-    static float QueryLogTimer = 0.0f;
-    QueryLogTimer += DeltaTime;
-    if (QueryLogTimer >= 1.0f)
-    {
-        // Solo ejecuta el query si hay entidades para procesar
-        if (Context.GetNumEntities() > 0)
+    // Procesa todas las entidades que cumplen el query
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Antes de ForEachEntityChunk"));
+
+    // Verificar si el query está registrado correctamente
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Verificando query antes de usar"));
+
+    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+                                     {
+        UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Dentro de ForEachEntityChunk - %d entidades"), Context.GetNumEntities());
+        
+        const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
+        const TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
+        const float DeltaTime = Context.GetDeltaTimeSeconds();
+
+        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
-            // Intenta ejecutar el query directamente para ver si encuentra entidades
-            int32 FoundEntities = 0;
-            MovementQuery.ForEachEntityChunk(EntityManager, Context, [&FoundEntities](FMassExecutionContext &Context)
-                                             { FoundEntities += Context.GetNumEntities(); });
+            FZombiMovementFragment& MovementFragment = MovementFragments[i];
+            FZombiStateFragment& StateFragment = StateFragments[i];
 
-            UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Query encontró %d entidades directamente, Context tiene %d"), FoundEntities, Context.GetNumEntities());
-        }
-        else
-        {
-            UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Context no tiene entidades para procesar"));
-        }
-        QueryLogTimer = 0.0f;
-    }
+            // Solo procesa movimiento si el zombi no está muerto
+            if (StateFragment.State != EZombiState::Death)
+            {
+                // Actualiza el timer de cambio de dirección
+                MovementFragment.DirectionChangeTimer += DeltaTime;
 
-    // Log temporal para verificar que el procesador se ejecuta
-    static float LogTimer = 0.0f;
-    LogTimer += DeltaTime;
-    if (LogTimer >= 2.0f)
-    {
-        UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Ejecutándose - Entidades: %d"), Context.GetNumEntities());
-
-        // Log adicional para verificar el estado de las entidades
-        if (Context.GetNumEntities() > 0)
-        {
-            MovementQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext &Context)
-                                             {
-                const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
-                const TConstArrayView<FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
-                
-                // Muestra información de la primera entidad como ejemplo
-                if (Context.GetNumEntities() > 0)
+                // Cambia dirección aleatoriamente
+                if (MovementFragment.DirectionChangeTimer >= MovementFragment.DirectionChangeInterval)
                 {
-                    const FZombiMovementFragment& FirstMovement = MovementFragments[0];
-                    const FZombiStateFragment& FirstState = StateFragments[0];
-                    
-                    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Primera entidad - Posición: %s, Estado: %d"), 
-                        *FirstMovement.Position.ToString(), 
-                        (int32)FirstState.State);
-                } });
-        }
+                    MovementFragment.MovementDirection = GenerateRandomDirection();
+                    MovementFragment.DirectionChangeTimer = 0.0f;
+                }
 
-        LogTimer = 0.0f;
-    }
+                // Calcula el movimiento
+                FVector NewPosition = MovementFragment.Position + 
+                    MovementFragment.MovementDirection * MovementFragment.MovementSpeed * DeltaTime;
 
-    // Solo ejecuta el query si hay entidades para procesar
-    if (Context.GetNumEntities() > 0)
-    {
-        MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
-                                         {
-		const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
-		const TConstArrayView<FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
-		const float DeltaTime = Context.GetDeltaTimeSeconds();
+                // Mantiene al zombi dentro del área de movimiento
+                NewPosition = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);
 
-		for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-		{
-			FZombiMovementFragment& MovementFragment = MovementFragments[i];
-			const FZombiStateFragment& StateFragment = StateFragments[i];
+                // Actualiza la posición
+                MovementFragment.Position = NewPosition;
 
-			// Solo procesa movimiento si el zombi no está muerto
-			if (StateFragment.State != EZombiState::Death)
-			{
-				// Actualiza el timer de cambio de dirección
-				MovementFragment.DirectionChangeTimer += DeltaTime;
+                // Calcula la rotación hacia la dirección de movimiento
+                if (!MovementFragment.MovementDirection.IsNearlyZero())
+                {
+                    FRotator TargetRotation = MovementFragment.MovementDirection.Rotation();
+                    FRotator CurrentRotation = MovementFragment.Rotation;
 
-				// Cambia dirección aleatoriamente
-				if (MovementFragment.DirectionChangeTimer >= MovementFragment.DirectionChangeInterval)
-				{
-					MovementFragment.MovementDirection = GenerateRandomDirection();
-					MovementFragment.DirectionChangeTimer = 0.0f;
-				}
+                    // Interpola suavemente la rotación
+                    MovementFragment.Rotation = FMath::RInterpTo(
+                        CurrentRotation, 
+                        TargetRotation, 
+                        DeltaTime, 
+                        MovementFragment.RotationSpeed / 90.0f // Normaliza la velocidad de rotación
+                    );
+                }
 
-				// Calcula el movimiento
-				FVector NewPosition = MovementFragment.Position + 
-					MovementFragment.MovementDirection * MovementFragment.MovementSpeed * DeltaTime;
+                // Actualiza el estado según si se está moviendo o no
+                FVector MovementDelta = NewPosition - MovementFragment.Position;
+                if (MovementDelta.Size() > 1.0f) // Si se movió más de 1 unidad
+                {
+                    if (StateFragment.State != EZombiState::Walk)
+                    {
+                        StateFragment.State = EZombiState::Walk;
+                    }
+                }
+                else
+                {
+                    if (StateFragment.State != EZombiState::Idle)
+                    {
+                        StateFragment.State = EZombiState::Idle;
+                    }
+                }
 
-				// Mantiene al zombi dentro del área de movimiento
-				NewPosition = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);
+                // Actualiza la instancia visual de TurboSequence
+                UpdateTurboSequenceInstance(MovementFragment);
+            }
+        } });
 
-				// Actualiza la posición
-				MovementFragment.Position = NewPosition;
-
-				// Calcula la rotación hacia la dirección de movimiento
-				if (!MovementFragment.MovementDirection.IsNearlyZero())
-				{
-					FRotator TargetRotation = MovementFragment.MovementDirection.Rotation();
-					FRotator CurrentRotation = MovementFragment.Rotation;
-
-					// Interpola suavemente la rotación
-					MovementFragment.Rotation = FMath::RInterpTo(
-						CurrentRotation, 
-						TargetRotation, 
-						DeltaTime, 
-						MovementFragment.RotationSpeed / 90.0f // Normaliza la velocidad de rotación
-					);
-				}
-
-				// Actualiza la instancia visual de TurboSequence
-				UpdateTurboSequenceInstance(MovementFragment);
-			}
-		} });
-    }
+    UE_LOG(LogTemp, Log, TEXT("ZombiMovementProcessor: Execute completado"));
 }
 
 // Genera una dirección aleatoria para el movimiento
