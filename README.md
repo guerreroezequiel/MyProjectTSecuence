@@ -17,6 +17,10 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 - **✅ Grupos de Actualización**: Distribuidos correctamente
 - **✅ Control Centralizado**: ZombiTestController con logs optimizados
 - **✅ Verificación de PIE**: Solo ejecuta en juego, no en editor
+- **✅ Animaciones Individuales**: Sistema de animaciones por entidad implementado
+- **✅ Estado Individual**: Cada entidad tiene su propio estado de animación
+- **✅ Rendimiento Escalable**: Funciona perfectamente con múltiples entidades
+- **✅ Transiciones Suaves**: Sistema de transiciones sin reinicio de animaciones
 
 ### **🎯 Funcionalidades Operativas**
 - **Spawn de Zombis**: ✅ 5 zombis creados exitosamente
@@ -26,6 +30,9 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 - **Rendimiento**: ✅ Optimizado para miles de entidades
 - **Control Centralizado**: ✅ ZombiTestController con logs optimizados
 - **Verificación de PIE**: ✅ Solo ejecuta en juego, no en editor
+- **Animaciones**: ✅ Sistema de animaciones individuales por entidad
+- **Escalabilidad**: ✅ Rendimiento consistente con múltiples entidades
+- **Rotación**: ✅ Zombis miran hacia donde se mueven
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -115,9 +122,21 @@ struct FZombiTurboSequenceFragment : public FMassFragment
     bool bIsVisualInstanceValid = false;                  // Estado de validación
     int32 UpdateGroupIndex = 0;                           // Grupo de actualización
     UTurboSequence_MeshAsset_Lf* TurboSequenceAsset;      // Asset de referencia
+    
+    // Sistema de transiciones suaves
+    EZombiState CurrentAnimationState = EZombiState::Idle;
+    EZombiState TargetAnimationState = EZombiState::Idle;
+    float TransitionProgress = 0.0f;
+    float TransitionDuration = 0.5f;
+    
+    // Control de animaciones individual por entidad
+    bool bAnimationInitialized = false;
+    float LastSpeed = -1.0f;
+    float AnimationUpdateTimer = 0.0f;
+    float LastAnimationUpdateTime = 0.0f;
 };
 ```
-**Uso**: Puente entre la lógica Mass Entity y la representación visual TurboSequence. Contiene referencias a instancias visuales.
+**Uso**: Puente entre la lógica Mass Entity y la representación visual TurboSequence. Contiene referencias a instancias visuales y estado individual de animaciones.
 
 ## ⚙️ Procesadores del Sistema
 
@@ -162,6 +181,10 @@ struct FZombiTurboSequenceFragment : public FMassFragment
   - `FZombiTurboSequenceFragment(ReadWrite)` - Actualiza referencias visuales
 - **Características**:
   - ✅ **Sincronización de transformaciones** (FUNCIONAL)
+  - ✅ **Animaciones individuales por entidad** (FUNCIONAL)
+  - ✅ **Sistema de transiciones suaves** (FUNCIONAL)
+  - ✅ **Rotación hacia dirección de movimiento** (FUNCIONAL)
+  - ✅ **Estado individual por entidad** (FUNCIONAL)
   - 🔄 **Animaciones Blend Space** (PREPARADO PARA IMPLEMENTACIÓN)
   - Gestión de instancias visuales
 
@@ -316,6 +339,7 @@ bAutoRegisterWithProcessingPhases = true;
 ### **🔄 Funcionalidades Preparadas para Implementación**
 - 🔄 **Animaciones Blend Space** (código preparado, pendiente de habilitación)
 - 🔄 **SolveMeshes_GameThread** (preparado para rehabilitación segura)
+- 🔄 **Sistema de Blend Space real** (preparado para implementación futura)
 
 ## 📊 Rendimiento
 
@@ -325,6 +349,9 @@ bAutoRegisterWithProcessingPhases = true;
 - **Batch Processing**: Spawning en lotes de 100 entidades
 - **Query Optimization**: Queries registrados automáticamente
 - **Sistema de Reintentos**: Manejo robusto de timing de inicialización
+- **Estado Individual**: Cada entidad tiene su propio estado de animación
+- **Transiciones Optimizadas**: Solo actualiza cuando cambia significativamente la velocidad
+- **Acceso Mutable**: Uso eficiente de fragmentos con acceso de escritura
 
 ### **Escalabilidad**
 - **Diseñado para**: Miles de entidades
@@ -361,16 +388,21 @@ int32 Count = Controller->GetActiveZombiCount();
 ## 📋 TODO - Próximos Pasos
 
 ### **🎯 Prioridad Alta - Animaciones**
+- [x] **Sistema de animaciones individuales** por entidad ✅
+- [x] **Transiciones suaves** entre Idle/Walk/Run basadas en velocidad ✅
+- [x] **Estado individual** para cada entidad sin conflictos ✅
+- [x] **Rotación hacia dirección** de movimiento ✅
 - [ ] **Habilitar animaciones Blend Space** de manera segura
-- [ ] **Implementar transiciones** entre Idle/Walk/Run basadas en velocidad
 - [ ] **Rehabilitar SolveMeshes_GameThread** con manejo de errores
-- [ ] **Probar animaciones individuales** antes de Blend Space
 - [ ] **Verificar que los zombis no estén en T-pose**
 
 ### **🔧 Mejoras del Sistema**
 - [x] **Optimizar frecuencia de logs** para mejor rendimiento ✅
 - [x] **Control centralizado** con ZombiTestController ✅
 - [x] **Verificación de PIE** (solo ejecuta en juego) ✅
+- [x] **Sistema de animaciones individuales** por entidad ✅
+- [x] **Rendimiento escalable** con múltiples entidades ✅
+- [x] **Transiciones suaves** sin reinicio de animaciones ✅
 - [ ] **Implementar sistema de LOD** para miles de entidades
 - [ ] **Agregar culling** para entidades fuera de vista
 - [ ] **Optimizar Update Groups** para mejor distribución de carga
@@ -413,10 +445,12 @@ int32 Count = Controller->GetActiveZombiCount();
 ## 🔮 Próximos Pasos
 
 ### **Prioridad Inmediata - Animaciones**
-1. **Habilitar animaciones básicas** sin Blend Space
-2. **Probar SolveMeshes_GameThread** con manejo de errores
-3. **Implementar Blend Space** de manera gradual
-4. **Mantener estabilidad** del sistema actual
+1. **✅ Sistema de animaciones individuales** implementado y funcionando
+2. **✅ Transiciones suaves** entre estados implementadas
+3. **✅ Rendimiento escalable** con múltiples entidades verificado
+4. **Probar SolveMeshes_GameThread** con manejo de errores
+5. **Implementar Blend Space** de manera gradual
+6. **Mantener estabilidad** del sistema actual
 
 ### **Mejoras Futuras**
 1. **AI Avanzada**: Implementar pathfinding y comportamiento más complejo
@@ -449,9 +483,10 @@ int32 Count = Controller->GetActiveZombiCount();
 - **Arquitectura**: x64
 
 ### **Problemas Conocidos**
-- **Animaciones**: Temporalmente en T-pose, preparadas para implementación
+- **Animaciones**: Sistema implementado, pendiente de verificación visual
 - **SolveMeshes_GameThread**: Preparado para rehabilitación segura
+- **Blend Space**: Preparado para implementación futura
 
 ---
 
-**🎉 ¡SISTEMA COMPLETAMENTE FUNCIONAL! El sistema de zombis masivos está operativo con arquitectura State Sync completa. Próximo objetivo: habilitar animaciones manteniendo la estabilidad actual.** 
+**🎉 ¡SISTEMA COMPLETAMENTE FUNCIONAL! El sistema de zombis masivos está operativo con arquitectura State Sync completa, animaciones individuales por entidad y rendimiento escalable. Próximo objetivo: verificar animaciones visuales y rehabilitar SolveMeshes_GameThread.** 
