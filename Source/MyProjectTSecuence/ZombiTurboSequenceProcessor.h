@@ -35,7 +35,7 @@ private:
 
 	// Función para actualizar animaciones basadas en estado del zombi
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
-									 const FZombiTurboSequenceFragment &TurboSequenceFragment,
+									 FZombiTurboSequenceFragment &TurboSequenceFragment,
 									 const FZombiStateFragment &StateFragment,
 									 const FZombiMovementFragment &MovementFragment);
 };

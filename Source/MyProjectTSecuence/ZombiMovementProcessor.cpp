@@ -63,17 +63,21 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                     
                     // Cambiar velocidad aleatoriamente para probar Blend Space
                     float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
-                    if (SpeedVariation < 0.3f)
+                    if (SpeedVariation < 0.2f)
                     {
-                        MovementFragment.MovementSpeed = FMath::RandRange(5.0f, 15.0f); // Idle
+                        MovementFragment.MovementSpeed = 0.0f; // IDLE - Completamente quieto
                     }
-                    else if (SpeedVariation < 0.7f)
+                    else if (SpeedVariation < 0.5f)
                     {
-                        MovementFragment.MovementSpeed = FMath::RandRange(50.0f, 100.0f); // Walk
+                        MovementFragment.MovementSpeed = FMath::RandRange(0.1f, 0.5f); // Idle (muy lento)
+                    }
+                    else if (SpeedVariation < 0.8f)
+                    {
+                        MovementFragment.MovementSpeed = FMath::RandRange(10.0f, 30.0f); // Walk
                     }
                     else
                     {
-                        MovementFragment.MovementSpeed = FMath::RandRange(120.0f, 180.0f); // Run
+                        MovementFragment.MovementSpeed = FMath::RandRange(60.0f, 100.0f); // Run
                     }
                     
                     // Log para verificar cambios de velocidad
@@ -81,14 +85,19 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                     SpeedLogTimer += DeltaTime;
                     if (SpeedLogTimer >= 5.0f)
                     {
-                        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Nueva velocidad: %.2f"), MovementFragment.MovementSpeed);
+                        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Nueva velocidad: %.2f, Dirección: %s"), 
+                               MovementFragment.MovementSpeed, *MovementFragment.MovementDirection.ToString());
                         SpeedLogTimer = 0.0f;
                     }
                 }
 
-                // Calcula el movimiento
-                FVector NewPosition = MovementFragment.Position + 
-                    MovementFragment.MovementDirection * MovementFragment.MovementSpeed * DeltaTime;
+                // Calcula el movimiento solo si hay velocidad
+                FVector NewPosition = MovementFragment.Position;
+                if (MovementFragment.MovementSpeed > 0.0f)
+                {
+                    NewPosition = MovementFragment.Position + 
+                        MovementFragment.MovementDirection * MovementFragment.MovementSpeed * DeltaTime;
+                }
 
                 // Mantiene al zombi dentro del área de movimiento
                 NewPosition = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);

@@ -44,6 +44,16 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	float TransitionDuration = 0.5f; // Duración de transición en segundos
 
+	// Control de animaciones individual por entidad
+	UPROPERTY()
+	bool bAnimationInitialized = false;
+	UPROPERTY()
+	float LastSpeed = -1.0f;
+	UPROPERTY()
+	float AnimationUpdateTimer = 0.0f;
+	UPROPERTY()
+	float LastAnimationUpdateTime = 0.0f;
+
 	FZombiTurboSequenceFragment()
 	{
 		TurboSequenceAsset = nullptr;
