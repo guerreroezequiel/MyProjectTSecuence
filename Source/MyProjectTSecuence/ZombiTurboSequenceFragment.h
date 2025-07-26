@@ -49,6 +49,7 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	float AnimationUpdateTimer = 0.0f;
 	UPROPERTY()
 	float LastAnimationUpdateTime = 0.0f;
+	// Frecuencia de actualización eliminada para mantener orden de procesamiento
 
 	// Cache de animaciones para optimizar búsquedas
 	UPROPERTY()

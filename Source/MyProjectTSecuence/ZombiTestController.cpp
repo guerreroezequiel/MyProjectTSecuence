@@ -147,10 +147,6 @@ void AZombiTestController::Tick(float DeltaTime)
     }
 
     // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización
-    // Esto debe llamarse una vez por frame como en el ejemplo de TurboSequence
-    static float SolveMeshesLogTimer = 0.0f;
-    SolveMeshesLogTimer += DeltaTime;
-
     for (int32 GroupIndex = 0; GroupIndex < 4; ++GroupIndex) // 4 grupos como configurado en el spawner
     {
         FTurboSequence_UpdateContext_Lf UpdateContext;
@@ -159,8 +155,6 @@ void AZombiTestController::Tick(float DeltaTime)
         try
         {
             ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
-
-            // Log eliminado para optimización de rendimiento
         }
         catch (...)
         {

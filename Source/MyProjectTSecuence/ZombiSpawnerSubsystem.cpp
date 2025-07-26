@@ -201,23 +201,10 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         LoggedEntities++;
     }
 
-    // Verificar que el asset sea válido antes de crear la instancia
-    if (!TurboSequenceFragment.TurboSequenceAsset)
+    // OPTIMIZACIÓN: Verificaciones combinadas para mejor rendimiento
+    if (!TurboSequenceFragment.TurboSequenceAsset || !IsValid(TurboSequenceFragment.TurboSequenceAsset) || !GetWorld())
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiSpawnerSubsystem: TurboSequenceAsset es null para entidad %d"), EntityHandle.Index);
-        return;
-    }
-
-    if (!IsValid(TurboSequenceFragment.TurboSequenceAsset))
-    {
-        UE_LOG(LogTemp, Error, TEXT("ZombiSpawnerSubsystem: TurboSequenceAsset no es válido para entidad %d"), EntityHandle.Index);
-        return;
-    }
-
-    // Verificar que el World esté disponible
-    if (!GetWorld())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: World no disponible"));
+        UE_LOG(LogTemp, Error, TEXT("ZombiSpawnerSubsystem: Asset o World inválido para entidad %d"), EntityHandle.Index);
         return;
     }
 

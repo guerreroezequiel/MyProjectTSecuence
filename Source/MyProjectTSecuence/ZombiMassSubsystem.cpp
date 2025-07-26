@@ -177,8 +177,8 @@ void UZombiMassSubsystem::ClearAllEntities()
     UE_LOG(LogTemp, Log, TEXT("Todas las entidades zombi eliminadas del Mass Entity System"));
 }
 
-// Genera una rotación aleatoria
-FRotator UZombiMassSubsystem::GenerateRandomRotation() const
+// OPTIMIZACIÓN: Genera una rotación aleatoria (inline para mejor rendimiento)
+FORCEINLINE FRotator UZombiMassSubsystem::GenerateRandomRotation() const
 {
     return FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
 }

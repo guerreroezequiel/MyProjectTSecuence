@@ -73,9 +73,6 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 // Cambia dirección aleatoriamente y velocidad para probar Blend Space
                 if (MovementFragment.DirectionChangeTimer >= MovementFragment.DirectionChangeInterval)
                 {
-                    // Guardar la dirección anterior para debugging
-                    FVector OldDirection = MovementFragment.MovementDirection;
-
                     MovementFragment.MovementDirection = GenerateRandomDirection();
                     MovementFragment.DirectionChangeTimer = 0.0f;
 
@@ -103,34 +100,23 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 // PRIMERO: Calcula la rotación hacia la dirección de movimiento deseada (OPTIMIZADO)
                 if (!MovementFragment.MovementDirection.IsNearlyZero())
                 {
-                    // OPTIMIZACIÓN: Solo calcular rotación si la dirección cambió significativamente
-                    static FVector LastDirection = FVector::ZeroVector;
-                    static FRotator CachedTargetRotation = FRotator::ZeroRotator;
-                    
-                    // Solo recalcular si la dirección cambió más de 5 grados
-                    float DirectionChangeThreshold = 0.087f; // ~5 grados en radianes
-                    if (FVector::DistSquared(MovementFragment.MovementDirection, LastDirection) > DirectionChangeThreshold * DirectionChangeThreshold)
+                    // OPTIMIZACIÓN: Solo calcular rotación si la velocidad es significativa
+                    if (MovementFragment.MovementSpeed > 1.0f)
                     {
-                        CachedTargetRotation = MovementFragment.MovementDirection.Rotation();
-                        LastDirection = MovementFragment.MovementDirection;
-                    }
-                    
-                    FRotator CurrentRotation = MovementFragment.Rotation;
+                        FRotator TargetRotation = MovementFragment.MovementDirection.Rotation();
+                        FRotator CurrentRotation = MovementFragment.Rotation;
 
-                    // Si acaba de cambiar dirección, usar rotación más agresiva
-                    float RotationSpeedMultiplier = 1.0f;
-                    if (MovementFragment.DirectionChangeTimer < 0.5f) // Si cambió dirección recientemente
-                    {
-                        RotationSpeedMultiplier = 3.0f; // Rotación más rápida
-                    }
+                        // Si acaba de cambiar dirección, usar rotación más agresiva
+                        float RotationSpeedMultiplier = (MovementFragment.DirectionChangeTimer < 0.5f) ? 3.0f : 1.0f;
 
-                    // Interpola suavemente la rotación con velocidad aumentada
-                    MovementFragment.Rotation = FMath::RInterpTo(
-                        CurrentRotation,
-                        CachedTargetRotation,
-                        DeltaTime,
-                        (MovementFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f // Velocidad de rotación más rápida
-                    );
+                        // Interpola suavemente la rotación
+                        MovementFragment.Rotation = FMath::RInterpTo(
+                            CurrentRotation,
+                            TargetRotation,
+                            DeltaTime,
+                            (MovementFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f
+                        );
+                    }
 
                     // Logs eliminados para optimización de rendimiento
                     // static float DetailedRotationDebugTimer = 0.0f;
@@ -163,20 +149,11 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 FVector NewPosition = MovementFragment.Position;
                 if (MovementFragment.MovementSpeed > 0.0f)
                 {
-                    // OPTIMIZACIÓN: Cache de ForwardDirection para evitar recálculos
-                    static FRotator LastRotation = FRotator::ZeroRotator;
-                    static FVector CachedForwardDirection = FVector::ForwardVector;
-                    
-                    // Solo recalcular si la rotación cambió significativamente
-                    float RotationChangeThreshold = 0.1f; // ~5.7 grados
-                    if (FMath::Abs(MovementFragment.Rotation.Yaw - LastRotation.Yaw) > RotationChangeThreshold)
-                    {
-                        CachedForwardDirection = MovementFragment.Rotation.Vector();
-                        LastRotation = MovementFragment.Rotation;
-                    }
+                    // OPTIMIZACIÓN: Calcular forward direction directamente (más eficiente)
+                    FVector ForwardDirection = MovementFragment.Rotation.Vector();
                     
                     NewPosition = MovementFragment.Position +
-                                  CachedForwardDirection * MovementFragment.MovementSpeed * DeltaTime;
+                                  ForwardDirection * MovementFragment.MovementSpeed * DeltaTime;
 
                     // Log eliminado para optimización de rendimiento
                     // static float ForwardMovementDebugTimer = 0.0f;
@@ -193,11 +170,15 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                     // }
                 }
 
-                // Mantiene al zombi dentro del área de movimiento
-                NewPosition = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);
-
-                // Actualiza la posición
+                // OPTIMIZACIÓN: Solo verificar área si la posición cambió significativamente
+                FVector OldPosition = MovementFragment.Position;
                 MovementFragment.Position = NewPosition;
+                
+                // Solo verificar área si se movió más de 1 unidad
+                if (FVector::DistSquared(OldPosition, NewPosition) > 1.0f)
+                {
+                    MovementFragment.Position = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);
+                }
             }
 
             // Actualiza el estado según si se está moviendo o no
@@ -216,8 +197,7 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
             }
 
-            // Actualiza la instancia visual de TurboSequence
-            UpdateTurboSequenceInstance(MovementFragment);
+            // La actualización visual se maneja en ZombiTurboSequenceProcessor
         } });
 }
 
@@ -252,13 +232,4 @@ FVector UZombiMovementProcessor::ClampToMovementArea(const FVector &Position, co
     return Position;
 }
 
-// Crea o actualiza la instancia visual de TurboSequence
-void UZombiMovementProcessor::UpdateTurboSequenceInstance(const FZombiMovementFragment &MovementFragment)
-{
-    // Por ahora, solo actualizamos la transformación si ya existe una instancia
-    // La creación de instancias se manejará en un procesador separado o en el spawner
-    // Esto evita problemas con la API de TurboSequence y mejora el rendimiento
-
-    // TODO: Implementar la sincronización con TurboSequence cuando sea necesario
-    // Por ahora, solo mantenemos los datos de movimiento en el fragmento
-}
+// Función eliminada - la actualización visual se maneja en ZombiTurboSequenceProcessor
