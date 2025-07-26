@@ -4,6 +4,7 @@
 #include "ZombiSpawnerSubsystem.h"
 #include "ZombiMassSubsystem.h"
 #include "TurboSequence_MeshAsset_Lf.h"
+#include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 
 AZombiTestController::AZombiTestController()
@@ -145,6 +146,37 @@ void AZombiTestController::Tick(float DeltaTime)
     if (SpawnerSubsystem)
     {
         SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
+    }
+
+    // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización
+    // Esto debe llamarse una vez por frame como en el ejemplo de TurboSequence
+    static float SolveMeshesLogTimer = 0.0f;
+    SolveMeshesLogTimer += DeltaTime;
+
+    for (int32 GroupIndex = 0; GroupIndex < 4; ++GroupIndex) // 4 grupos como configurado en el spawner
+    {
+        FTurboSequence_UpdateContext_Lf UpdateContext;
+        UpdateContext.GroupIndex = GroupIndex;
+
+        try
+        {
+            ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
+
+            // Log cada 10 segundos para verificar ejecución
+            if (SolveMeshesLogTimer >= 10.0f)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: SolveMeshes_GameThread ejecutado para grupo %d"), GroupIndex);
+            }
+        }
+        catch (...)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("❌ ZombiTestController: Error en SolveMeshes_GameThread para grupo %d"), GroupIndex);
+        }
+    }
+
+    if (SolveMeshesLogTimer >= 10.0f)
+    {
+        SolveMeshesLogTimer = 0.0f;
     }
 }
 

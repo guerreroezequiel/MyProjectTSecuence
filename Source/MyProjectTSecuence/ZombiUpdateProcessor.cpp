@@ -11,7 +11,7 @@ UZombiUpdateProcessor::UZombiUpdateProcessor()
     // Rehabilitar procesador pero con cuidado
     // Configuración para registro automático en UE5.5.4
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
-    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    ProcessingPhase = EMassProcessingPhase::FrameEnd;
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
@@ -45,11 +45,9 @@ void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExec
         LogTimer = 0.0f;
     }
 
-    // TEMPORAL: Comentar SolveMeshes_GameThread porque causa crash
-    // ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
-
+    // SolveMeshes_GameThread movido a ZombiTestController para mejor control
     if (LogTimer == 0.0f) // Solo loggear cuando se resetea el timer
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: SolveMeshes_GameThread temporalmente deshabilitado (causa crash)"));
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiUpdateProcessor: SolveMeshes_GameThread movido a TestController"));
     }
 }

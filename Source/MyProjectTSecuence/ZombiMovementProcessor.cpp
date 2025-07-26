@@ -5,6 +5,7 @@
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
+#include "ZombiTurboSequenceFragment.h"
 
 // Constructor del procesador de movimiento
 UZombiMovementProcessor::UZombiMovementProcessor()
@@ -22,6 +23,7 @@ void UZombiMovementProcessor::ConfigureQueries()
 {
     MovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
     MovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    MovementQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
 }
 
 // Ejecuta el procesamiento de movimiento para todas las entidades

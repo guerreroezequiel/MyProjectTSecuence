@@ -7,6 +7,7 @@
 #include "ZombiMovementFragment.h"
 #include "ZombiStateFragment.h"
 #include "TurboSequence_Manager_Lf.h"
+#include "MyTurboSequenceAnimComponent.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**
@@ -32,8 +33,8 @@ private:
 	// Query para actualizar Blend Space (futuro)
 	FMassEntityQuery BlendSpaceQuery{*this};
 
-	// Función para actualizar Blend Space basado en estado del zombi
-	void UpdateBlendSpaceAnimation(const FZombiTurboSequenceFragment &TurboSequenceFragment,
-								   const FZombiStateFragment &StateFragment,
-								   const FZombiMovementFragment &MovementFragment);
+	// Función para actualizar animaciones basadas en estado del zombi
+	void UpdateAnimationBasedOnState(const FZombiTurboSequenceFragment &TurboSequenceFragment,
+									 const FZombiStateFragment &StateFragment,
+									 const FZombiMovementFragment &MovementFragment);
 };

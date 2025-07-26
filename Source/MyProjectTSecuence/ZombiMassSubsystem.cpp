@@ -77,6 +77,9 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     FZombiStateFragment StateFragment;
     StateFragment.State = EZombiState::Idle; // Estado inicial
 
+    // Log para verificar estado inicial
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad creada con estado inicial: Idle"));
+
     FZombiMovementFragment MovementFragment;
     MovementFragment.Position = SpawnLocation;
     MovementFragment.Rotation = GenerateRandomRotation();
