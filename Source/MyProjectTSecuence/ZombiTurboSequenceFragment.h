@@ -6,6 +6,7 @@
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Data_Lf.h"
+#include "MyTurboSequenceAnimComponent.h"
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
@@ -32,6 +33,16 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	// Blend Space data para animaciones (enfoque principal)
 	UPROPERTY()
 	FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData;
+
+	// Sistema de transiciones suaves
+	UPROPERTY()
+	EZombiState CurrentAnimationState = EZombiState::Idle;
+	UPROPERTY()
+	EZombiState TargetAnimationState = EZombiState::Idle;
+	UPROPERTY()
+	float TransitionProgress = 0.0f;
+	UPROPERTY()
+	float TransitionDuration = 0.5f; // Duración de transición en segundos
 
 	FZombiTurboSequenceFragment()
 	{

@@ -93,12 +93,13 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             );
 
             // Actualizar animación basada en estado
-            UpdateAnimationBasedOnState(TurboSequenceFragment, StateFragment, MovementFragment);
+            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, StateFragment, MovementFragment);
         } });
 }
 
 // Implementación de animaciones basadas en estado con Blend Space
-void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurboSequenceFragment &TurboSequenceFragment,
+void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
+                                                               const FZombiTurboSequenceFragment &TurboSequenceFragment,
                                                                const FZombiStateFragment &StateFragment,
                                                                const FZombiMovementFragment &MovementFragment)
 {
@@ -125,7 +126,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
         return;
     }
 
-    // IMPLEMENTACIÓN DE BLEND SPACE BASADO EN VELOCIDAD
+    // SISTEMA DE TRANSICIONES SUAVES CON INTERPOLACIÓN TEMPORAL
     UAnimSequence *SelectedAnimation = nullptr;
     float BlendWeight = 1.0f;
 
@@ -138,10 +139,57 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
     const float RunThreshold = 120.0f; // 80-120 = Walk/Run blend
     const float MaxSpeed = 150.0f;     // Más de 120 = Run
 
-    // Seleccionar animación y peso basado en velocidad
+    // Determinar estado objetivo basado en velocidad
+    EZombiState TargetState = EZombiState::Idle;
     if (CurrentSpeed <= IdleThreshold)
     {
-        // IDLE
+        TargetState = EZombiState::Idle;
+    }
+    else if (CurrentSpeed <= WalkThreshold)
+    {
+        TargetState = EZombiState::Walk;
+    }
+    else if (CurrentSpeed <= RunThreshold)
+    {
+        TargetState = EZombiState::Chase; // Usar Chase para Run
+    }
+    else
+    {
+        TargetState = EZombiState::Chase;
+    }
+
+    // Obtener el fragmento mutable para poder modificarlo
+    TArrayView<FZombiTurboSequenceFragment> MutableTurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+    if (MutableTurboSequenceFragments.Num() == 0 || EntityIndex >= MutableTurboSequenceFragments.Num())
+    {
+        return;
+    }
+
+    FZombiTurboSequenceFragment &MutableTurboSequenceFragment = MutableTurboSequenceFragments[EntityIndex];
+
+    // Actualizar transición si el estado objetivo cambió
+    if (MutableTurboSequenceFragment.TargetAnimationState != TargetState)
+    {
+        MutableTurboSequenceFragment.CurrentAnimationState = MutableTurboSequenceFragment.TargetAnimationState;
+        MutableTurboSequenceFragment.TargetAnimationState = TargetState;
+        MutableTurboSequenceFragment.TransitionProgress = 0.0f;
+    }
+
+    // Actualizar progreso de transición
+    MutableTurboSequenceFragment.TransitionProgress += Context.GetDeltaTimeSeconds() / MutableTurboSequenceFragment.TransitionDuration;
+    MutableTurboSequenceFragment.TransitionProgress = FMath::Clamp(MutableTurboSequenceFragment.TransitionProgress, 0.0f, 1.0f);
+
+    // Seleccionar animación basada en el estado actual durante la transición
+    EZombiState CurrentState = MutableTurboSequenceFragment.CurrentAnimationState;
+    if (MutableTurboSequenceFragment.TransitionProgress >= 1.0f)
+    {
+        CurrentState = MutableTurboSequenceFragment.TargetAnimationState;
+    }
+
+    // Seleccionar animación y peso basado en estado
+    switch (CurrentState)
+    {
+    case EZombiState::Idle:
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Idle")))
@@ -151,15 +199,9 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
                 break;
             }
         }
+        break;
 
-        if (AnimationDebugTimer >= 10.0f)
-        {
-            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: IDLE - Velocidad: %.2f"), CurrentSpeed);
-        }
-    }
-    else if (CurrentSpeed <= WalkThreshold)
-    {
-        // WALK
+    case EZombiState::Walk:
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Walk")))
@@ -169,35 +211,9 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
                 break;
             }
         }
+        break;
 
-        if (AnimationDebugTimer >= 10.0f)
-        {
-            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: WALK - Velocidad: %.2f"), CurrentSpeed);
-        }
-    }
-    else if (CurrentSpeed <= RunThreshold)
-    {
-        // WALK/RUN BLEND
-        float WalkRunBlend = (CurrentSpeed - WalkThreshold) / (RunThreshold - WalkThreshold);
-
-        for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-        {
-            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Run")))
-            {
-                SelectedAnimation = AnimItem.Animation;
-                BlendWeight = WalkRunBlend;
-                break;
-            }
-        }
-
-        if (AnimationDebugTimer >= 10.0f)
-        {
-            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: WALK/RUN BLEND - Velocidad: %.2f, Blend: %.2f"), CurrentSpeed, WalkRunBlend);
-        }
-    }
-    else
-    {
-        // RUN
+    case EZombiState::Chase:
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Run")))
@@ -207,11 +223,27 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
                 break;
             }
         }
+        break;
 
-        if (AnimationDebugTimer >= 10.0f)
+    default:
+        // Fallback a Idle
+        for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
-            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: RUN - Velocidad: %.2f"), CurrentSpeed);
+            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Idle")))
+            {
+                SelectedAnimation = AnimItem.Animation;
+                BlendWeight = 1.0f;
+                break;
+            }
         }
+        break;
+    }
+
+    // Log de debugging para transiciones
+    if (AnimationDebugTimer >= 10.0f)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🎮 Transición: Estado Actual: %d, Objetivo: %d, Progreso: %.2f, Velocidad: %.2f"),
+               (int32)CurrentState, (int32)TargetState, MutableTurboSequenceFragment.TransitionProgress, CurrentSpeed);
     }
 
     // Configurar settings de animación con Blend Space
@@ -219,8 +251,12 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
     PlaySettings.AnimationSpeed = 1.0f;
     PlaySettings.AnimationWeight = BlendWeight; // Usar el peso calculado por Blend Space
 
-    // Reproducir la animación seleccionada
-    if (SelectedAnimation)
+    // Reproducir la animación seleccionada solo cuando sea necesario
+    static float AnimationUpdateTimer = 0.0f;
+    AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
+
+    // Solo actualizar animación cada 0.5 segundos para evitar conflictos
+    if (SelectedAnimation && AnimationUpdateTimer >= 0.5f)
     {
         ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
             TurboSequenceFragment.MeshData,
@@ -229,11 +265,13 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
 
         // Log de debugging para confirmar reproducción
         static float PlayDebugTimer = 0.0f;
-        PlayDebugTimer += LastDeltaTime;
+        PlayDebugTimer += Context.GetDeltaTimeSeconds();
         if (PlayDebugTimer >= 15.0f) // Log cada 15 segundos
         {
             UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Reproduciendo animación - %s"), *SelectedAnimation->GetName());
             PlayDebugTimer = 0.0f;
         }
+
+        AnimationUpdateTimer = 0.0f; // Reset timer
     }
 }
