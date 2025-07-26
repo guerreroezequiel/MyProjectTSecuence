@@ -97,7 +97,7 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         } });
 }
 
-// Implementación de animaciones basadas en estado
+// Implementación de animaciones basadas en estado con Blend Space
 void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurboSequenceFragment &TurboSequenceFragment,
                                                                const FZombiStateFragment &StateFragment,
                                                                const FZombiMovementFragment &MovementFragment)
@@ -114,7 +114,8 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
     AnimationDebugTimer += LastDeltaTime;
     if (AnimationDebugTimer >= 10.0f) // Log cada 10 segundos
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d"), (int32)StateFragment.State);
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d, Velocidad: %.2f"),
+               (int32)StateFragment.State, MovementFragment.MovementSpeed);
         AnimationDebugTimer = 0.0f;
     }
 
@@ -124,64 +125,99 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(const FZombiTurbo
         return;
     }
 
-    // Configurar settings de animación (usando solo campos confirmados)
-    FTurboSequence_AnimPlaySettings_Lf PlaySettings;
-    PlaySettings.AnimationSpeed = 1.0f;
-    PlaySettings.AnimationWeight = 1.0f;
-
-    // Seleccionar animación basada en estado
+    // IMPLEMENTACIÓN DE BLEND SPACE BASADO EN VELOCIDAD
     UAnimSequence *SelectedAnimation = nullptr;
+    float BlendWeight = 1.0f;
 
-    switch (StateFragment.State)
+    // Calcular velocidad actual del zombi
+    float CurrentSpeed = MovementFragment.MovementSpeed;
+
+    // Umbrales para transiciones suaves
+    const float IdleThreshold = 10.0f; // Menos de 10 = Idle
+    const float WalkThreshold = 80.0f; // 10-80 = Walk
+    const float RunThreshold = 120.0f; // 80-120 = Walk/Run blend
+    const float MaxSpeed = 150.0f;     // Más de 120 = Run
+
+    // Seleccionar animación y peso basado en velocidad
+    if (CurrentSpeed <= IdleThreshold)
     {
-    case EZombiState::Idle:
-        // Buscar animación "MM_Idle" en la librería
+        // IDLE
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Idle")))
             {
                 SelectedAnimation = AnimItem.Animation;
+                BlendWeight = 1.0f;
                 break;
             }
         }
-        break;
 
-    case EZombiState::Walk:
-        // Buscar animación "MM_Walk" en la librería
+        if (AnimationDebugTimer >= 10.0f)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: IDLE - Velocidad: %.2f"), CurrentSpeed);
+        }
+    }
+    else if (CurrentSpeed <= WalkThreshold)
+    {
+        // WALK
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Walk")))
             {
                 SelectedAnimation = AnimItem.Animation;
+                BlendWeight = 1.0f;
                 break;
             }
         }
-        break;
 
-    case EZombiState::Chase:
-        // Buscar animación "MM_Run" en la librería
+        if (AnimationDebugTimer >= 10.0f)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: WALK - Velocidad: %.2f"), CurrentSpeed);
+        }
+    }
+    else if (CurrentSpeed <= RunThreshold)
+    {
+        // WALK/RUN BLEND
+        float WalkRunBlend = (CurrentSpeed - WalkThreshold) / (RunThreshold - WalkThreshold);
+
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Run")))
             {
                 SelectedAnimation = AnimItem.Animation;
+                BlendWeight = WalkRunBlend;
                 break;
             }
         }
-        break;
 
-    default:
-        // Para otros estados, usar Idle como fallback
+        if (AnimationDebugTimer >= 10.0f)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: WALK/RUN BLEND - Velocidad: %.2f, Blend: %.2f"), CurrentSpeed, WalkRunBlend);
+        }
+    }
+    else
+    {
+        // RUN
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
-            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Idle")))
+            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Run")))
             {
                 SelectedAnimation = AnimItem.Animation;
+                BlendWeight = 1.0f;
                 break;
             }
         }
-        break;
+
+        if (AnimationDebugTimer >= 10.0f)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: RUN - Velocidad: %.2f"), CurrentSpeed);
+        }
     }
+
+    // Configurar settings de animación con Blend Space
+    FTurboSequence_AnimPlaySettings_Lf PlaySettings;
+    PlaySettings.AnimationSpeed = 1.0f;
+    PlaySettings.AnimationWeight = BlendWeight; // Usar el peso calculado por Blend Space
 
     // Reproducir la animación seleccionada
     if (SelectedAnimation)

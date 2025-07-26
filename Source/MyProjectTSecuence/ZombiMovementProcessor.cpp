@@ -55,11 +55,35 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 // Actualiza el timer de cambio de dirección
                 MovementFragment.DirectionChangeTimer += DeltaTime;
 
-                // Cambia dirección aleatoriamente
+                // Cambia dirección aleatoriamente y velocidad para probar Blend Space
                 if (MovementFragment.DirectionChangeTimer >= MovementFragment.DirectionChangeInterval)
                 {
                     MovementFragment.MovementDirection = GenerateRandomDirection();
                     MovementFragment.DirectionChangeTimer = 0.0f;
+                    
+                    // Cambiar velocidad aleatoriamente para probar Blend Space
+                    float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
+                    if (SpeedVariation < 0.3f)
+                    {
+                        MovementFragment.MovementSpeed = FMath::RandRange(5.0f, 15.0f); // Idle
+                    }
+                    else if (SpeedVariation < 0.7f)
+                    {
+                        MovementFragment.MovementSpeed = FMath::RandRange(50.0f, 100.0f); // Walk
+                    }
+                    else
+                    {
+                        MovementFragment.MovementSpeed = FMath::RandRange(120.0f, 180.0f); // Run
+                    }
+                    
+                    // Log para verificar cambios de velocidad
+                    static float SpeedLogTimer = 0.0f;
+                    SpeedLogTimer += DeltaTime;
+                    if (SpeedLogTimer >= 5.0f)
+                    {
+                        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Nueva velocidad: %.2f"), MovementFragment.MovementSpeed);
+                        SpeedLogTimer = 0.0f;
+                    }
                 }
 
                 // Calcula el movimiento
