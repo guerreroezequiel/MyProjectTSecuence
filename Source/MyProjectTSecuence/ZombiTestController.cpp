@@ -124,24 +124,85 @@ void AZombiTestController::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // Log temporal para verificar que Tick se ejecuta
-    static float TickLogTimer = 0.0f;
-    TickLogTimer += DeltaTime;
-    if (TickLogTimer >= 1.0f)
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiTestController: Tick ejecutándose - DeltaTime: %f"), DeltaTime);
-        TickLogTimer = 0.0f;
+        return;
     }
 
-    // Procesar reintentos de instancias visuales pendientes
+    // Inicialización del sistema
+    if (!bSystemInitialized)
+    {
+        bSystemInitialized = true;
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Sistema inicializado - Control centralizado activo"));
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Logs optimizados - Solo información esencial"));
+    }
+
+    // Control centralizado del sistema
+    UpdateSystemControl(DeltaTime);
+
+    // Procesa instancias visuales pendientes
     if (SpawnerSubsystem)
     {
         SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
     }
+}
 
-    // Ejecuta los procesadores manualmente cada frame
-    if (UZombiMassSubsystem *ZombiMassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>())
+// Control centralizado del sistema
+void AZombiTestController::UpdateSystemControl(float DeltaTime)
+{
+    // Actualizar timers de logs
+    SystemLogTimer += DeltaTime;
+    PerformanceLogTimer += DeltaTime;
+
+    // Logs de estado del sistema
+    if (bEnableSystemLogs && SystemLogTimer >= LogInterval)
     {
-        ZombiMassSubsystem->ExecuteProcessorsManually(DeltaTime);
+        LogSystemStatus();
+        SystemLogTimer = 0.0f;
     }
+
+    // Logs de rendimiento
+    if (bEnablePerformanceLogs && PerformanceLogTimer >= LogInterval)
+    {
+        LogPerformanceMetrics();
+        PerformanceLogTimer = 0.0f;
+    }
+}
+
+// Logs centralizados del estado del sistema
+void AZombiTestController::LogSystemStatus()
+{
+    if (!SpawnerSubsystem)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiTestController: SpawnerSubsystem no disponible"));
+        return;
+    }
+
+    int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
+
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Estado del Sistema:"));
+    UE_LOG(LogTemp, Log, TEXT("  📊 Entidades activas: %d"), CurrentEntityCount);
+    UE_LOG(LogTemp, Log, TEXT("  🎯 Sistema funcionando: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
+
+    if (CurrentEntityCount != LastEntityCount)
+    {
+        UE_LOG(LogTemp, Log, TEXT("  📈 Cambio en entidades: %d → %d"), LastEntityCount, CurrentEntityCount);
+        LastEntityCount = CurrentEntityCount;
+    }
+}
+
+// Logs centralizados de métricas de rendimiento
+void AZombiTestController::LogPerformanceMetrics()
+{
+    if (!SpawnerSubsystem)
+    {
+        return;
+    }
+
+    int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
+
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Métricas de Rendimiento:"));
+    UE_LOG(LogTemp, Log, TEXT("  🚀 Entidades procesadas: %d"), CurrentEntityCount);
+    UE_LOG(LogTemp, Log, TEXT("  ⚡ Sistema estable: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
 }

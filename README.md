@@ -15,6 +15,8 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 - **✅ Sistema Estable**: Sin crashes
 - **✅ Asset Configurado**: TS_Manny con animaciones disponibles
 - **✅ Grupos de Actualización**: Distribuidos correctamente
+- **✅ Control Centralizado**: ZombiTestController con logs optimizados
+- **✅ Verificación de PIE**: Solo ejecuta en juego, no en editor
 
 ### **🎯 Funcionalidades Operativas**
 - **Spawn de Zombis**: ✅ 5 zombis creados exitosamente
@@ -22,6 +24,8 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 - **Transformaciones**: ✅ Sincronización perfecta entre lógica y visual
 - **Instancias Visuales**: ✅ Todas válidas y funcionando
 - **Rendimiento**: ✅ Optimizado para miles de entidades
+- **Control Centralizado**: ✅ ZombiTestController con logs optimizados
+- **Verificación de PIE**: ✅ Solo ejecuta en juego, no en editor
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -70,7 +74,7 @@ Source/MyProjectTSecuence/
 ### **Control y Testing**
 ```
 Source/MyProjectTSecuence/
-├── ZombiTestController.h/.cpp        # Control desde Blueprint
+├── ZombiTestController.h/.cpp        # Control centralizado desde Blueprint
 └── MyTurboSequenceAnimComponent.h/.cpp # Componente de animación (legacy)
 ```
 
@@ -83,6 +87,7 @@ struct FZombiStateFragment : public FMassFragment
     EZombiState State = EZombiState::Idle; // Idle, Walk, Chase, Attack, Hit, Death
 };
 ```
+**Uso**: Almacena el estado lógico del zombi. Utilizado por todos los procesadores para determinar comportamiento.
 
 ### **FZombiMovementFragment**
 ```cpp
@@ -99,6 +104,7 @@ struct FZombiMovementFragment : public FMassFragment
     FVector MovementCenter;              // Centro del área
 };
 ```
+**Uso**: Contiene todos los datos de movimiento y transformación. Es el fragmento más utilizado por los procesadores.
 
 ### **FZombiTurboSequenceFragment**
 ```cpp
@@ -111,13 +117,35 @@ struct FZombiTurboSequenceFragment : public FMassFragment
     UTurboSequence_MeshAsset_Lf* TurboSequenceAsset;      // Asset de referencia
 };
 ```
+**Uso**: Puente entre la lógica Mass Entity y la representación visual TurboSequence. Contiene referencias a instancias visuales.
 
 ## ⚙️ Procesadores del Sistema
+
+### **📊 Resumen de Fragmentos por Procesador**
+
+#### **ZombiMovementProcessor**
+- **Fragmentos**: `FZombiStateFragment`, `FZombiMovementFragment`, `FZombiTurboSequenceFragment`
+- **Permisos**: ReadWrite para todos los fragmentos
+- **Fase**: PrePhysics
+
+#### **ZombiTurboSequenceProcessor**
+- **Fragmentos**: `FZombiStateFragment`, `FZombiMovementFragment`, `FZombiTurboSequenceFragment`
+- **Permisos**: ReadOnly para State/Movement, ReadWrite para TurboSequence
+- **Fase**: PostPhysics
+
+#### **ZombiUpdateProcessor**
+- **Fragmentos**: `FZombiTurboSequenceFragment`
+- **Permisos**: ReadOnly
+- **Fase**: FrameEnd
 
 ### **UZombiMovementProcessor**
 - **Función**: Maneja movimiento, AI básica y cambios de estado
 - **Fase**: `EMassProcessingPhase::PrePhysics`
 - **Grupo**: `"MassBehavior"`
+- **Fragmentos Utilizados**:
+  - `FZombiStateFragment(ReadWrite)` - Estado lógico del zombi
+  - `FZombiMovementFragment(ReadWrite)` - Posición, rotación, velocidad
+  - `FZombiTurboSequenceFragment(ReadWrite)` - Referencias visuales
 - **Características**:
   - Movimiento aleatorio con cambio de dirección
   - Rotación suave hacia la dirección de movimiento
@@ -126,8 +154,12 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 
 ### **UZombiTurboSequenceProcessor**
 - **Función**: Sincroniza transformaciones y animaciones visuales
-- **Fase**: `EMassProcessingPhase::PrePhysics`
+- **Fase**: `EMassProcessingPhase::PostPhysics`
 - **Grupo**: `"MassBehavior"`
+- **Fragmentos Utilizados**:
+  - `FZombiStateFragment(ReadOnly)` - Lee estado lógico del zombi
+  - `FZombiMovementFragment(ReadOnly)` - Lee posición y rotación
+  - `FZombiTurboSequenceFragment(ReadWrite)` - Actualiza referencias visuales
 - **Características**:
   - ✅ **Sincronización de transformaciones** (FUNCIONAL)
   - 🔄 **Animaciones Blend Space** (PREPARADO PARA IMPLEMENTACIÓN)
@@ -135,8 +167,10 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 
 ### **UZombiUpdateProcessor**
 - **Función**: Ejecuta Update Groups de TurboSequence
-- **Fase**: `EMassProcessingPhase::PrePhysics`
+- **Fase**: `EMassProcessingPhase::FrameEnd`
 - **Grupo**: `"MassBehavior"`
+- **Fragmentos Utilizados**:
+  - `FZombiTurboSequenceFragment(ReadOnly)` - Lee referencias visuales
 - **Características**:
   - ✅ **Distribución de carga** en 4 grupos
   - 🔄 **SolveMeshes_GameThread** (PREPARADO PARA REHABILITACIÓN)
@@ -159,7 +193,7 @@ struct FZombiTurboSequenceFragment : public FMassFragment
   - ✅ **Sistema de reintentos** para timing de inicialización
   - 🔄 **Configuración de animaciones** (PREPARADO PARA IMPLEMENTACIÓN)
 
-## 🎮 Control desde Blueprint
+## 🎮 Control Centralizado desde Blueprint
 
 ### **AZombiTestController**
 ```cpp
@@ -169,6 +203,11 @@ void SpawnSingleZombi();                           // Spawn individual
 void ClearAllZombis();                             // Limpiar todos
 int32 GetActiveZombiCount();                       // Contar activos
 void SetTurboSequenceAsset(UTurboSequence_MeshAsset_Lf* Asset); // Configurar asset
+
+// Configuración de control centralizado:
+bool bEnableSystemLogs = true;                     // Logs de estado del sistema
+bool bEnablePerformanceLogs = true;                // Logs de rendimiento
+float LogInterval = 30.0f;                         // Intervalo de logs (segundos)
 ```
 
 ## 🔄 Flujo de Ejecución
@@ -185,7 +224,7 @@ SpawnZombiBatch() → CreateZombiMassEntity() → CreateTurboSequenceVisualInsta
 
 ### **3. Ejecución por Frame**
 ```
-ZombiMovementProcessor → ZombiTurboSequenceProcessor → ZombiUpdateProcessor
+ZombiMovementProcessor (PrePhysics) → ZombiTurboSequenceProcessor (PostPhysics) → ZombiUpdateProcessor (FrameEnd)
 ```
 
 ### **4. Sincronización Visual**
@@ -223,8 +262,19 @@ enum class EZombiState : uint8
 ### **3. Configuración de Procesadores**
 ```cpp
 // Configuración automática en constructores:
+// ZombiMovementProcessor:
 ProcessingPhase = EMassProcessingPhase::PrePhysics;
 ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+
+// ZombiTurboSequenceProcessor:
+ProcessingPhase = EMassProcessingPhase::PostPhysics;
+ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+
+// ZombiUpdateProcessor:
+ProcessingPhase = EMassProcessingPhase::FrameEnd;
+ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+
+// Configuración común:
 bRequiresGameThreadExecution = false;
 bAutoRegisterWithProcessingPhases = true;
 ```
@@ -318,7 +368,9 @@ int32 Count = Controller->GetActiveZombiCount();
 - [ ] **Verificar que los zombis no estén en T-pose**
 
 ### **🔧 Mejoras del Sistema**
-- [ ] **Optimizar frecuencia de logs** para mejor rendimiento
+- [x] **Optimizar frecuencia de logs** para mejor rendimiento ✅
+- [x] **Control centralizado** con ZombiTestController ✅
+- [x] **Verificación de PIE** (solo ejecuta en juego) ✅
 - [ ] **Implementar sistema de LOD** para miles de entidades
 - [ ] **Agregar culling** para entidades fuera de vista
 - [ ] **Optimizar Update Groups** para mejor distribución de carga

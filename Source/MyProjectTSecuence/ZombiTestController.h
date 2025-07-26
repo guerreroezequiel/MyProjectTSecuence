@@ -59,6 +59,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zombi Test")
 	int32 ZombisPerBatch = 100;
 
+	// Control centralizado del sistema
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "System Control")
+	bool bEnableSystemLogs = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "System Control")
+	bool bEnablePerformanceLogs = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "System Control")
+	float LogInterval = 30.0f; // Logs cada 30 segundos
+
 private:
 	// Referencia al subsystem de spawning
 	UPROPERTY()
@@ -67,9 +77,20 @@ private:
 	// Timer para spawn inicial
 	FTimerHandle SpawnTimerHandle;
 
+	// Control de logs centralizados
+	float SystemLogTimer = 0.0f;
+	float PerformanceLogTimer = 0.0f;
+	int32 LastEntityCount = 0;
+	bool bSystemInitialized = false;
+
 	// Función para spawn inicial con delay
 	void DelayedSpawn();
 
 	// Tick function para ejecutar procesadores manualmente
 	virtual void Tick(float DeltaTime) override;
+
+	// Control centralizado del sistema
+	void UpdateSystemControl(float DeltaTime);
+	void LogSystemStatus();
+	void LogPerformanceMetrics();
 };

@@ -196,27 +196,11 @@ void UZombiMassSubsystem::RegisterMassProcessors()
         // Solo necesitamos verificar que el sistema Mass Entity esté funcionando
         UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
 
-        // Verificar que los procesadores estén disponibles
-        // En UE5.5.4, los procesadores se registran automáticamente si están configurados correctamente
-        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Verificando procesadores personalizados..."));
+        // Los procesadores se registran automáticamente en UE5.5.4
 
-        // Crear instancias temporales para verificar que se crean correctamente
-        UZombiMovementProcessor *MovementProcessor = NewObject<UZombiMovementProcessor>();
-        UZombiTurboSequenceProcessor *TurboSequenceProcessor = NewObject<UZombiTurboSequenceProcessor>();
-        UZombiUpdateProcessor *UpdateProcessor = NewObject<UZombiUpdateProcessor>();
-
-        if (MovementProcessor && TurboSequenceProcessor && UpdateProcessor)
-        {
-            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores personalizados creados correctamente"));
-            UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Los procesadores deberían registrarse automáticamente"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("ZombiMassSubsystem: Error al crear procesadores personalizados"));
-        }
-
+        // Los procesadores se registran automáticamente en UE5.5.4
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Procesadores configurados para registro automático"));
         bProcessorsRegistered = true;
-        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Procesadores Mass Entity configurados para registro automático"));
     }
     else
     {

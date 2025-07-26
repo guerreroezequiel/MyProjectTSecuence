@@ -27,6 +27,12 @@ void UZombiMovementProcessor::ConfigureQueries()
 // Ejecuta el procesamiento de movimiento para todas las entidades
 void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld())
+    {
+        return;
+    }
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Procesa todas las entidades que cumplen el query

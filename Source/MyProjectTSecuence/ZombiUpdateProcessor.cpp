@@ -16,7 +16,13 @@ UZombiUpdateProcessor::UZombiUpdateProcessor()
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Constructor llamado - Procesador creado"));
+    // Log solo en la primera instancia
+    static bool bLoggedConstructor = false;
+    if (!bLoggedConstructor)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiUpdateProcessor: Procesador inicializado"));
+        bLoggedConstructor = true;
+    }
 }
 
 void UZombiUpdateProcessor::ConfigureQueries()

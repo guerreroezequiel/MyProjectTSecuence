@@ -19,7 +19,13 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Constructor llamado - Procesador creado"));
+    // Log solo en la primera instancia
+    static bool bLoggedConstructor = false;
+    if (!bLoggedConstructor)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesador inicializado"));
+        bLoggedConstructor = true;
+    }
 }
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
@@ -38,17 +44,13 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
-    const float DeltaTime = Context.GetDeltaTimeSeconds();
-
-    // Log cada 60 segundos (aproximadamente una vez por minuto)
-    static float LogTimer = 0.0f;
-    LogTimer += DeltaTime;
-
-    if (LogTimer >= 60.0f)
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-        LogTimer = 0.0f;
+        return;
     }
+
+    const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Sincronizar transformaciones (State Sync)
     TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
@@ -66,12 +68,6 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 TurboSequenceFragment.MeshData,
                 FTransform(FQuat(MovementFragment.Rotation), MovementFragment.Position, FVector::OneVector)
             );
-
-            if (LogTimer == 0.0f) // Solo loggear cuando se resetea el timer
-            {
-                UE_LOG(LogTemp, Log, TEXT("ZombiTurboSequenceProcessor: Sincronizando transformación para entidad en posición X=%.3f Y=%.3f Z=%.3f"), 
-                       MovementFragment.Position.X, MovementFragment.Position.Y, MovementFragment.Position.Z);
-            }
         } });
 
     // TODO: Implementar Blend Space Query aquí
