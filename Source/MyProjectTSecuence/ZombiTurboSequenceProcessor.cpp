@@ -208,14 +208,41 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
         UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: Velocidad: %.2f, Normalizada: %.2f"), CurrentSpeed, NormalizedSpeed);
     }
 
-    // USAR BLEND SPACE CON TURBOSEQUENCE - Enfoque correcto según documentación
+    // Actualizar timer de animación
     TurboSequenceFragment.AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
 
-    // Solo actualizar cuando cambie significativamente la velocidad o cada 3 segundos
-    bool bShouldUpdateAnimation = (FMath::Abs(TurboSequenceFragment.LastSpeed - NormalizedSpeed) > 10.0f) ||
-                                  (TurboSequenceFragment.AnimationUpdateTimer >= 3.0f);
+    // Determinar la animación objetivo basada en velocidad fija
+    UAnimSequence *TargetAnimation = nullptr;
+    if (NormalizedSpeed < 5.0f) // Umbral más bajo para Idle
+    {
+        TargetAnimation = TurboSequenceFragment.CachedIdleAnimation;
+    }
+    else if (NormalizedSpeed < 50.0f) // Umbral ajustado para Walk
+    {
+        TargetAnimation = TurboSequenceFragment.CachedWalkAnimation;
+    }
+    else
+    {
+        TargetAnimation = TurboSequenceFragment.CachedRunAnimation;
+    }
 
-    if (!TurboSequenceFragment.bAnimationInitialized || bShouldUpdateAnimation)
+    // Log de debugging para selección de animación (reducido para mejor rendimiento)
+    static float AnimationSelectionDebugTimer = 0.0f;
+    AnimationSelectionDebugTimer += Context.GetDeltaTimeSeconds();
+    if (AnimationSelectionDebugTimer >= 15.0f) // Log cada 15 segundos en lugar de 5
+    {
+        UE_LOG(LogTemp, Log, TEXT("🎮 Selección de Animación: Velocidad: %.2f, Target: %s"),
+               NormalizedSpeed,
+               TargetAnimation ? *TargetAnimation->GetName() : TEXT("NULL"));
+        AnimationSelectionDebugTimer = 0.0f;
+    }
+
+    // Verificar si necesitamos cambiar de animación
+    bool bShouldChangeAnimation = (TargetAnimation != TurboSequenceFragment.CurrentAnimation) &&
+                                  (TargetAnimation != nullptr);
+
+    // Inicializar o cambiar animación
+    if (!TurboSequenceFragment.bAnimationInitialized || bShouldChangeAnimation)
     {
         // USAR BLEND SPACE CON TURBOSEQUENCE - Enfoque correcto según documentación
         if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
@@ -227,7 +254,8 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
                 SelectedBlendSpace = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->BlendSpaces[0];
             }
 
-            if (SelectedBlendSpace)
+            // TEMPORALMENTE DESHABILITADO BLEND SPACE PARA FORZAR ANIMACIONES INDIVIDUALES
+            if (false && SelectedBlendSpace) // Forzar animaciones individuales
             {
                 // Usar PlayBlendSpace_Concurrent para Blend Space
                 TurboSequenceFragment.BlendSpaceData = ATurboSequence_Manager_Lf::PlayBlendSpace_Concurrent(
@@ -252,70 +280,74 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
             }
             else
             {
-                // Fallback a animaciones individuales si no hay Blend Space
-                UAnimSequence *SelectedAnimation = nullptr;
+                // Fallback a animaciones individuales con transiciones suaves
 
-                // Seleccionar animación basada en velocidad
-                if (NormalizedSpeed < 5.0f)
+                // Cache de animaciones si no está hecho
+                if (!TurboSequenceFragment.bAnimationsCached)
                 {
-                    // IDLE - Buscar animación de idle
-                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                    {
-                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
-                        {
-                            SelectedAnimation = AnimItem.Animation;
-                            break;
-                        }
-                    }
-                }
-                else if (NormalizedSpeed < 50.0f)
-                {
-                    // WALK - Buscar animación de caminar
-                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                    {
-                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
-                        {
-                            SelectedAnimation = AnimItem.Animation;
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    // RUN - Buscar animación de correr
-                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                    {
-                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Run"), ESearchCase::IgnoreCase))
-                        {
-                            SelectedAnimation = AnimItem.Animation;
-                            break;
-                        }
-                    }
+                    CacheAnimations(TurboSequenceFragment);
                 }
 
                 // Si no encontramos animación específica, usar la primera disponible
-                if (!SelectedAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
+                if (!TargetAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
                 {
-                    SelectedAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
+                    TargetAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
                 }
 
-                // Reproducir la animación seleccionada
-                if (SelectedAnimation)
+                // Manejar transición de animación
+                if (TargetAnimation && TargetAnimation != TurboSequenceFragment.CurrentAnimation)
                 {
+                    // Iniciar transición
+                    if (!TurboSequenceFragment.bIsTransitioning)
+                    {
+                        TurboSequenceFragment.TargetAnimation = TargetAnimation;
+                        TurboSequenceFragment.TransitionProgress = 0.0f;
+                        TurboSequenceFragment.bIsTransitioning = true;
+
+                        // Log de inicio de transición
+                        UE_LOG(LogTemp, Log, TEXT("🎮 Iniciando Transición: %s → %s, Velocidad: %.2f"),
+                               TurboSequenceFragment.CurrentAnimation ? *TurboSequenceFragment.CurrentAnimation->GetName() : TEXT("NULL"),
+                               *TargetAnimation->GetName(), NormalizedSpeed);
+                    }
+                }
+
+                // Actualizar transición en progreso
+                if (TurboSequenceFragment.bIsTransitioning)
+                {
+                    TurboSequenceFragment.TransitionProgress += Context.GetDeltaTimeSeconds() / TurboSequenceFragment.TransitionDuration;
+
+                    if (TurboSequenceFragment.TransitionProgress >= 1.0f)
+                    {
+                        // Transición completada
+                        TurboSequenceFragment.CurrentAnimation = TurboSequenceFragment.TargetAnimation;
+                        TurboSequenceFragment.bIsTransitioning = false;
+                        TurboSequenceFragment.TransitionProgress = 0.0f;
+
+                        // Reproducir la nueva animación
+                        ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                            TurboSequenceFragment.MeshData,
+                            TurboSequenceFragment.CurrentAnimation,
+                            PlaySettings);
+
+                        // Log de transición completada
+                        UE_LOG(LogTemp, Log, TEXT("🎮 Transición Completada: %s, Velocidad: %.2f"),
+                               *TurboSequenceFragment.CurrentAnimation->GetName(), NormalizedSpeed);
+                    }
+                }
+                else if (TurboSequenceFragment.CurrentAnimation)
+                {
+                    // No hay transición, solo reproducir la animación actual
                     ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
                         TurboSequenceFragment.MeshData,
-                        SelectedAnimation,
+                        TurboSequenceFragment.CurrentAnimation,
                         PlaySettings);
-
-                    TurboSequenceFragment.LastSpeed = NormalizedSpeed;
-                    TurboSequenceFragment.AnimationUpdateTimer = 0.0f;
-                    TurboSequenceFragment.bAnimationInitialized = true;
-                    TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
-
-                    // Log de debugging para animación individual
-                    UE_LOG(LogTemp, Log, TEXT("🎮 Animación Individual: %s, Velocidad: %.2f"),
-                           *SelectedAnimation->GetName(), NormalizedSpeed);
                 }
+
+                // Actualizar estado
+                TurboSequenceFragment.LastSpeed = NormalizedSpeed;
+                TurboSequenceFragment.AnimationUpdateTimer = 0.0f;
+                TurboSequenceFragment.bAnimationInitialized = true;
+                TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
             }
         }
     }
@@ -329,4 +361,46 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
                CurrentSpeed, NormalizedSpeed, TurboSequenceFragment.bAnimationInitialized ? TEXT("Sí") : TEXT("No"), Context.GetNumEntities());
         PlayDebugTimer = 0.0f;
     }
+}
+
+// Implementación de cache de animaciones para optimizar búsquedas
+void UZombiTurboSequenceProcessor::CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment)
+{
+    if (!TurboSequenceFragment.TurboSequenceAsset || !TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
+    {
+        return;
+    }
+
+    // Buscar y cachear animaciones por nombre
+    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+    {
+        if (!AnimItem.Animation)
+        {
+            continue;
+        }
+
+        FString AnimationName = AnimItem.Animation->GetName();
+
+        if (AnimationName.Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+        {
+            TurboSequenceFragment.CachedIdleAnimation = AnimItem.Animation;
+        }
+        else if (AnimationName.Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+        {
+            TurboSequenceFragment.CachedWalkAnimation = AnimItem.Animation;
+        }
+        else if (AnimationName.Contains(TEXT("Run"), ESearchCase::IgnoreCase))
+        {
+            TurboSequenceFragment.CachedRunAnimation = AnimItem.Animation;
+        }
+    }
+
+    // Marcar como cacheado
+    TurboSequenceFragment.bAnimationsCached = true;
+
+    // Log de debugging para confirmar cache
+    UE_LOG(LogTemp, Log, TEXT("🎮 Cache de Animaciones: Idle: %s, Walk: %s, Run: %s"),
+           TurboSequenceFragment.CachedIdleAnimation ? *TurboSequenceFragment.CachedIdleAnimation->GetName() : TEXT("NULL"),
+           TurboSequenceFragment.CachedWalkAnimation ? *TurboSequenceFragment.CachedWalkAnimation->GetName() : TEXT("NULL"),
+           TurboSequenceFragment.CachedRunAnimation ? *TurboSequenceFragment.CachedRunAnimation->GetName() : TEXT("NULL"));
 }

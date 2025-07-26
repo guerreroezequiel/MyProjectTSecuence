@@ -66,21 +66,18 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
                     // Cambiar velocidad aleatoriamente para probar Blend Space
                     float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
-                    if (SpeedVariation < 0.2f)
+                    // Usar velocidades fijas para animaciones más predecibles
+                    if (SpeedVariation < 0.3f)
                     {
-                        MovementFragment.MovementSpeed = 0.0f; // IDLE - Completamente quieto
+                        MovementFragment.MovementSpeed = 0.0f; // IDLE - velocidad fija
                     }
-                    else if (SpeedVariation < 0.5f)
+                    else if (SpeedVariation < 0.7f)
                     {
-                        MovementFragment.MovementSpeed = FMath::RandRange(0.1f, 0.5f); // Idle (muy lento)
-                    }
-                    else if (SpeedVariation < 0.8f)
-                    {
-                        MovementFragment.MovementSpeed = FMath::RandRange(10.0f, 30.0f); // Walk
+                        MovementFragment.MovementSpeed = 25.0f; // WALK - velocidad fija
                     }
                     else
                     {
-                        MovementFragment.MovementSpeed = FMath::RandRange(60.0f, 100.0f); // Run
+                        MovementFragment.MovementSpeed = 80.0f; // RUN - velocidad fija
                     }
 
                     // Log para verificar cambios de dirección y velocidad

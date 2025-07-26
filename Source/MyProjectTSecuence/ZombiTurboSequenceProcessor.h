@@ -38,4 +38,7 @@ private:
 									 FZombiTurboSequenceFragment &TurboSequenceFragment,
 									 const FZombiStateFragment &StateFragment,
 									 const FZombiMovementFragment &MovementFragment);
+
+	// Función para cachear animaciones y optimizar búsquedas
+	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);
 };

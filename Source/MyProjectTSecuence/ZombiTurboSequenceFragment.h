@@ -34,15 +34,11 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData;
 
-	// Sistema de transiciones suaves
+	// Sistema de transiciones suaves (antiguo - mantenido para compatibilidad)
 	UPROPERTY()
 	EZombiState CurrentAnimationState = EZombiState::Idle;
 	UPROPERTY()
 	EZombiState TargetAnimationState = EZombiState::Idle;
-	UPROPERTY()
-	float TransitionProgress = 0.0f;
-	UPROPERTY()
-	float TransitionDuration = 0.5f; // Duración de transición en segundos
 
 	// Control de animaciones individual por entidad
 	UPROPERTY()
@@ -53,6 +49,28 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	float AnimationUpdateTimer = 0.0f;
 	UPROPERTY()
 	float LastAnimationUpdateTime = 0.0f;
+
+	// Cache de animaciones para optimizar búsquedas
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CachedIdleAnimation = nullptr;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CachedWalkAnimation = nullptr;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CachedRunAnimation = nullptr;
+	UPROPERTY()
+	bool bAnimationsCached = false;
+
+	// Control de transiciones suaves
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CurrentAnimation = nullptr;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> TargetAnimation = nullptr;
+	UPROPERTY()
+	float TransitionProgress = 0.0f;
+	UPROPERTY()
+	float TransitionDuration = 0.3f; // Duración de transición en segundos
+	UPROPERTY()
+	bool bIsTransitioning = false;
 
 	// Dirección de la animación (para sincronizar con movimiento) - TEMPORALMENTE COMENTADO
 	// UPROPERTY()
