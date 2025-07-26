@@ -3,8 +3,9 @@
 #include "ZombiSpawnerSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
-#include "ZombiStateFragment.h"
-#include "ZombiMovementFragment.h"
+#include "ZombiCoreFragment.h"
+#include "ZombiBehaviorFragment.h"
+#include "ZombiCombatFragment.h"
 #include "ZombiTurboSequenceFragment.h"
 #include "ZombiMassSubsystem.h"
 #include "TurboSequence_MinimalData_Lf.h"
@@ -306,10 +307,10 @@ void UZombiSpawnerSubsystem::ProcessPendingVisualInstances(float DeltaTime)
         if (EntityHandle.IsValid())
         {
             // Obtener la posición de la entidad para recrear la instancia visual
-            FZombiMovementFragment &MovementFragment = MassEntitySubsystem->GetEntityManager()
-                                                           .GetFragmentDataChecked<FZombiMovementFragment>(EntityHandle);
+            FZombiCoreFragment &CoreFragment = MassEntitySubsystem->GetEntityManager()
+                                                   .GetFragmentDataChecked<FZombiCoreFragment>(EntityHandle);
 
-            CreateTurboSequenceVisualInstance(EntityHandle, MovementFragment.Position);
+            CreateTurboSequenceVisualInstance(EntityHandle, CoreFragment.Position);
         }
         else
         {

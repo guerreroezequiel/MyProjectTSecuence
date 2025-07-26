@@ -4,17 +4,16 @@
 
 #include "MassProcessor.h"
 #include "ZombiTurboSequenceFragment.h"
-#include "ZombiTransformFragment.h"
-#include "ZombiVelocityFragment.h"
-#include "ZombiStateFragment.h"
-#include "ZombiChaseFragment.h"
+#include "ZombiCoreFragment.h"
+#include "ZombiBehaviorFragment.h"
+#include "ZombiCombatFragment.h"
 #include "TurboSequence_Manager_Lf.h"
-#include "MyTurboSequenceAnimComponent.h"
+#include "ZombiBehaviorFragment.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**
  * Procesador para sincronizar entidades Mass con instancias visuales TurboSequence
- * Enfoque: State Sync Architecture con Blend Space para animaciones
+ * Optimizado para usar fragmentos especializados
  */
 UCLASS()
 class UZombiTurboSequenceProcessor : public UMassProcessor
@@ -38,9 +37,9 @@ private:
 	// Función para actualizar animaciones basadas en estado del zombi
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
 									 FZombiTurboSequenceFragment &TurboSequenceFragment,
-									 const FZombiStateFragment &StateFragment,
-									 const FZombiVelocityFragment &VelocityFragment,
-									 const FZombiChaseFragment &ChaseFragment);
+									 const FZombiBehaviorFragment &BehaviorFragment,
+									 const FZombiCoreFragment &CoreFragment,
+									 const FZombiCombatFragment &CombatFragment);
 
 	// Función para cachear animaciones y optimizar búsquedas
 	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);

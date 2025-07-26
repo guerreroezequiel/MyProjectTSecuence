@@ -4,15 +4,17 @@
 #include "MassProcessor.h"
 #include "MassExecutionContext.h"
 #include "ZombiTurboSequenceFragment.h"
-#include "ZombiStateFragment.h"
-#include "ZombiChaseFragment.h"
+#include "ZombiCoreFragment.h"
+#include "ZombiBehaviorFragment.h"
+#include "ZombiCombatFragment.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
-#include "MyTurboSequenceAnimComponent.h"
+#include "ZombiBehaviorFragment.h"
 #include "Animation/BlendSpace.h"
 #include "Engine/Engine.h"
 #include "HAL/PlatformTime.h"
 #include "Math/Vector.h"
+#include "TurboSequence_Manager_Lf.h"
 
 UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
 {
@@ -28,26 +30,25 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesador inicializado"));
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesador optimizado inicializado"));
         bLoggedConstructor = true;
     }
 }
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
 {
-    // Query para sincronizar transformaciones y animaciones (State Sync)
+    // Query para sincronizar transformaciones y animaciones (State Sync) - optimizado
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
-    TransformSyncQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
-    TransformSyncQuery.AddRequirement<FZombiVelocityFragment>(EMassFragmentAccess::ReadOnly);
-    TransformSyncQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
-    TransformSyncQuery.AddRequirement<FZombiChaseFragment>(EMassFragmentAccess::ReadOnly);
+    TransformSyncQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+    TransformSyncQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    TransformSyncQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
 
     // TODO: Query para Blend Space (futuro)
     // BlendSpaceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
-    // BlendSpaceQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
-    // BlendSpaceQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadOnly);
+    // BlendSpaceQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    // BlendSpaceQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
 
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: ConfigureQueries completado - animaciones habilitadas"));
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: ConfigureQueries completado - optimizado para fragmentos especializados"));
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -69,14 +70,13 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
     //     DebugTimer = 0.0f;
     // }
 
-    // Sincronizar transformaciones y animaciones (State Sync)
+    // Sincronizar transformaciones y animaciones (State Sync) - optimizado
     TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
                                           {
         TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
-        TArrayView<const FZombiTransformFragment> TransformFragments = Context.GetFragmentView<FZombiTransformFragment>();
-        TArrayView<const FZombiVelocityFragment> VelocityFragments = Context.GetFragmentView<FZombiVelocityFragment>();
-        TArrayView<const FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
-        TArrayView<const FZombiChaseFragment> ChaseFragments = Context.GetFragmentView<FZombiChaseFragment>();
+        TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
+        TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
+        TArrayView<const FZombiCombatFragment> CombatFragments = Context.GetFragmentView<FZombiCombatFragment>();
 
         // Log eliminado para optimización de rendimiento
         // static float EntityDebugTimer = 0.0f;
@@ -90,90 +90,51 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
-            const FZombiTransformFragment& TransformFragment = TransformFragments[i];
-            const FZombiVelocityFragment& VelocityFragment = VelocityFragments[i];
-            const FZombiStateFragment& StateFragment = StateFragments[i];
-            const FZombiChaseFragment& ChaseFragment = ChaseFragments[i];
+            const FZombiCoreFragment& CoreFragment = CoreFragments[i];
+            const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
+            const FZombiCombatFragment& CombatFragment = CombatFragments[i];
 
             // Actualizar animación basada en estado PRIMERO
-            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, StateFragment, VelocityFragment, ChaseFragment);
+            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, BehaviorFragment, CoreFragment, CombatFragment);
             
-            // Sincronizar transformación usando la rotación ya calculada en MovementProcessor DESPUÉS
-            // Aplicar offset de -90° para corregir la orientación del asset de TurboSequence
-            FRotator AdjustedRotation = TransformFragment.Rotation;
-            AdjustedRotation.Yaw -= 90.0f; // Offset de -90° para corregir la orientación del asset
-            FQuat RotationQuat = FQuat(AdjustedRotation);
-            
-            // Log eliminado para optimización de rendimiento
-            // static float RotationDebugTimer = 0.0f;
-            // RotationDebugTimer += Context.GetDeltaTimeSeconds();
-            // if (RotationDebugTimer >= 15.0f && VelocityFragment.MovementSpeed > 0.0f)
-            // {
-            //     UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence Rotación: Velocidad: %.2f, Dirección: %s, Rotación Original: %s, Rotación Ajustada: %s, Quat: %s, ForwardVector: %s"),
-            //            VelocityFragment.MovementSpeed, 
-            //            *VelocityFragment.MovementDirection.ToString(),
-            //            *TransformFragment.Rotation.ToString(),
-            //            *AdjustedRotation.ToString(),
-            //            *RotationQuat.ToString(),
-            //            *AdjustedRotation.Vector().ToString());
-            //     RotationDebugTimer = 0.0f;
-            // }
-            
-            // Crear la transformación final
-            FTransform FinalTransform = FTransform(RotationQuat, TransformFragment.Position, FVector::OneVector);
-            
-            // Aplicar la transformación a TurboSequence DESPUÉS de la animación
-            ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-                TurboSequenceFragment.MeshData,
-                FinalTransform
-            );
-            
-            // Logs eliminados para optimización de rendimiento
-            // static float TransformAppliedDebugTimer = 0.0f;
-            // TransformAppliedDebugTimer += Context.GetDeltaTimeSeconds();
-            // if (TransformAppliedDebugTimer >= 25.0f && MovementFragment.MovementSpeed > 0.0f)
-            // {
-            //     UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Aplicada: MeshData Válido: %s, Posición: %s, Rotación: %s"),
-            //            TurboSequenceFragment.MeshData.IsMeshDataValid() ? TEXT("SÍ") : TEXT("NO"),
-            //            *MovementFragment.Position.ToString(),
-            //            *MovementFragment.Rotation.ToString());
-            //     TransformAppliedDebugTimer = 0.0f;
-            // }
-            
-            // static float TransformDebugTimer = 0.0f;
-            // TransformDebugTimer += Context.GetDeltaTimeSeconds();
-            // if (TransformDebugTimer >= 20.0f && MovementFragment.MovementSpeed > 0.0f)
-            // {
-            //     FVector ForwardVector = MovementFragment.Rotation.Vector();
-            //     FVector MovementDirection = MovementFragment.MovementDirection;
-            //     float DotProduct = FVector::DotProduct(ForwardVector, MovementDirection);
-            //     
-            //     UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Final: Posición: %s, Rotación: %s, ForwardVector: %s, MovementDirection: %s, DotProduct: %.3f"),
-            //            *MovementFragment.Position.ToString(),
-            //            *MovementFragment.Rotation.ToString(),
-            //            *ForwardVector.ToString(),
-            //            *MovementDirection.ToString(),
-            //            DotProduct);
-            //     TransformDebugTimer = 0.0f;
-            // }
+            // SINCRONIZAR TRANSFORMACIÓN con TurboSequence
+            if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.MeshData.IsMeshDataValid())
+            {
+                // Crear transformación desde los datos del CoreFragment
+                FTransform NewTransform;
+                NewTransform.SetLocation(CoreFragment.Position);
+                
+                // CORREGIR ROTACIÓN: Compensar la diferencia de 90 grados entre animación y transformación
+                // La animación está 90 grados a la derecha, así que rotamos -90 grados en el eje Z
+                FRotator CorrectedRotation = CoreFragment.Rotation;
+                CorrectedRotation.Yaw -= 90.0f; // Compensar la diferencia de orientación
+                
+                NewTransform.SetRotation(CorrectedRotation.Quaternion());
+                NewTransform.SetScale3D(FVector::OneVector);
 
-            // static float ExecutionOrderDebugTimer = 0.0f;
-            // ExecutionOrderDebugTimer += Context.GetDeltaTimeSeconds();
-            // if (ExecutionOrderDebugTimer >= 30.0f && MovementFragment.MovementSpeed > 0.0f)
-            // {
-            //     UE_LOG(LogTemp, Log, TEXT("🎮 Orden de Ejecución: 1. Animación actualizada, 2. Transformación aplicada, Velocidad: %.2f, Rotación: %s"),
-            //            MovementFragment.MovementSpeed, *MovementFragment.Rotation.ToString());
-            //     ExecutionOrderDebugTimer = 0.0f;
-            // }
+                // Aplicar transformación usando el manager de TurboSequence
+                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                    TurboSequenceFragment.MeshData,
+                    NewTransform);
+
+                // Log de debugging para verificar sincronización
+                static int32 TransformLogCount = 0;
+                TransformLogCount++;
+                if (TransformLogCount % 120 == 1) // Log cada 2 segundos
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiTurboSequenceProcessor: TRANSFORMACIÓN SINCRONIZADA - Entidad %d: %s, Rotación: %.1f° (Corregida: %.1f°)"), 
+                           i, *CoreFragment.Position.ToString(), CoreFragment.Rotation.Yaw, CorrectedRotation.Yaw);
+                }
+            }
         } });
 }
 
 // Implementación de animaciones basadas en estado con Blend Space
 void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
                                                                FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                               const FZombiStateFragment &StateFragment,
-                                                               const FZombiVelocityFragment &VelocityFragment,
-                                                               const FZombiChaseFragment &ChaseFragment)
+                                                               const FZombiBehaviorFragment &BehaviorFragment,
+                                                               const FZombiCoreFragment &CoreFragment,
+                                                               const FZombiCombatFragment &CombatFragment)
 {
     // Verificar que tenemos todo lo necesario
     if (!TurboSequenceFragment.TurboSequenceAsset || !TurboSequenceFragment.MeshData.IsMeshDataValid())
@@ -198,7 +159,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     }
 
     // USAR BLEND SPACE DIRECTAMENTE - Enfoque correcto según documentación
-    float CurrentSpeed = VelocityFragment.MovementSpeed;
+    float CurrentSpeed = CoreFragment.MovementSpeed;
 
     // Normalizar velocidad al rango del Blend Space (0-100)
     float NormalizedSpeed = FMath::Clamp(CurrentSpeed, 0.0f, 100.0f);
@@ -221,7 +182,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     UAnimSequence *TargetAnimation = nullptr;
 
     // Priorizar estado de persecución sobre velocidad
-    if (ChaseFragment.bIsChasing)
+    if (BehaviorFragment.IsChasing())
     {
         // Durante persecución, usar animación de correr
         TargetAnimation = TurboSequenceFragment.CachedRunAnimation;

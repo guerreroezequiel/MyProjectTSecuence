@@ -3,43 +3,36 @@
 #pragma once
 
 #include "MassProcessor.h"
-#include "ZombiTransformFragment.h"
-#include "ZombiVelocityFragment.h"
+#include "MassEntityTypes.h"
+#include "ZombiCoreFragment.h"
 #include "ZombiBehaviorFragment.h"
-#include "ZombiStateFragment.h"
-#include "TurboSequence_MinimalData_Lf.h"
-#include "TurboSequence_Manager_Lf.h"
-#include "MassProcessingTypes.h"
+#include "ZombiCombatFragment.h"
 #include "ZombiTags.h"
+#include "Engine/Engine.h"
 #include "ZombiMovementProcessor.generated.h"
 
-// Procesador que maneja el movimiento y rotación de los zombis
-// Optimizado para rendimiento con miles de entidades
+/**
+ * Procesador especializado SOLO para movimiento y rotación
+ * Optimizado para cache locality - accede solo a fragmentos de movimiento
+ */
 UCLASS()
-class MYPROJECTTSECUENCE_API UZombiMovementProcessor : public UMassProcessor
+class UZombiMovementProcessor : public UMassProcessor
 {
 	GENERATED_BODY()
 
 public:
 	UZombiMovementProcessor();
 
-public:
+protected:
 	virtual void ConfigureQueries() override;
 	virtual void Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context) override;
-	virtual bool ShouldAllowQueryBasedPruning(const bool bRuntimeMode = true) const override { return false; }
 
 private:
-	// Queries optimizados por responsabilidad
-	FMassEntityQuery ActiveMovementQuery{*this}; // Solo entidades activas
-	FMassEntityQuery MovingQuery{*this};		 // Solo entidades en movimiento
-	FMassEntityQuery BehaviorQuery{*this};		 // Solo entidades con comportamiento
+	// Query para entidades activas que necesitan movimiento
+	FMassEntityQuery MovementQuery{*this};
 
-	// Genera una dirección aleatoria para el movimiento
+	// Funciones auxiliares
 	FVector GenerateRandomDirection() const;
-
-	// Verifica si el zombi está dentro del radio de movimiento
 	bool IsWithinMovementRadius(const FVector &Position, const FVector &Center, float Radius) const;
-
-	// Ajusta la posición para mantener al zombi dentro del área
 	FVector ClampToMovementArea(const FVector &Position, const FVector &Center, float Radius) const;
 };

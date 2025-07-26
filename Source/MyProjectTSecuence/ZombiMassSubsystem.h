@@ -5,16 +5,19 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "MassEntitySubsystem.h"
-#include "ZombiStateFragment.h"
-#include "ZombiMovementFragment.h"
+#include "ZombiCoreFragment.h"
+#include "ZombiBehaviorFragment.h"
+#include "ZombiCombatFragment.h"
 #include "ZombiTurboSequenceFragment.h"
 #include "ZombiMovementProcessor.h"
+#include "ZombiBehaviorProcessor.h"
+#include "ZombiCombatProcessor.h"
 #include "ZombiTurboSequenceProcessor.h"
-#include "ZombiUpdateProcessor.h"
+// ZombiUpdateProcessor eliminado - migrado a sistema especializado
 #include "ZombiMassSubsystem.generated.h"
 
 // Subsystem que maneja el registro de entidades zombi en el sistema Mass Entity
-// Ahora usa el nuevo State Sync sin dependencia de Actors
+// Optimizado con fragmentos especializados para mejor rendimiento
 UCLASS()
 class MYPROJECTTSECUENCE_API UZombiMassSubsystem : public UWorldSubsystem
 {
@@ -29,7 +32,7 @@ public:
 	virtual void OnWorldBeginPlay(UWorld &InWorld) override;
 
 	// Registra una entidad zombi en el sistema Mass Entity
-	// Ahora crea entidades puras sin Actors
+	// Usa fragmentos especializados para optimización
 	FMassEntityHandle RegisterZombiEntity(const FVector &SpawnLocation,
 										  class UTurboSequence_MeshAsset_Lf *TurboSequenceAsset);
 
@@ -62,4 +65,14 @@ private:
 public:
 	// Ejecuta los procesadores manualmente cada frame (DEPRECATED - Ahora se ejecutan automáticamente)
 	void ExecuteProcessorsManually(float DeltaTime);
+
+private:
+	// Debug: Verifica que una entidad tiene los fragmentos correctos
+	void DebugEntityFragments(FMassEntityHandle EntityHandle);
+
+	// Debug: Verifica que una entidad tiene los tags correctos
+	void DebugEntityTags(FMassEntityHandle EntityHandle);
+
+	// Verifica que los procesadores están registrados correctamente
+	void VerifyProcessorsRegistration();
 };
