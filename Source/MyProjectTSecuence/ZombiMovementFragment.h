@@ -26,7 +26,7 @@ struct FZombiMovementFragment : public FMassFragment
 
 	// Velocidad de rotación (grados por segundo)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float RotationSpeed = 90.0f;
+	float RotationSpeed = 360.0f;
 
 	// Dirección de movimiento actual
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

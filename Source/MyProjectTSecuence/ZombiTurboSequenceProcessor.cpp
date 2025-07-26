@@ -88,31 +88,78 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             const FZombiMovementFragment& MovementFragment = MovementFragments[i];
             const FZombiStateFragment& StateFragment = StateFragments[i];
 
-            // Sincronizar transformación con rotación hacia la dirección de movimiento
-            FQuat RotationQuat = FQuat(MovementFragment.Rotation);
+            // Actualizar animación basada en estado PRIMERO
+            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, StateFragment, MovementFragment);
             
-            // Si hay movimiento, calcular la rotación hacia la dirección
-            if (!MovementFragment.MovementDirection.IsNearlyZero() && MovementFragment.MovementSpeed > 0.0f)
+            // Sincronizar transformación usando la rotación ya calculada en MovementProcessor DESPUÉS
+            // Aplicar offset de -90° para corregir la orientación del asset de TurboSequence
+            FRotator AdjustedRotation = MovementFragment.Rotation;
+            AdjustedRotation.Yaw -= 90.0f; // Offset de -90° para corregir la orientación del asset
+            FQuat RotationQuat = FQuat(AdjustedRotation);
+            
+            // Log de debugging para rotación (solo ocasionalmente)
+            static float RotationDebugTimer = 0.0f;
+            RotationDebugTimer += Context.GetDeltaTimeSeconds();
+            if (RotationDebugTimer >= 15.0f && MovementFragment.MovementSpeed > 0.0f)
             {
-                // Calcular rotación hacia la dirección de movimiento
-                FRotator DirectionRotation = MovementFragment.MovementDirection.Rotation();
-                
-                // Interpolar suavemente la rotación para evitar giros bruscos
-                FRotator CurrentRotation = MovementFragment.Rotation;
-                FRotator TargetRotation = DirectionRotation;
-                
-                // Interpolación suave con velocidad de rotación
-                float RotationSpeed = 5.0f; // Velocidad de rotación en radianes por segundo
-                RotationQuat = FQuat(FMath::RInterpTo(CurrentRotation, TargetRotation, Context.GetDeltaTimeSeconds(), RotationSpeed));
+                UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence Rotación: Velocidad: %.2f, Dirección: %s, Rotación Original: %s, Rotación Ajustada: %s, Quat: %s, ForwardVector: %s"),
+                       MovementFragment.MovementSpeed, 
+                       *MovementFragment.MovementDirection.ToString(),
+                       *MovementFragment.Rotation.ToString(),
+                       *AdjustedRotation.ToString(),
+                       *RotationQuat.ToString(),
+                       *AdjustedRotation.Vector().ToString());
+                RotationDebugTimer = 0.0f;
             }
             
+            // Crear la transformación final
+            FTransform FinalTransform = FTransform(RotationQuat, MovementFragment.Position, FVector::OneVector);
+            
+            // Aplicar la transformación a TurboSequence DESPUÉS de la animación
             ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
                 TurboSequenceFragment.MeshData,
-                FTransform(RotationQuat, MovementFragment.Position, FVector::OneVector)
+                FinalTransform
             );
+            
+            // Log de debugging para verificar si la transformación se aplicó
+            static float TransformAppliedDebugTimer = 0.0f;
+            TransformAppliedDebugTimer += Context.GetDeltaTimeSeconds();
+            if (TransformAppliedDebugTimer >= 25.0f && MovementFragment.MovementSpeed > 0.0f)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Aplicada: MeshData Válido: %s, Posición: %s, Rotación: %s"),
+                       TurboSequenceFragment.MeshData.IsMeshDataValid() ? TEXT("SÍ") : TEXT("NO"),
+                       *MovementFragment.Position.ToString(),
+                       *MovementFragment.Rotation.ToString());
+                TransformAppliedDebugTimer = 0.0f;
+            }
+            
+            // Log de debugging para transformación (solo ocasionalmente)
+            static float TransformDebugTimer = 0.0f;
+            TransformDebugTimer += Context.GetDeltaTimeSeconds();
+            if (TransformDebugTimer >= 20.0f && MovementFragment.MovementSpeed > 0.0f)
+            {
+                FVector ForwardVector = MovementFragment.Rotation.Vector();
+                FVector MovementDirection = MovementFragment.MovementDirection;
+                float DotProduct = FVector::DotProduct(ForwardVector, MovementDirection);
+                
+                UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Final: Posición: %s, Rotación: %s, ForwardVector: %s, MovementDirection: %s, DotProduct: %.3f"),
+                       *MovementFragment.Position.ToString(),
+                       *MovementFragment.Rotation.ToString(),
+                       *ForwardVector.ToString(),
+                       *MovementDirection.ToString(),
+                       DotProduct);
+                TransformDebugTimer = 0.0f;
+            }
 
-            // Actualizar animación basada en estado
-            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, StateFragment, MovementFragment);
+            // Log de orden de ejecución
+            static float ExecutionOrderDebugTimer = 0.0f;
+            ExecutionOrderDebugTimer += Context.GetDeltaTimeSeconds();
+            if (ExecutionOrderDebugTimer >= 30.0f && MovementFragment.MovementSpeed > 0.0f)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🎮 Orden de Ejecución: 1. Animación actualizada, 2. Transformación aplicada, Velocidad: %.2f, Rotación: %s"),
+                       MovementFragment.MovementSpeed, *MovementFragment.Rotation.ToString());
+                ExecutionOrderDebugTimer = 0.0f;
+            }
         } });
 }
 
@@ -130,8 +177,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
 
     // Log de debugging para verificar ejecución de animaciones
     static float AnimationDebugTimer = 0.0f;
-    static float LastDeltaTime = 0.0f;
-    AnimationDebugTimer += LastDeltaTime;
+    AnimationDebugTimer += Context.GetDeltaTimeSeconds();
     if (AnimationDebugTimer >= 10.0f) // Log cada 10 segundos
     {
         UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d, Velocidad: %.2f"),
@@ -151,8 +197,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     // Normalizar velocidad al rango del Blend Space (0-100)
     float NormalizedSpeed = FMath::Clamp(CurrentSpeed, 0.0f, 100.0f);
 
-    // Usar TweakAnimation_Concurrent para Blend Space
-    // Esto es más eficiente que PlayAnimation_Concurrent para transiciones suaves
+    // Configuración para Blend Space
     FTurboSequence_AnimPlaySettings_Lf PlaySettings;
     PlaySettings.AnimationSpeed = 1.0f;
     PlaySettings.AnimationWeight = 1.0f;
@@ -163,8 +208,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
         UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: Velocidad: %.2f, Normalizada: %.2f"), CurrentSpeed, NormalizedSpeed);
     }
 
-    // USAR ANIMACIONES CON TRANSICIONES SUAVES - POR ENTIDAD
-    // Cada entidad tiene su propio estado de animación
+    // USAR BLEND SPACE CON TURBOSEQUENCE - Enfoque correcto según documentación
     TurboSequenceFragment.AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
 
     // Solo actualizar cuando cambie significativamente la velocidad o cada 3 segundos
@@ -173,67 +217,105 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
 
     if (!TurboSequenceFragment.bAnimationInitialized || bShouldUpdateAnimation)
     {
-        // Buscar la animación más apropiada basada en velocidad
+        // USAR BLEND SPACE CON TURBOSEQUENCE - Enfoque correcto según documentación
         if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
         {
-            UAnimSequence *SelectedAnimation = nullptr;
-
-            // Seleccionar animación basada en velocidad con umbrales más claros
-            if (NormalizedSpeed < 5.0f)
+            // Buscar Blend Space en la librería
+            UBlendSpace *SelectedBlendSpace = nullptr;
+            if (TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->BlendSpaces.Num() > 0)
             {
-                // IDLE - Buscar animación de idle
-                for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                {
-                    if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
-                    {
-                        SelectedAnimation = AnimItem.Animation;
-                        break;
-                    }
-                }
-            }
-            else if (NormalizedSpeed < 50.0f)
-            {
-                // WALK - Buscar animación de caminar
-                for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                {
-                    if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
-                    {
-                        SelectedAnimation = AnimItem.Animation;
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                // RUN - Buscar animación de correr
-                for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
-                {
-                    if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Run"), ESearchCase::IgnoreCase))
-                    {
-                        SelectedAnimation = AnimItem.Animation;
-                        break;
-                    }
-                }
+                SelectedBlendSpace = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->BlendSpaces[0];
             }
 
-            // Si no encontramos animación específica, usar la primera disponible
-            if (!SelectedAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
+            if (SelectedBlendSpace)
             {
-                SelectedAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
-            }
-
-            // Reproducir la animación seleccionada
-            if (SelectedAnimation)
-            {
-                ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                // Usar PlayBlendSpace_Concurrent para Blend Space
+                TurboSequenceFragment.BlendSpaceData = ATurboSequence_Manager_Lf::PlayBlendSpace_Concurrent(
                     TurboSequenceFragment.MeshData,
-                    SelectedAnimation,
+                    SelectedBlendSpace,
                     PlaySettings);
+
+                // Usar TweakBlendSpace_Concurrent para ajustar la posición en el Blend Space
+                FVector3f BlendSpacePosition(NormalizedSpeed, 0.0f, 0.0f); // Velocidad en X, dirección en Y
+                bool bBlendSpaceTweaked = ATurboSequence_Manager_Lf::TweakBlendSpace_Concurrent(
+                    TurboSequenceFragment.BlendSpaceData,
+                    BlendSpacePosition);
 
                 TurboSequenceFragment.LastSpeed = NormalizedSpeed;
                 TurboSequenceFragment.AnimationUpdateTimer = 0.0f;
                 TurboSequenceFragment.bAnimationInitialized = true;
                 TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
+
+                // Log de debugging para Blend Space
+                UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space Aplicado: Velocidad: %.2f, Posición: %s, Tweaked: %s"),
+                       NormalizedSpeed, *BlendSpacePosition.ToString(), bBlendSpaceTweaked ? TEXT("SÍ") : TEXT("NO"));
+            }
+            else
+            {
+                // Fallback a animaciones individuales si no hay Blend Space
+                UAnimSequence *SelectedAnimation = nullptr;
+
+                // Seleccionar animación basada en velocidad
+                if (NormalizedSpeed < 5.0f)
+                {
+                    // IDLE - Buscar animación de idle
+                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+                    {
+                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+                        {
+                            SelectedAnimation = AnimItem.Animation;
+                            break;
+                        }
+                    }
+                }
+                else if (NormalizedSpeed < 50.0f)
+                {
+                    // WALK - Buscar animación de caminar
+                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+                    {
+                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                        {
+                            SelectedAnimation = AnimItem.Animation;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    // RUN - Buscar animación de correr
+                    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+                    {
+                        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Run"), ESearchCase::IgnoreCase))
+                        {
+                            SelectedAnimation = AnimItem.Animation;
+                            break;
+                        }
+                    }
+                }
+
+                // Si no encontramos animación específica, usar la primera disponible
+                if (!SelectedAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
+                {
+                    SelectedAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
+                }
+
+                // Reproducir la animación seleccionada
+                if (SelectedAnimation)
+                {
+                    ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                        TurboSequenceFragment.MeshData,
+                        SelectedAnimation,
+                        PlaySettings);
+
+                    TurboSequenceFragment.LastSpeed = NormalizedSpeed;
+                    TurboSequenceFragment.AnimationUpdateTimer = 0.0f;
+                    TurboSequenceFragment.bAnimationInitialized = true;
+                    TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
+
+                    // Log de debugging para animación individual
+                    UE_LOG(LogTemp, Log, TEXT("🎮 Animación Individual: %s, Velocidad: %.2f"),
+                           *SelectedAnimation->GetName(), NormalizedSpeed);
+                }
             }
         }
     }

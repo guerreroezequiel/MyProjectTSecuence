@@ -184,8 +184,9 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     TurboSequenceFragment.TurboSequenceAsset = ZombiTurboSequenceAsset;
     TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // 4 grupos de actualización
 
-    // Crear transform de spawn
-    FTransform SpawnTransform(GenerateRandomRotation(), SpawnLocation, FVector::OneVector);
+    // Crear transform de spawn sin offset - el asset ya está orientado correctamente
+    FRotator SpawnRotation = GenerateRandomRotation();
+    FTransform SpawnTransform(SpawnRotation, SpawnLocation, FVector::OneVector);
 
     // Crear instancia visual de TurboSequence
     // Log solo para las primeras 3 entidades

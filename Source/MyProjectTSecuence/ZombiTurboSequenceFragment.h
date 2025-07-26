@@ -54,6 +54,12 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	float LastAnimationUpdateTime = 0.0f;
 
+	// Dirección de la animación (para sincronizar con movimiento) - TEMPORALMENTE COMENTADO
+	// UPROPERTY()
+	// FVector AnimationDirection = FVector::ForwardVector;
+	// UPROPERTY()
+	// float LastDirectionChangeTime = 0.0f;
+
 	FZombiTurboSequenceFragment()
 	{
 		TurboSequenceAsset = nullptr;
