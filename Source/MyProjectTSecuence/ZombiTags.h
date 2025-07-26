@@ -49,3 +49,10 @@ struct FNeedsVisualSyncTag : public FMassTag
 {
     GENERATED_BODY()
 };
+
+// Tag para entidades que están persiguiendo al jugador
+USTRUCT()
+struct FChasingTag : public FMassTag
+{
+    GENERATED_BODY()
+};

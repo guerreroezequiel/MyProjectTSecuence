@@ -1,11 +1,15 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ZombiMovementProcessor.h"
+#include "ZombiTransformFragment.h"
+#include "ZombiVelocityFragment.h"
+#include "ZombiBehaviorFragment.h"
 #include "MassExecutionContext.h"
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 #include "ZombiTurboSequenceFragment.h"
+#include "ZombiChaseFragment.h"
 
 // Constructor del procesador de movimiento
 UZombiMovementProcessor::UZombiMovementProcessor()
@@ -22,19 +26,25 @@ UZombiMovementProcessor::UZombiMovementProcessor()
 void UZombiMovementProcessor::ConfigureQueries()
 {
     // Query para entidades activas (no muertas) - TEMPORALMENTE SIN TAGS PARA DIAGNOSTICAR
-    ActiveMovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    ActiveMovementQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
+    ActiveMovementQuery.AddRequirement<FZombiVelocityFragment>(EMassFragmentAccess::ReadWrite);
+    ActiveMovementQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     ActiveMovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    ActiveMovementQuery.AddRequirement<FZombiChaseFragment>(EMassFragmentAccess::ReadOnly);
     // ActiveMovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     // ActiveMovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 
     // Query para entidades en movimiento
-    MovingQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    MovingQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
+    MovingQuery.AddRequirement<FZombiVelocityFragment>(EMassFragmentAccess::ReadWrite);
     MovingQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
     MovingQuery.AddTagRequirement<FMovingTag>(EMassFragmentPresence::All);
     MovingQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 
     // Query para comportamiento (cambio de dirección, etc.)
-    BehaviorQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    BehaviorQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
+    BehaviorQuery.AddRequirement<FZombiVelocityFragment>(EMassFragmentAccess::ReadWrite);
+    BehaviorQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
 
@@ -55,41 +65,47 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
     // Procesa entidades activas con queries optimizados
     ActiveMovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                            {
-        const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
+        const TArrayView<FZombiTransformFragment> TransformFragments = Context.GetMutableFragmentView<FZombiTransformFragment>();
+        const TArrayView<FZombiVelocityFragment> VelocityFragments = Context.GetMutableFragmentView<FZombiVelocityFragment>();
+        const TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
         const TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
+        const TConstArrayView<FZombiChaseFragment> ChaseFragments = Context.GetFragmentView<FZombiChaseFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
-            FZombiMovementFragment &MovementFragment = MovementFragments[i];
+            FZombiTransformFragment &TransformFragment = TransformFragments[i];
+            FZombiVelocityFragment &VelocityFragment = VelocityFragments[i];
+            FZombiBehaviorFragment &BehaviorFragment = BehaviorFragments[i];
             FZombiStateFragment &StateFragment = StateFragments[i];
+            const FZombiChaseFragment &ChaseFragment = ChaseFragments[i];
 
-            // Solo procesa movimiento si el zombi no está muerto
-            if (StateFragment.State != EZombiState::Death)
+            // Solo procesa movimiento si el zombi no está muerto y no está persiguiendo
+            if (StateFragment.State != EZombiState::Death && !ChaseFragment.bIsChasing)
             {
                 // Actualiza el timer de cambio de dirección
-                MovementFragment.DirectionChangeTimer += DeltaTime;
+                BehaviorFragment.DirectionChangeTimer += DeltaTime;
 
                 // Cambia dirección aleatoriamente y velocidad para probar Blend Space
-                if (MovementFragment.DirectionChangeTimer >= MovementFragment.DirectionChangeInterval)
+                if (BehaviorFragment.DirectionChangeTimer >= BehaviorFragment.DirectionChangeInterval)
                 {
-                    MovementFragment.MovementDirection = GenerateRandomDirection();
-                    MovementFragment.DirectionChangeTimer = 0.0f;
+                    VelocityFragment.MovementDirection = GenerateRandomDirection();
+                    BehaviorFragment.DirectionChangeTimer = 0.0f;
 
                     // Cambiar velocidad aleatoriamente para probar Blend Space
                     float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
                     // Usar velocidades fijas para animaciones más predecibles
                     if (SpeedVariation < 0.3f)
                     {
-                        MovementFragment.MovementSpeed = 0.0f; // IDLE - velocidad fija
+                        VelocityFragment.MovementSpeed = 0.0f; // IDLE - velocidad fija
                     }
                     else if (SpeedVariation < 0.7f)
                     {
-                        MovementFragment.MovementSpeed = 25.0f; // WALK - velocidad fija
+                        VelocityFragment.MovementSpeed = 25.0f; // WALK - velocidad fija
                     }
                     else
                     {
-                        MovementFragment.MovementSpeed = 80.0f; // RUN - velocidad fija
+                        VelocityFragment.MovementSpeed = 80.0f; // RUN - velocidad fija
                     }
 
                     // Log eliminado para optimización de rendimiento
@@ -98,23 +114,23 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
 
                 // PRIMERO: Calcula la rotación hacia la dirección de movimiento deseada (OPTIMIZADO)
-                if (!MovementFragment.MovementDirection.IsNearlyZero())
+                if (!VelocityFragment.MovementDirection.IsNearlyZero())
                 {
                     // OPTIMIZACIÓN: Solo calcular rotación si la velocidad es significativa
-                    if (MovementFragment.MovementSpeed > 1.0f)
+                    if (VelocityFragment.MovementSpeed > 1.0f)
                     {
-                        FRotator TargetRotation = MovementFragment.MovementDirection.Rotation();
-                        FRotator CurrentRotation = MovementFragment.Rotation;
+                        FRotator TargetRotation = VelocityFragment.MovementDirection.Rotation();
+                        FRotator CurrentRotation = TransformFragment.Rotation;
 
                         // Si acaba de cambiar dirección, usar rotación más agresiva
-                        float RotationSpeedMultiplier = (MovementFragment.DirectionChangeTimer < 0.5f) ? 3.0f : 1.0f;
+                        float RotationSpeedMultiplier = (BehaviorFragment.DirectionChangeTimer < 0.5f) ? 3.0f : 1.0f;
 
                         // Interpola suavemente la rotación
-                        MovementFragment.Rotation = FMath::RInterpTo(
+                        TransformFragment.Rotation = FMath::RInterpTo(
                             CurrentRotation,
                             TargetRotation,
                             DeltaTime,
-                            (MovementFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f
+                            (VelocityFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f
                         );
                     }
 
@@ -146,14 +162,14 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
 
                 // SEGUNDO: Calcula el movimiento hacia adelante en la dirección de la rotación (OPTIMIZADO)
-                FVector NewPosition = MovementFragment.Position;
-                if (MovementFragment.MovementSpeed > 0.0f)
+                FVector NewPosition = TransformFragment.Position;
+                if (VelocityFragment.MovementSpeed > 0.0f)
                 {
                     // OPTIMIZACIÓN: Calcular forward direction directamente (más eficiente)
-                    FVector ForwardDirection = MovementFragment.Rotation.Vector();
+                    FVector ForwardDirection = TransformFragment.Rotation.Vector();
                     
-                    NewPosition = MovementFragment.Position +
-                                  ForwardDirection * MovementFragment.MovementSpeed * DeltaTime;
+                    NewPosition = TransformFragment.Position +
+                                  ForwardDirection * VelocityFragment.MovementSpeed * DeltaTime;
 
                     // Log eliminado para optimización de rendimiento
                     // static float ForwardMovementDebugTimer = 0.0f;
@@ -171,18 +187,18 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
 
                 // OPTIMIZACIÓN: Solo verificar área si la posición cambió significativamente
-                FVector OldPosition = MovementFragment.Position;
-                MovementFragment.Position = NewPosition;
+                FVector OldPosition = TransformFragment.Position;
+                TransformFragment.Position = NewPosition;
                 
                 // Solo verificar área si se movió más de 1 unidad
                 if (FVector::DistSquared(OldPosition, NewPosition) > 1.0f)
                 {
-                    MovementFragment.Position = ClampToMovementArea(NewPosition, MovementFragment.MovementCenter, MovementFragment.MovementRadius);
+                    TransformFragment.Position = ClampToMovementArea(NewPosition, BehaviorFragment.MovementCenter, BehaviorFragment.MovementRadius);
                 }
             }
 
             // Actualiza el estado según si se está moviendo o no
-            if (MovementFragment.MovementSpeed > 0.0f) // Si tiene velocidad, está caminando
+            if (VelocityFragment.MovementSpeed > 0.0f) // Si tiene velocidad, está caminando
             {
                 if (StateFragment.State != EZombiState::Walk)
                 {

@@ -4,8 +4,10 @@
 
 #include "MassProcessor.h"
 #include "ZombiTurboSequenceFragment.h"
-#include "ZombiMovementFragment.h"
+#include "ZombiTransformFragment.h"
+#include "ZombiVelocityFragment.h"
 #include "ZombiStateFragment.h"
+#include "ZombiChaseFragment.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "MyTurboSequenceAnimComponent.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
@@ -37,7 +39,8 @@ private:
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
 									 FZombiTurboSequenceFragment &TurboSequenceFragment,
 									 const FZombiStateFragment &StateFragment,
-									 const FZombiMovementFragment &MovementFragment);
+									 const FZombiVelocityFragment &VelocityFragment,
+									 const FZombiChaseFragment &ChaseFragment);
 
 	// Función para cachear animaciones y optimizar búsquedas
 	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);

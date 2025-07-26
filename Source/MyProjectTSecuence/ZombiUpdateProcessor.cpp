@@ -33,6 +33,12 @@ void UZombiUpdateProcessor::ConfigureQueries()
 
 void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld())
+    {
+        return;
+    }
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Log cada 60 segundos (aproximadamente una vez por minuto)

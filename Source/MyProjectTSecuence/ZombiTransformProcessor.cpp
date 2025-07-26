@@ -27,6 +27,12 @@ void UZombiTransformProcessor::ConfigureQueries()
 
 void UZombiTransformProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld())
+    {
+        return;
+    }
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Procesar transformaciones en paralelo

@@ -3,23 +3,15 @@
 #pragma once
 
 #include "MassProcessor.h"
-#include "ZombiMovementFragment.h"
+#include "ZombiTransformFragment.h"
+#include "ZombiVelocityFragment.h"
+#include "ZombiBehaviorFragment.h"
 #include "ZombiStateFragment.h"
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "MassProcessingTypes.h"
+#include "ZombiTags.h"
 #include "ZombiMovementProcessor.generated.h"
-
-// Tags para filtrado inteligente de entidades
-struct FActiveTag : public FMassTag
-{
-};
-struct FMovingTag : public FMassTag
-{
-};
-struct FDeadTag : public FMassTag
-{
-};
 
 // Procesador que maneja el movimiento y rotación de los zombis
 // Optimizado para rendimiento con miles de entidades
@@ -50,7 +42,4 @@ private:
 
 	// Ajusta la posición para mantener al zombi dentro del área
 	FVector ClampToMovementArea(const FVector &Position, const FVector &Center, float Radius) const;
-
-	// Crea o actualiza la instancia visual de TurboSequence
-	void UpdateTurboSequenceInstance(const FZombiMovementFragment &MovementFragment);
 };

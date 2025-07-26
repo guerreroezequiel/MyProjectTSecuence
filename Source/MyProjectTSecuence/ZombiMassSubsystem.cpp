@@ -4,11 +4,15 @@
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
 #include "ZombiStateFragment.h"
-#include "ZombiMovementFragment.h"
+#include "ZombiTransformFragment.h"
+#include "ZombiVelocityFragment.h"
+#include "ZombiBehaviorFragment.h"
 #include "ZombiTurboSequenceFragment.h"
+#include "ZombiChaseFragment.h"
 #include "ZombiMovementProcessor.h"
 #include "ZombiTurboSequenceProcessor.h"
 #include "ZombiUpdateProcessor.h"
+#include "ZombiChaseProcessor.h"
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "ZombiUpdateProcessor.h"
@@ -74,24 +78,38 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Crea la entidad Mass usando el método más simple de UE5.5
     FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
 
-    // Crea los fragmentos con los datos iniciales
+    // Crea los fragmentos especializados con los datos iniciales
     FZombiStateFragment StateFragment;
     StateFragment.State = EZombiState::Idle; // Estado inicial
 
-    // Log eliminado para optimización de rendimiento
+    // Fragmento de transformación (posición y rotación)
+    FZombiTransformFragment TransformFragment;
+    TransformFragment.Position = SpawnLocation;
+    TransformFragment.Rotation = GenerateRandomRotation();
 
-    FZombiMovementFragment MovementFragment;
-    MovementFragment.Position = SpawnLocation;
-    MovementFragment.Rotation = GenerateRandomRotation();
-    MovementFragment.MovementCenter = SpawnLocation;
-    MovementFragment.MovementRadius = 500.0f;
-    MovementFragment.MovementSpeed = FMath::RandRange(80.0f, 120.0f);
-    MovementFragment.RotationSpeed = FMath::RandRange(60.0f, 120.0f);
-    MovementFragment.DirectionChangeInterval = FMath::RandRange(2.0f, 5.0f);
+    // Fragmento de velocidad (movimiento y rotación)
+    FZombiVelocityFragment VelocityFragment;
+    VelocityFragment.MovementSpeed = FMath::RandRange(80.0f, 120.0f);
+    VelocityFragment.RotationSpeed = FMath::RandRange(60.0f, 120.0f);
+    VelocityFragment.MovementDirection = FVector::ForwardVector;
+
+    // Fragmento de comportamiento (timers y área de movimiento)
+    FZombiBehaviorFragment BehaviorFragment;
+    BehaviorFragment.MovementCenter = SpawnLocation;
+    BehaviorFragment.MovementRadius = 500.0f;
+    BehaviorFragment.DirectionChangeInterval = FMath::RandRange(2.0f, 5.0f);
+    BehaviorFragment.DirectionChangeTimer = 0.0f;
 
     FZombiTurboSequenceFragment TurboSequenceFragment;
     TurboSequenceFragment.TurboSequenceAsset = TurboSequenceAsset;
     TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // Distribuye en 4 grupos
+
+    // Fragmento de persecución
+    FZombiChaseFragment ChaseFragment;
+    ChaseFragment.ChaseDistance = 1000.0f;
+    ChaseFragment.ChaseSpeed = 200.0f;
+    ChaseFragment.ChaseDuration = 5.0f;
+    ChaseFragment.bIsChasing = false;
 
     // Crea la entidad con los fragmentos ya instanciados (método correcto de UE5.5)
     TArray<FInstancedStruct> FragmentList;
@@ -102,17 +120,35 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     StateFragmentInstance.GetMutable<FZombiStateFragment>() = StateFragment;
     FragmentList.Add(StateFragmentInstance);
 
-    // Instancia el fragmento de movimiento
-    FInstancedStruct MovementFragmentInstance;
-    MovementFragmentInstance.InitializeAs<FZombiMovementFragment>();
-    MovementFragmentInstance.GetMutable<FZombiMovementFragment>() = MovementFragment;
-    FragmentList.Add(MovementFragmentInstance);
+    // Instancia el fragmento de transformación
+    FInstancedStruct TransformFragmentInstance;
+    TransformFragmentInstance.InitializeAs<FZombiTransformFragment>();
+    TransformFragmentInstance.GetMutable<FZombiTransformFragment>() = TransformFragment;
+    FragmentList.Add(TransformFragmentInstance);
+
+    // Instancia el fragmento de velocidad
+    FInstancedStruct VelocityFragmentInstance;
+    VelocityFragmentInstance.InitializeAs<FZombiVelocityFragment>();
+    VelocityFragmentInstance.GetMutable<FZombiVelocityFragment>() = VelocityFragment;
+    FragmentList.Add(VelocityFragmentInstance);
+
+    // Instancia el fragmento de comportamiento
+    FInstancedStruct BehaviorFragmentInstance;
+    BehaviorFragmentInstance.InitializeAs<FZombiBehaviorFragment>();
+    BehaviorFragmentInstance.GetMutable<FZombiBehaviorFragment>() = BehaviorFragment;
+    FragmentList.Add(BehaviorFragmentInstance);
 
     // Instancia el fragmento de TurboSequence
     FInstancedStruct TurboSequenceFragmentInstance;
     TurboSequenceFragmentInstance.InitializeAs<FZombiTurboSequenceFragment>();
     TurboSequenceFragmentInstance.GetMutable<FZombiTurboSequenceFragment>() = TurboSequenceFragment;
     FragmentList.Add(TurboSequenceFragmentInstance);
+
+    // Instancia el fragmento de persecución
+    FInstancedStruct ChaseFragmentInstance;
+    ChaseFragmentInstance.InitializeAs<FZombiChaseFragment>();
+    ChaseFragmentInstance.GetMutable<FZombiChaseFragment>() = ChaseFragment;
+    FragmentList.Add(ChaseFragmentInstance);
 
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);

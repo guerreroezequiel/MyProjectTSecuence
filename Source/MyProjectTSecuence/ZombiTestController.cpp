@@ -189,6 +189,7 @@ void AZombiTestController::LogSystemStatus()
     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Estado del Sistema:"));
     UE_LOG(LogTemp, Log, TEXT("  📊 Entidades activas: %d"), CurrentEntityCount);
     UE_LOG(LogTemp, Log, TEXT("  🎯 Sistema funcionando: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
+    UE_LOG(LogTemp, Log, TEXT("  🏃 Sistema de persecución: ✅ Activo (cada 10s por 5s)"));
 
     if (CurrentEntityCount != LastEntityCount)
     {
