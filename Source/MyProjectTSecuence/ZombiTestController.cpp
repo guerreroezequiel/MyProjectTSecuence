@@ -135,8 +135,6 @@ void AZombiTestController::Tick(float DeltaTime)
     if (!bSystemInitialized)
     {
         bSystemInitialized = true;
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Sistema inicializado - Control centralizado activo"));
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Logs optimizados - Solo información esencial"));
     }
 
     // Control centralizado del sistema
@@ -162,11 +160,7 @@ void AZombiTestController::Tick(float DeltaTime)
         {
             ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
 
-            // Log cada 10 segundos para verificar ejecución
-            if (SolveMeshesLogTimer >= 10.0f)
-            {
-                UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: SolveMeshes_GameThread ejecutado para grupo %d"), GroupIndex);
-            }
+            // Log eliminado para optimización de rendimiento
         }
         catch (...)
         {
@@ -174,10 +168,7 @@ void AZombiTestController::Tick(float DeltaTime)
         }
     }
 
-    if (SolveMeshesLogTimer >= 10.0f)
-    {
-        SolveMeshesLogTimer = 0.0f;
-    }
+    // Timer reset eliminado para optimización
 }
 
 // Control centralizado del sistema
@@ -187,19 +178,7 @@ void AZombiTestController::UpdateSystemControl(float DeltaTime)
     SystemLogTimer += DeltaTime;
     PerformanceLogTimer += DeltaTime;
 
-    // Logs de estado del sistema
-    if (bEnableSystemLogs && SystemLogTimer >= LogInterval)
-    {
-        LogSystemStatus();
-        SystemLogTimer = 0.0f;
-    }
-
-    // Logs de rendimiento
-    if (bEnablePerformanceLogs && PerformanceLogTimer >= LogInterval)
-    {
-        LogPerformanceMetrics();
-        PerformanceLogTimer = 0.0f;
-    }
+    // Logs eliminados para optimización de rendimiento
 }
 
 // Logs centralizados del estado del sistema

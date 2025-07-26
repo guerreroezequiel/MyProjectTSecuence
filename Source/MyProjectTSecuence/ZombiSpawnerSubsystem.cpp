@@ -43,22 +43,23 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
         return;
     }
 
-    // Log solo para el primer spawn o cuando cambia la cantidad
-    static int32 LastSpawnCount = 0;
-    if (Count != LastSpawnCount)
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Spawn de %d zombis iniciado"), Count);
-        LastSpawnCount = Count;
-    }
+    // Log eliminado para optimización de rendimiento
 
-    // Spawna los zombis en lotes para optimizar rendimiento
-    const int32 BatchSize = 100; // Procesa en lotes de 100 para evitar bloqueos
+    // Spawna los zombis en lotes optimizados para máximo rendimiento
+    const int32 BatchSize = 1000; // Aumentado a 1000 para mejor rendimiento
     int32 RemainingCount = Count;
     int32 SuccessfullySpawned = 0;
+
+    // Pre-allocar memoria para evitar reallocaciones
+    SpawnedEntities.Reserve(SpawnedEntities.Num() + Count);
 
     while (RemainingCount > 0)
     {
         int32 CurrentBatchSize = FMath::Min(BatchSize, RemainingCount);
+
+        // Crear entidades en lote para mejor rendimiento
+        TArray<FMassEntityHandle> BatchEntities;
+        BatchEntities.Reserve(CurrentBatchSize);
 
         for (int32 i = 0; i < CurrentBatchSize; ++i)
         {
@@ -67,11 +68,14 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
 
             if (EntityHandle.IsValid())
             {
-                SpawnedEntities.Add(EntityHandle);
-                ActiveZombiCount++;
+                BatchEntities.Add(EntityHandle);
                 SuccessfullySpawned++;
             }
         }
+
+        // Agregar lote completo de una vez
+        SpawnedEntities.Append(BatchEntities);
+        ActiveZombiCount += BatchEntities.Num();
 
         RemainingCount -= CurrentBatchSize;
     }
@@ -193,7 +197,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     static int32 LoggedEntities = 0;
     if (LoggedEntities < 3)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Creando instancia visual para entidad %d"), EntityHandle.Index);
+        // Log eliminado para optimización de rendimiento
         LoggedEntities++;
     }
 
@@ -221,7 +225,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     static int32 LoggedTransforms = 0;
     if (LoggedTransforms < 3)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Transform válido para entidad %d"), EntityHandle.Index);
+        // Log eliminado para optimización de rendimiento
         LoggedTransforms++;
     }
 
@@ -233,7 +237,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     static bool bLoggedVerification = false;
     if (!bLoggedVerification)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Asset TS_Manny configurado correctamente"));
+        // Log eliminado para optimización de rendimiento
         bLoggedVerification = true;
     }
 
@@ -249,7 +253,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         static int32 LoggedInstances = 0;
         if (LoggedInstances < 3)
         {
-            UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Instancia válida creada para entidad %d"), EntityHandle.Index);
+            // Log eliminado para optimización de rendimiento
             LoggedInstances++;
         }
     }
@@ -271,8 +275,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     static int32 LoggedFinal = 0;
     if (LoggedFinal < 3)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Entidad %d creada en grupo %d"),
-               EntityHandle.Index, TurboSequenceFragment.UpdateGroupIndex);
+        // Log eliminado para optimización de rendimiento
         LoggedFinal++;
     }
 }

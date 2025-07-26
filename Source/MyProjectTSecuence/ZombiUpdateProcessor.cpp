@@ -41,7 +41,7 @@ void UZombiUpdateProcessor::Execute(FMassEntityManager &EntityManager, FMassExec
 
     if (LogTimer >= 60.0f)
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiUpdateProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
+        // Log eliminado para optimización de rendimiento
         LogTimer = 0.0f;
     }
 

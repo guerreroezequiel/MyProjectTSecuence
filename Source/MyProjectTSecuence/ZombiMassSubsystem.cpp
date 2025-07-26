@@ -12,6 +12,7 @@
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "ZombiUpdateProcessor.h"
+#include "ZombiMovementProcessor.h" // Para los tags FActiveTag, FMovingTag, FDeadTag
 
 // Constructor del subsystem
 UZombiMassSubsystem::UZombiMassSubsystem()
@@ -77,8 +78,7 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     FZombiStateFragment StateFragment;
     StateFragment.State = EZombiState::Idle; // Estado inicial
 
-    // Log para verificar estado inicial
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad creada con estado inicial: Idle"));
+    // Log eliminado para optimización de rendimiento
 
     FZombiMovementFragment MovementFragment;
     MovementFragment.Position = SpawnLocation;
@@ -116,6 +116,10 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
 
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
+
+    // Agregar tags necesarios para que los queries optimizados funcionen
+    EntityManager.AddTagToEntity(EntityHandle, FActiveTag::StaticStruct());
+    EntityManager.AddTagToEntity(EntityHandle, FMovingTag::StaticStruct());
 
     // Guarda la referencia para limpieza
     RegisteredEntities.Add(EntityHandle);

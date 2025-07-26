@@ -57,14 +57,14 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Log de debugging para verificar ejecución
-    static float DebugTimer = 0.0f;
-    DebugTimer += DeltaTime;
-    if (DebugTimer >= 5.0f) // Log cada 5 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-        DebugTimer = 0.0f;
-    }
+    // Log eliminado para optimización de rendimiento
+    // static float DebugTimer = 0.0f;
+    // DebugTimer += DeltaTime;
+    // if (DebugTimer >= 5.0f) // Log cada 5 segundos
+    // {
+    //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
+    //     DebugTimer = 0.0f;
+    // }
 
     // Sincronizar transformaciones y animaciones (State Sync)
     TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
@@ -73,14 +73,14 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         TArrayView<const FZombiMovementFragment> MovementFragments = Context.GetFragmentView<FZombiMovementFragment>();
         TArrayView<const FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
 
-        // Log de debugging para verificar entidades procesadas
-        static float EntityDebugTimer = 0.0f;
-        EntityDebugTimer += DeltaTime;
-        if (EntityDebugTimer >= 5.0f && Context.GetNumEntities() > 0)
-        {
-            UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesando %d entidades"), Context.GetNumEntities());
-            EntityDebugTimer = 0.0f;
-        }
+        // Log eliminado para optimización de rendimiento
+        // static float EntityDebugTimer = 0.0f;
+        // EntityDebugTimer += DeltaTime;
+        // if (EntityDebugTimer >= 5.0f && Context.GetNumEntities() > 0)
+        // {
+        //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesando %d entidades"), Context.GetNumEntities());
+        //     EntityDebugTimer = 0.0f;
+        // }
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
@@ -97,20 +97,20 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             AdjustedRotation.Yaw -= 90.0f; // Offset de -90° para corregir la orientación del asset
             FQuat RotationQuat = FQuat(AdjustedRotation);
             
-            // Log de debugging para rotación (solo ocasionalmente)
-            static float RotationDebugTimer = 0.0f;
-            RotationDebugTimer += Context.GetDeltaTimeSeconds();
-            if (RotationDebugTimer >= 15.0f && MovementFragment.MovementSpeed > 0.0f)
-            {
-                UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence Rotación: Velocidad: %.2f, Dirección: %s, Rotación Original: %s, Rotación Ajustada: %s, Quat: %s, ForwardVector: %s"),
-                       MovementFragment.MovementSpeed, 
-                       *MovementFragment.MovementDirection.ToString(),
-                       *MovementFragment.Rotation.ToString(),
-                       *AdjustedRotation.ToString(),
-                       *RotationQuat.ToString(),
-                       *AdjustedRotation.Vector().ToString());
-                RotationDebugTimer = 0.0f;
-            }
+            // Log eliminado para optimización de rendimiento
+            // static float RotationDebugTimer = 0.0f;
+            // RotationDebugTimer += Context.GetDeltaTimeSeconds();
+            // if (RotationDebugTimer >= 15.0f && MovementFragment.MovementSpeed > 0.0f)
+            // {
+            //     UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence Rotación: Velocidad: %.2f, Dirección: %s, Rotación Original: %s, Rotación Ajustada: %s, Quat: %s, ForwardVector: %s"),
+            //            MovementFragment.MovementSpeed, 
+            //            *MovementFragment.MovementDirection.ToString(),
+            //            *MovementFragment.Rotation.ToString(),
+            //            *AdjustedRotation.ToString(),
+            //            *RotationQuat.ToString(),
+            //            *AdjustedRotation.Vector().ToString());
+            //     RotationDebugTimer = 0.0f;
+            // }
             
             // Crear la transformación final
             FTransform FinalTransform = FTransform(RotationQuat, MovementFragment.Position, FVector::OneVector);
@@ -121,45 +121,43 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 FinalTransform
             );
             
-            // Log de debugging para verificar si la transformación se aplicó
-            static float TransformAppliedDebugTimer = 0.0f;
-            TransformAppliedDebugTimer += Context.GetDeltaTimeSeconds();
-            if (TransformAppliedDebugTimer >= 25.0f && MovementFragment.MovementSpeed > 0.0f)
-            {
-                UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Aplicada: MeshData Válido: %s, Posición: %s, Rotación: %s"),
-                       TurboSequenceFragment.MeshData.IsMeshDataValid() ? TEXT("SÍ") : TEXT("NO"),
-                       *MovementFragment.Position.ToString(),
-                       *MovementFragment.Rotation.ToString());
-                TransformAppliedDebugTimer = 0.0f;
-            }
+            // Logs eliminados para optimización de rendimiento
+            // static float TransformAppliedDebugTimer = 0.0f;
+            // TransformAppliedDebugTimer += Context.GetDeltaTimeSeconds();
+            // if (TransformAppliedDebugTimer >= 25.0f && MovementFragment.MovementSpeed > 0.0f)
+            // {
+            //     UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Aplicada: MeshData Válido: %s, Posición: %s, Rotación: %s"),
+            //            TurboSequenceFragment.MeshData.IsMeshDataValid() ? TEXT("SÍ") : TEXT("NO"),
+            //            *MovementFragment.Position.ToString(),
+            //            *MovementFragment.Rotation.ToString());
+            //     TransformAppliedDebugTimer = 0.0f;
+            // }
             
-            // Log de debugging para transformación (solo ocasionalmente)
-            static float TransformDebugTimer = 0.0f;
-            TransformDebugTimer += Context.GetDeltaTimeSeconds();
-            if (TransformDebugTimer >= 20.0f && MovementFragment.MovementSpeed > 0.0f)
-            {
-                FVector ForwardVector = MovementFragment.Rotation.Vector();
-                FVector MovementDirection = MovementFragment.MovementDirection;
-                float DotProduct = FVector::DotProduct(ForwardVector, MovementDirection);
-                
-                UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Final: Posición: %s, Rotación: %s, ForwardVector: %s, MovementDirection: %s, DotProduct: %.3f"),
-                       *MovementFragment.Position.ToString(),
-                       *MovementFragment.Rotation.ToString(),
-                       *ForwardVector.ToString(),
-                       *MovementDirection.ToString(),
-                       DotProduct);
-                TransformDebugTimer = 0.0f;
-            }
+            // static float TransformDebugTimer = 0.0f;
+            // TransformDebugTimer += Context.GetDeltaTimeSeconds();
+            // if (TransformDebugTimer >= 20.0f && MovementFragment.MovementSpeed > 0.0f)
+            // {
+            //     FVector ForwardVector = MovementFragment.Rotation.Vector();
+            //     FVector MovementDirection = MovementFragment.MovementDirection;
+            //     float DotProduct = FVector::DotProduct(ForwardVector, MovementDirection);
+            //     
+            //     UE_LOG(LogTemp, Log, TEXT("🎮 Transformación Final: Posición: %s, Rotación: %s, ForwardVector: %s, MovementDirection: %s, DotProduct: %.3f"),
+            //            *MovementFragment.Position.ToString(),
+            //            *MovementFragment.Rotation.ToString(),
+            //            *ForwardVector.ToString(),
+            //            *MovementDirection.ToString(),
+            //            DotProduct);
+            //     TransformDebugTimer = 0.0f;
+            // }
 
-            // Log de orden de ejecución
-            static float ExecutionOrderDebugTimer = 0.0f;
-            ExecutionOrderDebugTimer += Context.GetDeltaTimeSeconds();
-            if (ExecutionOrderDebugTimer >= 30.0f && MovementFragment.MovementSpeed > 0.0f)
-            {
-                UE_LOG(LogTemp, Log, TEXT("🎮 Orden de Ejecución: 1. Animación actualizada, 2. Transformación aplicada, Velocidad: %.2f, Rotación: %s"),
-                       MovementFragment.MovementSpeed, *MovementFragment.Rotation.ToString());
-                ExecutionOrderDebugTimer = 0.0f;
-            }
+            // static float ExecutionOrderDebugTimer = 0.0f;
+            // ExecutionOrderDebugTimer += Context.GetDeltaTimeSeconds();
+            // if (ExecutionOrderDebugTimer >= 30.0f && MovementFragment.MovementSpeed > 0.0f)
+            // {
+            //     UE_LOG(LogTemp, Log, TEXT("🎮 Orden de Ejecución: 1. Animación actualizada, 2. Transformación aplicada, Velocidad: %.2f, Rotación: %s"),
+            //            MovementFragment.MovementSpeed, *MovementFragment.Rotation.ToString());
+            //     ExecutionOrderDebugTimer = 0.0f;
+            // }
         } });
 }
 
@@ -175,15 +173,15 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
         return;
     }
 
-    // Log de debugging para verificar ejecución de animaciones
-    static float AnimationDebugTimer = 0.0f;
-    AnimationDebugTimer += Context.GetDeltaTimeSeconds();
-    if (AnimationDebugTimer >= 10.0f) // Log cada 10 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d, Velocidad: %.2f"),
-               (int32)StateFragment.State, MovementFragment.MovementSpeed);
-        AnimationDebugTimer = 0.0f;
-    }
+    // Log eliminado para optimización de rendimiento
+    // static float AnimationDebugTimer = 0.0f;
+    // AnimationDebugTimer += Context.GetDeltaTimeSeconds();
+    // if (AnimationDebugTimer >= 10.0f) // Log cada 10 segundos
+    // {
+    //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d, Velocidad: %.2f"),
+    //            (int32)StateFragment.State, MovementFragment.MovementSpeed);
+    //     AnimationDebugTimer = 0.0f;
+    // }
 
     // Obtener la librería de animaciones del asset
     if (!TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
@@ -203,10 +201,10 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     PlaySettings.AnimationWeight = 1.0f;
 
     // Log de debugging para Blend Space
-    if (AnimationDebugTimer >= 10.0f)
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: Velocidad: %.2f, Normalizada: %.2f"), CurrentSpeed, NormalizedSpeed);
-    }
+    // if (AnimationDebugTimer >= 10.0f)
+    // {
+    //     UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: Velocidad: %.2f, Normalizada: %.2f"), CurrentSpeed, NormalizedSpeed);
+    // }
 
     // Actualizar timer de animación
     TurboSequenceFragment.AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
@@ -227,15 +225,15 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     }
 
     // Log de debugging para selección de animación (reducido para mejor rendimiento)
-    static float AnimationSelectionDebugTimer = 0.0f;
-    AnimationSelectionDebugTimer += Context.GetDeltaTimeSeconds();
-    if (AnimationSelectionDebugTimer >= 15.0f) // Log cada 15 segundos en lugar de 5
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 Selección de Animación: Velocidad: %.2f, Target: %s"),
-               NormalizedSpeed,
-               TargetAnimation ? *TargetAnimation->GetName() : TEXT("NULL"));
-        AnimationSelectionDebugTimer = 0.0f;
-    }
+    // static float AnimationSelectionDebugTimer = 0.0f;
+    // AnimationSelectionDebugTimer += Context.GetDeltaTimeSeconds();
+    // if (AnimationSelectionDebugTimer >= 15.0f) // Log cada 15 segundos en lugar de 5
+    // {
+    //     UE_LOG(LogTemp, Log, TEXT("🎮 Selección de Animación: Velocidad: %.2f, Target: %s"),
+    //            NormalizedSpeed,
+    //            TargetAnimation ? *TargetAnimation->GetName() : TEXT("NULL"));
+    //     AnimationSelectionDebugTimer = 0.0f;
+    // }
 
     // Verificar si necesitamos cambiar de animación
     bool bShouldChangeAnimation = (TargetAnimation != TurboSequenceFragment.CurrentAnimation) &&
@@ -275,8 +273,8 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
                 TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
 
                 // Log de debugging para Blend Space
-                UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space Aplicado: Velocidad: %.2f, Posición: %s, Tweaked: %s"),
-                       NormalizedSpeed, *BlendSpacePosition.ToString(), bBlendSpaceTweaked ? TEXT("SÍ") : TEXT("NO"));
+                // UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space Aplicado: Velocidad: %.2f, Posición: %s, Tweaked: %s"),
+                //        NormalizedSpeed, *BlendSpacePosition.ToString(), bBlendSpaceTweaked ? TEXT("SÍ") : TEXT("NO"));
             }
             else
             {
@@ -304,10 +302,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
                         TurboSequenceFragment.TransitionProgress = 0.0f;
                         TurboSequenceFragment.bIsTransitioning = true;
 
-                        // Log de inicio de transición
-                        UE_LOG(LogTemp, Log, TEXT("🎮 Iniciando Transición: %s → %s, Velocidad: %.2f"),
-                               TurboSequenceFragment.CurrentAnimation ? *TurboSequenceFragment.CurrentAnimation->GetName() : TEXT("NULL"),
-                               *TargetAnimation->GetName(), NormalizedSpeed);
+                        // Log eliminado para optimización de rendimiento
                     }
                 }
 
@@ -329,9 +324,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
                             TurboSequenceFragment.CurrentAnimation,
                             PlaySettings);
 
-                        // Log de transición completada
-                        UE_LOG(LogTemp, Log, TEXT("🎮 Transición Completada: %s, Velocidad: %.2f"),
-                               *TurboSequenceFragment.CurrentAnimation->GetName(), NormalizedSpeed);
+                        // Log eliminado para optimización de rendimiento
                     }
                 }
                 else if (TurboSequenceFragment.CurrentAnimation)
@@ -352,15 +345,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
         }
     }
 
-    // Log de debugging para confirmar reproducción (solo para la primera entidad)
-    static float PlayDebugTimer = 0.0f;
-    PlayDebugTimer += Context.GetDeltaTimeSeconds();
-    if (PlayDebugTimer >= 15.0f) // Log cada 15 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Animación - Velocidad: %.2f, Normalizada: %.2f, Inicializada: %s, Entidades: %d"),
-               CurrentSpeed, NormalizedSpeed, TurboSequenceFragment.bAnimationInitialized ? TEXT("Sí") : TEXT("No"), Context.GetNumEntities());
-        PlayDebugTimer = 0.0f;
-    }
+    // Log eliminado para optimización de rendimiento
 }
 
 // Implementación de cache de animaciones para optimizar búsquedas
@@ -398,9 +383,5 @@ void UZombiTurboSequenceProcessor::CacheAnimations(FZombiTurboSequenceFragment &
     // Marcar como cacheado
     TurboSequenceFragment.bAnimationsCached = true;
 
-    // Log de debugging para confirmar cache
-    UE_LOG(LogTemp, Log, TEXT("🎮 Cache de Animaciones: Idle: %s, Walk: %s, Run: %s"),
-           TurboSequenceFragment.CachedIdleAnimation ? *TurboSequenceFragment.CachedIdleAnimation->GetName() : TEXT("NULL"),
-           TurboSequenceFragment.CachedWalkAnimation ? *TurboSequenceFragment.CachedWalkAnimation->GetName() : TEXT("NULL"),
-           TurboSequenceFragment.CachedRunAnimation ? *TurboSequenceFragment.CachedRunAnimation->GetName() : TEXT("NULL"));
+    // Log eliminado para optimización de rendimiento
 }

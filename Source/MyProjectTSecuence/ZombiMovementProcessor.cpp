@@ -12,18 +12,33 @@ UZombiMovementProcessor::UZombiMovementProcessor()
 {
     // Configuración para registro automático en UE5.5.4
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
-    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    ProcessingPhase = EMassProcessingPhase::PostPhysics; // Cambiado a PostPhysics para ejecutar después del spawning
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true;
 }
 
-// Configura el query para requerir los fragmentos de movimiento y estado
+// Configura queries optimizados por responsabilidad
 void UZombiMovementProcessor::ConfigureQueries()
 {
-    MovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
-    MovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
-    MovementQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+    // Query para entidades activas (no muertas) - TEMPORALMENTE SIN TAGS PARA DIAGNOSTICAR
+    ActiveMovementQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    ActiveMovementQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    // ActiveMovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    // ActiveMovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Query para entidades en movimiento
+    MovingQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    MovingQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    MovingQuery.AddTagRequirement<FMovingTag>(EMassFragmentPresence::All);
+    MovingQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Query para comportamiento (cambio de dirección, etc.)
+    BehaviorQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
+    BehaviorQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
+    BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: ConfigureQueries completado - ActiveMovementQuery configurado"));
 }
 
 // Ejecuta el procesamiento de movimiento para todas las entidades
@@ -37,9 +52,9 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Procesa todas las entidades que cumplen el query
-    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
-                                     {
+    // Procesa entidades activas con queries optimizados
+    ActiveMovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+                                           {
         const TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
         const TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
@@ -80,15 +95,26 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                         MovementFragment.MovementSpeed = 80.0f; // RUN - velocidad fija
                     }
 
-                    // Log para verificar cambios de dirección y velocidad
-                    UE_LOG(LogTemp, Log, TEXT("🎮 Cambio de Dirección: Antigua: %s, Nueva: %s, Velocidad: %.2f"),
-                           *OldDirection.ToString(), *MovementFragment.MovementDirection.ToString(), MovementFragment.MovementSpeed);
+                    // Log eliminado para optimización de rendimiento
+                    // UE_LOG(LogTemp, Log, TEXT("🎮 Cambio de Dirección: Antigua: %s, Nueva: %s, Velocidad: %.2f"),
+                    //        *OldDirection.ToString(), *MovementFragment.MovementDirection.ToString(), MovementFragment.MovementSpeed);
                 }
 
-                // PRIMERO: Calcula la rotación hacia la dirección de movimiento deseada
+                // PRIMERO: Calcula la rotación hacia la dirección de movimiento deseada (OPTIMIZADO)
                 if (!MovementFragment.MovementDirection.IsNearlyZero())
                 {
-                    FRotator TargetRotation = MovementFragment.MovementDirection.Rotation();
+                    // OPTIMIZACIÓN: Solo calcular rotación si la dirección cambió significativamente
+                    static FVector LastDirection = FVector::ZeroVector;
+                    static FRotator CachedTargetRotation = FRotator::ZeroRotator;
+                    
+                    // Solo recalcular si la dirección cambió más de 5 grados
+                    float DirectionChangeThreshold = 0.087f; // ~5 grados en radianes
+                    if (FVector::DistSquared(MovementFragment.MovementDirection, LastDirection) > DirectionChangeThreshold * DirectionChangeThreshold)
+                    {
+                        CachedTargetRotation = MovementFragment.MovementDirection.Rotation();
+                        LastDirection = MovementFragment.MovementDirection;
+                    }
+                    
                     FRotator CurrentRotation = MovementFragment.Rotation;
 
                     // Si acaba de cambiar dirección, usar rotación más agresiva
@@ -101,62 +127,70 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                     // Interpola suavemente la rotación con velocidad aumentada
                     MovementFragment.Rotation = FMath::RInterpTo(
                         CurrentRotation,
-                        TargetRotation,
+                        CachedTargetRotation,
                         DeltaTime,
                         (MovementFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f // Velocidad de rotación más rápida
                     );
 
-                    // Log detallado para debugging de rotación
-                    static float DetailedRotationDebugTimer = 0.0f;
-                    DetailedRotationDebugTimer += DeltaTime;
-                    if (DetailedRotationDebugTimer >= 8.0f && MovementFragment.MovementSpeed > 0.0f)
-                    {
-                        UE_LOG(LogTemp, Log, TEXT("🎮 Rotación Detallada: Velocidad: %.2f, Dirección: %s, Actual: %s, Objetivo: %s, Nueva: %s, Multiplicador: %.1f"),
-                               MovementFragment.MovementSpeed,
-                               *MovementFragment.MovementDirection.ToString(),
-                               *CurrentRotation.ToString(),
-                               *TargetRotation.ToString(),
-                               *MovementFragment.Rotation.ToString(),
-                               RotationSpeedMultiplier);
-                        DetailedRotationDebugTimer = 0.0f;
-                    }
+                    // Logs eliminados para optimización de rendimiento
+                    // static float DetailedRotationDebugTimer = 0.0f;
+                    // DetailedRotationDebugTimer += DeltaTime;
+                    // if (DetailedRotationDebugTimer >= 8.0f && MovementFragment.MovementSpeed > 0.0f)
+                    // {
+                    //     UE_LOG(LogTemp, Log, TEXT("🎮 Rotación Detallada: Velocidad: %.2f, Dirección: %s, Actual: %s, Objetivo: %s, Nueva: %s, Multiplicador: %.1f"),
+                    //            MovementFragment.MovementSpeed,
+                    //            *MovementFragment.MovementDirection.ToString(),
+                    //            *CurrentRotation.ToString(),
+                    //            *TargetRotation.ToString(),
+                    //            *MovementFragment.Rotation.ToString(),
+                    //            RotationSpeedMultiplier);
+                    //     DetailedRotationDebugTimer = 0.0f;
+                    // }
 
-                    // Log de debugging para rotación (solo ocasionalmente)
-                    static float MovementRotationDebugTimer = 0.0f;
-                    MovementRotationDebugTimer += DeltaTime;
-                    if (MovementRotationDebugTimer >= 10.0f && MovementFragment.MovementSpeed > 0.0f)
-                    {
-                        UE_LOG(LogTemp, Log, TEXT("🎮 MovementProcessor Rotación: Velocidad: %.2f, Dirección: %s, Rotación: %s"),
-                               MovementFragment.MovementSpeed,
-                               *MovementFragment.MovementDirection.ToString(),
-                               *MovementFragment.Rotation.ToString());
-                        MovementRotationDebugTimer = 0.0f;
-                    }
+                    // static float MovementRotationDebugTimer = 0.0f;
+                    // MovementRotationDebugTimer += DeltaTime;
+                    // if (MovementRotationDebugTimer >= 10.0f && MovementFragment.MovementSpeed > 0.0f)
+                    // {
+                    //     UE_LOG(LogTemp, Log, TEXT("🎮 MovementProcessor Rotación: Velocidad: %.2f, Dirección: %s, Rotación: %s"),
+                    //            MovementFragment.MovementSpeed,
+                    //            *MovementFragment.MovementDirection.ToString(),
+                    //            *MovementFragment.Rotation.ToString());
+                    //     MovementRotationDebugTimer = 0.0f;
+                    // }
                 }
 
-                // SEGUNDO: Calcula el movimiento hacia adelante en la dirección de la rotación
+                // SEGUNDO: Calcula el movimiento hacia adelante en la dirección de la rotación (OPTIMIZADO)
                 FVector NewPosition = MovementFragment.Position;
                 if (MovementFragment.MovementSpeed > 0.0f)
                 {
-                    // Mover hacia adelante en la dirección de la rotación actual
-                    // Usar Vector() para obtener la dirección hacia adelante del zombi
-                    FVector ForwardDirection = MovementFragment.Rotation.Vector();
-                    NewPosition = MovementFragment.Position +
-                                  ForwardDirection * MovementFragment.MovementSpeed * DeltaTime;
-
-                    // Log de movimiento hacia adelante
-                    static float ForwardMovementDebugTimer = 0.0f;
-                    ForwardMovementDebugTimer += DeltaTime;
-                    if (ForwardMovementDebugTimer >= 12.0f && MovementFragment.MovementSpeed > 0.0f)
+                    // OPTIMIZACIÓN: Cache de ForwardDirection para evitar recálculos
+                    static FRotator LastRotation = FRotator::ZeroRotator;
+                    static FVector CachedForwardDirection = FVector::ForwardVector;
+                    
+                    // Solo recalcular si la rotación cambió significativamente
+                    float RotationChangeThreshold = 0.1f; // ~5.7 grados
+                    if (FMath::Abs(MovementFragment.Rotation.Yaw - LastRotation.Yaw) > RotationChangeThreshold)
                     {
-                        UE_LOG(LogTemp, Log, TEXT("🎮 Movimiento Hacia Adelante: Velocidad: %.2f, Rotación: %s, Dirección Adelante: %s, Posición: %s, Dirección Deseada: %s"),
-                               MovementFragment.MovementSpeed,
-                               *MovementFragment.Rotation.ToString(),
-                               *ForwardDirection.ToString(),
-                               *MovementFragment.Position.ToString(),
-                               *MovementFragment.MovementDirection.ToString());
-                        ForwardMovementDebugTimer = 0.0f;
+                        CachedForwardDirection = MovementFragment.Rotation.Vector();
+                        LastRotation = MovementFragment.Rotation;
                     }
+                    
+                    NewPosition = MovementFragment.Position +
+                                  CachedForwardDirection * MovementFragment.MovementSpeed * DeltaTime;
+
+                    // Log eliminado para optimización de rendimiento
+                    // static float ForwardMovementDebugTimer = 0.0f;
+                    // ForwardMovementDebugTimer += DeltaTime;
+                    // if (ForwardMovementDebugTimer >= 12.0f && MovementFragment.MovementSpeed > 0.0f)
+                    // {
+                    //     UE_LOG(LogTemp, Log, TEXT("🎮 Movimiento Hacia Adelante: Velocidad: %.2f, Rotación: %s, Dirección Adelante: %s, Posición: %s, Dirección Deseada: %s"),
+                    //            MovementFragment.MovementSpeed,
+                    //            *MovementFragment.Rotation.ToString(),
+                    //            *ForwardDirection.ToString(),
+                    //            *MovementFragment.Position.ToString(),
+                    //            *MovementFragment.MovementDirection.ToString());
+                    //     ForwardMovementDebugTimer = 0.0f;
+                    // }
                 }
 
                 // Mantiene al zombi dentro del área de movimiento

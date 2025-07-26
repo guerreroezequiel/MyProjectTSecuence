@@ -6,45 +6,42 @@
 #include "ZombiMovementFragment.generated.h"
 
 // Fragmento que maneja el movimiento y rotación del zombi para Mass Entity
-// Optimizado para rendimiento con muchos zombis
+// OPTIMIZADO para cache locality y rendimiento con miles de entidades
 USTRUCT(BlueprintType)
 struct FZombiMovementFragment : public FMassFragment
 {
 	GENERATED_BODY()
 
-	// Posición actual del zombi
+	// Datos de transformación (accedidos juntos frecuentemente)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector Position = FVector::ZeroVector;
+	FVector Position = FVector::ZeroVector; // 12 bytes
 
-	// Rotación actual del zombi
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FRotator Rotation = FRotator::ZeroRotator;
+	FRotator Rotation = FRotator::ZeroRotator; // 12 bytes
 
-	// Velocidad de movimiento (unidades por segundo)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MovementSpeed = 100.0f;
+	FVector MovementDirection = FVector::ForwardVector; // 12 bytes
 
-	// Velocidad de rotación (grados por segundo)
+	// Datos de velocidad (accedidos juntos frecuentemente)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float RotationSpeed = 360.0f;
+	float MovementSpeed = 100.0f; // 4 bytes
 
-	// Dirección de movimiento actual
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector MovementDirection = FVector::ForwardVector;
+	float RotationSpeed = 360.0f; // 4 bytes
 
-	// Tiempo para cambiar dirección (para movimiento aleatorio)
+	// Datos de comportamiento (accedidos juntos frecuentemente)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float DirectionChangeTimer = 0.0f;
+	float DirectionChangeTimer = 0.0f; // 4 bytes
 
-	// Intervalo para cambiar dirección
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float DirectionChangeInterval = 3.0f;
+	float DirectionChangeInterval = 3.0f; // 4 bytes
 
-	// Radio de movimiento (para mantener zombis en área)
+	// Datos de área (accedidos juntos frecuentemente)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MovementRadius = 500.0f;
+	float MovementRadius = 500.0f; // 4 bytes
 
-	// Centro del área de movimiento
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector MovementCenter = FVector::ZeroVector;
+	FVector MovementCenter = FVector::ZeroVector; // 12 bytes
+
+	// Total: 68 bytes, optimizado para cache lines de 64 bytes
 };
