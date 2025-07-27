@@ -93,6 +93,13 @@ struct FZombiBehaviorFragment : public FMassFragment
     UPROPERTY()
     float DirectionChangeTimer = 0.0f; // Timer para cambio de dirección
 
+    // Timers de persecución periódica (8 bytes)
+    UPROPERTY()
+    float ChasePeriodicTimer = 0.0f; // Timer para persecución periódica (10 segundos)
+
+    UPROPERTY()
+    float ChaseDurationTimer = 0.0f; // Timer de duración de persecución (5 segundos)
+
     // Configuración de comportamiento (16 bytes)
     UPROPERTY()
     float DirectionChangeInterval = 3.0f;
@@ -105,6 +112,16 @@ struct FZombiBehaviorFragment : public FMassFragment
 
     UPROPERTY()
     float AttackRange = 150.0f;
+
+    // Configuración de persecución periódica
+    UPROPERTY()
+    float PeriodicChaseInterval = 10.0f; // Intervalo entre persecuciones (10 segundos)
+
+    UPROPERTY()
+    float PeriodicChaseDuration = 5.0f; // Duración de persecución (5 segundos)
+
+    UPROPERTY()
+    float PeriodicChaseDistance = 500.0f; // Distancia para activar persecución periódica (aumentada de 100 a 500)
 
     // Referencias de horda (8 bytes)
     UPROPERTY()
@@ -124,10 +141,15 @@ struct FZombiBehaviorFragment : public FMassFragment
         ActionTimer = 0.0f;
         BehaviorTimer = 0.0f;
         DirectionChangeTimer = 0.0f;
+        ChasePeriodicTimer = 0.0f;
+        ChaseDurationTimer = 0.0f;
         DirectionChangeInterval = 3.0f;
         ChaseDistance = 1000.0f;
         ChaseSpeed = 200.0f;
         AttackRange = 150.0f;
+        PeriodicChaseInterval = 10.0f;
+        PeriodicChaseDuration = 5.0f;
+        PeriodicChaseDistance = 500.0f;
         HordeLeaderIndex = -1;
         HordeInfluenceRadius = 300.0f;
     }
@@ -189,4 +211,11 @@ struct FZombiBehaviorFragment : public FMassFragment
     }
     bool HasAnyAction() const { return ActionFlags != 0; }
     bool IsInHorde() const { return HordeLeaderIndex >= 0; }
+
+    // Utilidades para persecución periódica
+    bool IsInPeriodicChaseDistance(float DistanceToPlayer) const { return DistanceToPlayer <= PeriodicChaseDistance; }
+    bool IsPeriodicChaseTime() const { return ChasePeriodicTimer >= PeriodicChaseInterval; }
+    bool IsPeriodicChaseActive() const { return ChaseDurationTimer > 0.0f; }
+    void StartPeriodicChase() { ChaseDurationTimer = PeriodicChaseDuration; }
+    void ResetPeriodicChaseTimer() { ChasePeriodicTimer = 0.0f; }
 };

@@ -42,13 +42,6 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
     TransformSyncQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
-
-    // TODO: Query para Blend Space (futuro)
-    // BlendSpaceQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
-    // BlendSpaceQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
-    // BlendSpaceQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: ConfigureQueries completado - optimizado para fragmentos especializados"));
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -105,7 +98,6 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 NewTransform.SetLocation(CoreFragment.Position);
                 
                 // CORREGIR ROTACIÓN: Compensar la diferencia de 90 grados entre animación y transformación
-                // La animación está 90 grados a la derecha, así que rotamos -90 grados en el eje Z
                 FRotator CorrectedRotation = CoreFragment.Rotation;
                 CorrectedRotation.Yaw -= 90.0f; // Compensar la diferencia de orientación
                 
@@ -116,15 +108,6 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
                     TurboSequenceFragment.MeshData,
                     NewTransform);
-
-                // Log de debugging para verificar sincronización
-                static int32 TransformLogCount = 0;
-                TransformLogCount++;
-                if (TransformLogCount % 120 == 1) // Log cada 2 segundos
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiTurboSequenceProcessor: TRANSFORMACIÓN SINCRONIZADA - Entidad %d: %s, Rotación: %.1f° (Corregida: %.1f°)"), 
-                           i, *CoreFragment.Position.ToString(), CoreFragment.Rotation.Yaw, CorrectedRotation.Yaw);
-                }
             }
         } });
 }
@@ -160,6 +143,13 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
 
     // USAR BLEND SPACE DIRECTAMENTE - Enfoque correcto según documentación
     float CurrentSpeed = CoreFragment.MovementSpeed;
+
+    // Ajustar velocidad basada en estado de persecución
+    if (BehaviorFragment.IsChasing() || BehaviorFragment.IsPeriodicChaseActive())
+    {
+        // Durante persecución, usar velocidad de persecución
+        CurrentSpeed = FMath::Max(CurrentSpeed, 80.0f); // Mínimo 80 para persecución
+    }
 
     // Normalizar velocidad al rango del Blend Space (0-100)
     float NormalizedSpeed = FMath::Clamp(CurrentSpeed, 0.0f, 100.0f);

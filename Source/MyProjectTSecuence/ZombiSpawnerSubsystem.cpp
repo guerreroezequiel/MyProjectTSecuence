@@ -80,9 +80,6 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
 
         RemainingCount -= CurrentBatchSize;
     }
-
-    // UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Spawn completado - %d zombis creados exitosamente, Total activos: %d"),
-    //        SuccessfullySpawned, ActiveZombiCount);
 }
 
 // Spawna un zombi individual

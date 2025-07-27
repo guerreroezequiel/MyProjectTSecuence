@@ -33,6 +33,6 @@ private:
 
     // Funciones auxiliares de combate
     void UpdateCombatCooldowns(FZombiCombatFragment &CombatFragment, float DeltaTime);
-    void ProcessAttackLogic(FZombiCombatFragment &CombatFragment, FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime);
+    void ProcessAttackLogic(FZombiCombatFragment &CombatFragment, FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
     void ProcessDamageLogic(FZombiCombatFragment &CombatFragment, FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
 };

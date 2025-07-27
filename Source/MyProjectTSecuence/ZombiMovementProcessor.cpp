@@ -5,7 +5,6 @@
 #include "MassExecutionContext.h"
 #include "ZombiCoreFragment.h"
 #include "ZombiBehaviorFragment.h"
-#include "ZombiCombatFragment.h"
 #include "ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
@@ -34,27 +33,12 @@ void UZombiMovementProcessor::ConfigureQueries()
     // Query optimizada para movimiento - solo fragmentos necesarios
     MovementQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
     MovementQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
-    MovementQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
     MovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     MovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: ConfigureQueries completado - optimizado para movimiento"));
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Query configurado con FActiveTag(All), FDeadTag(None) y FZombiCombatFragment(ReadOnly)"));
-
-    // Log crítico para verificar que el procesador se está configurando
-    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiMovementProcessor: CONFIGURACIÓN COMPLETADA - Procesador debería registrarse automáticamente"));
 }
 
 void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
-    // Log crítico para verificar que el procesador se está ejecutando
-    static bool bFirstExecute = true;
-    if (bFirstExecute)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiMovementProcessor: EXECUTE LLAMADO - Procesador está funcionando"));
-        bFirstExecute = false;
-    }
-
     // Solo ejecutar durante el juego (PIE), no en el editor
     if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
@@ -63,39 +47,20 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Log para debugging
-    static float DebugTimer = 0.0f;
-    DebugTimer += DeltaTime;
-    if (DebugTimer >= 3.0f) // Log cada 3 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-        DebugTimer = 0.0f;
-    }
-
     // Procesa entidades activas para movimiento
     MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                      {
-        // Log crítico para verificar si el query encuentra entidades
-        static bool bFirstChunk = true;
-        if (bFirstChunk)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiMovementProcessor: LAMBDA EJECUTÁNDOSE - Entidades encontradas: %d"), Context.GetNumEntities());
-            bFirstChunk = false;
-        }
-
         TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
         TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCombatFragment> CombatFragments = Context.GetFragmentView<FZombiCombatFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiCoreFragment& CoreFragment = CoreFragments[i];
             const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCombatFragment& CombatFragment = CombatFragments[i];
 
-            // Solo procesar movimiento si no está muerto y tiene salud
-            if (!BehaviorFragment.IsDead() && CombatFragment.IsAlive())
+            // Solo procesar movimiento si no está muerto
+            if (!BehaviorFragment.IsDead())
             {
                 // Procesar movimiento aleatorio solo si no está persiguiendo
                 if (!BehaviorFragment.IsChasing())
@@ -148,29 +113,16 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
 
                 // Procesar movimiento hacia adelante
-                FVector NewPosition = CoreFragment.Position;
                 if (CoreFragment.MovementSpeed > 0.0f)
                 {
                     FVector ForwardDirection = CoreFragment.Rotation.Vector();
-                    NewPosition = CoreFragment.Position + ForwardDirection * CoreFragment.MovementSpeed * DeltaTime;
+                    CoreFragment.Position += ForwardDirection * CoreFragment.MovementSpeed * DeltaTime;
                 }
 
                 // Aplicar restricciones de área solo si no está persiguiendo
-                FVector OldPosition = CoreFragment.Position;
-                CoreFragment.Position = NewPosition;
-
-                // Log crítico para verificar si las entidades se están moviendo
-                static int32 MovementLogCount = 0;
-                MovementLogCount++;
-                if (MovementLogCount % 60 == 1) // Log cada segundo
+                if (!BehaviorFragment.IsChasing())
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiMovementProcessor: MOVIMIENTO APLICADO - Entidad %d: %s → %s, Velocidad: %.2f"), 
-                           i, *OldPosition.ToString(), *CoreFragment.Position.ToString(), CoreFragment.MovementSpeed);
-                }
-
-                if (!BehaviorFragment.IsChasing() && FVector::DistSquared(OldPosition, NewPosition) > 1.0f)
-                {
-                    CoreFragment.Position = ClampToMovementArea(NewPosition, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
+                    CoreFragment.Position = ClampToMovementArea(CoreFragment.Position, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
                 }
             }
         } });

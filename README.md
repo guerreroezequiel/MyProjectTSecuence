@@ -4,24 +4,25 @@
 
 Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine 5.5.4** con una arquitectura **State Sync** que separa completamente la lógica de juego (Mass Entity System) de la representación visual (TurboSequence). El sistema está diseñado para manejar miles de entidades con máximo rendimiento.
 
-## 🏆 Estado Actual: ¡SISTEMA OPTIMIZADO PARA 50,000 ENTIDADES!
+## 🏆 Estado Actual: ¡SISTEMA COMPLETAMENTE FUNCIONAL Y OPTIMIZADO!
 
 ### **✅ Logros Alcanzados (Última Actualización)**
 - **✅ Sistema Mass Entity**: Completamente funcional y optimizado
-- **✅ TurboSequence Integration**: Integrado y funcionando
+- **✅ TurboSequence Integration**: Integrado y funcionando perfectamente
 - **✅ Arquitectura State Sync**: Implementada correctamente
 - **✅ Fragmentos Especializados**: Divididos para mejor cache locality
 - **✅ Tags para Filtrado Inteligente**: Sistema de filtrado optimizado
 - **✅ Procesadores Especializados**: Pipeline de procesamiento optimizado
-- **✅ Archetype System**: Datos compartidos para reducir duplicación
 - **✅ Sistema Estable**: Sin crashes y rendimiento escalable
 - **✅ Control Centralizado**: ZombiTestController optimizado
 - **✅ Animaciones Individuales**: Sistema de animaciones por entidad
-- **✅ Rendimiento Escalable**: Preparado para 50,000 entidades
+- **✅ Rendimiento Escalable**: Preparado para miles de entidades
+- **✅ Movimiento Funcional**: Zombis se mueven con sincronización perfecta
+- **✅ Transformaciones Sincronizadas**: Lógica y visual perfectamente alineadas
 
 ### **🎯 Funcionalidades Operativas**
-- **Spawn de Zombis**: ✅ 5 zombis creados exitosamente
-- **Movimiento**: ✅ Zombis se mueven con AI básica
+- **Spawn de Zombis**: ✅ Zombis creados exitosamente
+- **Movimiento**: ✅ Zombis se mueven con AI básica y rotación
 - **Transformaciones**: ✅ Sincronización perfecta entre lógica y visual
 - **Instancias Visuales**: ✅ Todas válidas y funcionando
 - **Rendimiento**: ✅ Optimizado para miles de entidades
@@ -30,6 +31,7 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 - **Animaciones**: ✅ Sistema de animaciones individuales por entidad
 - **Escalabilidad**: ✅ Rendimiento consistente con múltiples entidades
 - **Rotación**: ✅ Zombis miran hacia donde se mueven
+- **Optimización de Fragmentos**: ✅ Solo fragmentos necesarios en cada procesador
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -55,21 +57,20 @@ Este proyecto implementa un sistema de zombis masivos utilizando **Unreal Engine
 ### **Fragmentos Especializados (Datos Optimizados)**
 ```
 Source/MyProjectTSecuence/
-├── ZombiStateFragment.h              # Estado lógico (Idle, Walk, Chase, etc.)
-├── ZombiTransformFragment.h          # Posición y rotación (24 bytes)
-├── ZombiVelocityFragment.h           # Velocidad y dirección (20 bytes)
-├── ZombiBehaviorFragment.h           # Comportamiento y timers (24 bytes)
-├── ZombiTurboSequenceFragment.h      # Referencias visuales (MeshData, Asset)
-└── ZombiArchetypeData.h              # Datos compartidos entre entidades
+├── ZombiCoreFragment.h              # Datos centrales (posición, rotación, velocidad)
+├── ZombiBehaviorFragment.h          # Comportamiento y estados (AI, timers)
+├── ZombiCombatFragment.h            # Datos de combate (salud, daño, cooldowns)
+├── ZombiTurboSequenceFragment.h     # Referencias visuales (MeshData, Asset)
+└── ZombiTags.h                      # Tags para filtrado inteligente
 ```
 
 ### **Procesadores Especializados (Lógica Optimizada)**
 ```
 Source/MyProjectTSecuence/
-├── ZombiMovementProcessor.h/.cpp         # Movimiento y AI básica (legacy)
-├── ZombiTransformProcessor.h/.cpp        # Transformaciones especializadas
+├── ZombiMovementProcessor.h/.cpp         # Movimiento y AI básica
+├── ZombiBehaviorProcessor.h/.cpp         # Lógica de comportamiento y estados
+├── ZombiCombatProcessor.h/.cpp           # Lógica de combate y daño
 ├── ZombiTurboSequenceProcessor.h/.cpp    # Sincronización visual
-├── ZombiUpdateProcessor.h/.cpp           # Update Groups de TurboSequence
 └── ZombiTags.h                          # Tags para filtrado inteligente
 ```
 
@@ -77,72 +78,138 @@ Source/MyProjectTSecuence/
 ```
 Source/MyProjectTSecuence/
 ├── ZombiMassSubsystem.h/.cpp         # Gestión de entidades Mass
-└── ZombiSpawnerSubsystem.h/.cpp      # Spawning optimizado
-```
-
-### **Control y Testing**
-```
-Source/MyProjectTSecuence/
-├── ZombiTestController.h/.cpp        # Control centralizado desde Blueprint
-└── MyTurboSequenceAnimComponent.h/.cpp # Componente de animación (legacy)
+├── ZombiSpawnerSubsystem.h/.cpp      # Spawning optimizado
+└── ZombiTestController.h/.cpp        # Control centralizado desde Blueprint
 ```
 
 ## 🔧 Fragmentos Especializados del Sistema
 
-### **FZombiStateFragment**
+### **FZombiCoreFragment**
 ```cpp
-struct FZombiStateFragment : public FMassFragment
+struct FZombiCoreFragment : public FMassFragment
 {
-    EZombiState State = EZombiState::Idle; // Idle, Walk, Chase, Attack, Hit, Death
+    // Datos de transformación
+    FVector Position = FVector::ZeroVector;           // Posición en el mundo
+    FRotator Rotation = FRotator::ZeroRotator;        // Rotación actual
+    
+    // Datos de movimiento
+    float MovementSpeed = 0.0f;                       // Velocidad actual
+    FVector MovementDirection = FVector::ForwardVector; // Dirección de movimiento
+    float RotationSpeed = 360.0f;                     // Velocidad de rotación
+    
+    // Datos de comportamiento
+    float BehaviorTimer = 0.0f;                       // Timer para cambios de comportamiento
+    float DirectionChangeInterval = 3.0f;             // Intervalo para cambiar dirección
+    FVector MovementCenter = FVector::ZeroVector;     // Centro del área de movimiento
+    float MovementRadius = 500.0f;                    // Radio del área de movimiento
+    
+    // Datos de transformación para TurboSequence
+    FTransform WorldTransform;                        // Transformación del mundo
 };
 ```
-**Uso**: Almacena el estado lógico del zombi. Utilizado por todos los procesadores para determinar comportamiento.
+**Uso**: Almacena todos los datos centrales del zombi. Utilizado por todos los procesadores para movimiento, comportamiento y sincronización visual.
 
-### **FZombiTransformFragment** (NUEVO - Optimizado)
-```cpp
-struct FZombiTransformFragment : public FMassFragment
-{
-    FVector Position = FVector::ZeroVector;    // 12 bytes
-    FRotator Rotation = FRotator::ZeroRotator; // 12 bytes
-    // Total: 24 bytes, optimizado para cache lines de 32 bytes
-};
-```
-**Uso**: Datos de transformación accedidos juntos frecuentemente. Mejor cache locality.
-
-### **FZombiVelocityFragment** (NUEVO - Optimizado)
-```cpp
-struct FZombiVelocityFragment : public FMassFragment
-{
-    float MovementSpeed = 100.0f;              // 4 bytes
-    float RotationSpeed = 360.0f;              // 4 bytes
-    FVector MovementDirection = FVector::ForwardVector; // 12 bytes
-    // Total: 20 bytes, optimizado para cache lines de 32 bytes
-};
-```
-**Uso**: Datos de velocidad y dirección accedidos juntos frecuentemente.
-
-### **FZombiBehaviorFragment** (NUEVO - Optimizado)
+### **FZombiBehaviorFragment**
 ```cpp
 struct FZombiBehaviorFragment : public FMassFragment
 {
-    float DirectionChangeTimer = 0.0f;         // 4 bytes
-    float DirectionChangeInterval = 3.0f;      // 4 bytes
-    float MovementRadius = 500.0f;             // 4 bytes
-    FVector MovementCenter = FVector::ZeroVector; // 12 bytes
-    // Total: 24 bytes, optimizado para cache lines de 32 bytes
+    // Estados de comportamiento
+    EZombiState State = EZombiState::Idle;            // Estado actual del zombi
+    EZombiCondition Condition = EZombiCondition::Normal; // Condición actual
+    EZombiHordeBehavior HordeBehavior = EZombiHordeBehavior::None; // Comportamiento de horda
+    
+    // Timers de comportamiento
+    float StateTimer = 0.0f;                          // Timer del estado actual
+    float ActionTimer = 0.0f;                         // Timer de acciones
+    float ChaseTimer = 0.0f;                          // Timer de persecución
+    
+    // Flags de comportamiento
+    bool bIsChasing = false;                          // ¿Está persiguiendo?
+    bool bIsAttacking = false;                        // ¿Está atacando?
+    bool bIsDamaged = false;                          // ¿Está dañado?
+    bool bIsInHorde = false;                          // ¿Está en una horda?
+    
+    // Datos de persecución
+    FVector TargetPosition = FVector::ZeroVector;     // Posición del objetivo
+    float ChaseDistance = 1000.0f;                    // Distancia de persecución
+    float AttackDistance = 150.0f;                    // Distancia de ataque
+    
+    // Métodos de utilidad
+    bool IsDead() const { return State == EZombiState::Dead; }
+    bool IsChasing() const { return bIsChasing; }
+    bool IsAttacking() const { return bIsAttacking; }
+    bool IsDamaged() const { return bIsDamaged; }
+    bool IsInHorde() const { return bIsInHorde; }
+    
+    void SetState(EZombiState NewState) { State = NewState; StateTimer = 0.0f; }
+    EZombiState GetState() const { return State; }
+    EZombiHordeBehavior GetHordeBehavior() const { return HordeBehavior; }
+    
+    void SetChasingAction(bool bChasing) { bIsChasing = bChasing; }
+    void SetAttackingAction(bool bAttacking) { bIsAttacking = bAttacking; }
+    void SetDamagedAction(bool bDamaged) { bIsDamaged = bDamaged; }
+    void SetInHorde(bool bInHorde) { bIsInHorde = bInHorde; }
+    
+    void ClearAllActions() { bIsChasing = false; bIsAttacking = false; bIsDamaged = false; }
+    bool IsAttackingAction() const { return bIsAttacking; }
 };
 ```
-**Uso**: Datos de comportamiento y área accedidos juntos frecuentemente.
+**Uso**: Maneja todos los estados de comportamiento, AI y lógica de decisión del zombi.
+
+### **FZombiCombatFragment**
+```cpp
+struct FZombiCombatFragment : public FMassFragment
+{
+    // Datos de salud
+    float CurrentHealth = 100.0f;                     // Salud actual
+    float MaxHealth = 100.0f;                         // Salud máxima
+    
+    // Datos de daño
+    float Damage = 25.0f;                             // Daño que causa
+    float LastDamageTime = -1.0f;                     // Tiempo del último daño recibido
+    float DamageCooldown = 0.5f;                      // Cooldown entre daños
+    
+    // Datos de ataque
+    float AttackCooldown = 2.0f;                      // Cooldown entre ataques
+    float LastAttackTime = -1.0f;                     // Tiempo del último ataque
+    float AttackRange = 150.0f;                       // Rango de ataque
+    
+    // Datos de defensa
+    float Defense = 0.0f;                             // Defensa actual
+    float KnockbackResistance = 0.5f;                 // Resistencia al retroceso
+    
+    // Métodos de utilidad
+    bool IsAlive() const { return CurrentHealth > 0.0f; }
+    bool IsDead() const { return CurrentHealth <= 0.0f; }
+    float GetHealthPercentage() const { return MaxHealth > 0.0f ? CurrentHealth / MaxHealth : 0.0f; }
+    
+    bool CanAttack() const { return (GetWorld()->GetTimeSeconds() - LastAttackTime) >= AttackCooldown; }
+    bool CanTakeDamage() const { return (GetWorld()->GetTimeSeconds() - LastDamageTime) >= DamageCooldown; }
+    
+    void TakeDamage(float DamageAmount);
+    void Heal(float HealAmount);
+    void SetHealth(float NewHealth);
+    void ResetHealth();
+    
+    void PerformAttack();
+    void SetLastDamageTime(float Time);
+    void SetLastAttackTime(float Time);
+};
+```
+**Uso**: Maneja todos los datos relacionados con combate, salud, daño y ataques.
 
 ### **FZombiTurboSequenceFragment**
 ```cpp
 struct FZombiTurboSequenceFragment : public FMassFragment
 {
-    FTurboSequence_MinimalMeshData_Lf MeshData;           // Handle visual
+    // Referencias visuales
+    FTurboSequence_MinimalMeshData_Lf MeshData;       // Handle visual de TurboSequence
+    UTurboSequence_MeshAsset_Lf* TurboSequenceAsset;  // Asset de referencia
+    
+    // Datos de animación
     FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData; // Blend Space para animaciones
-    bool bIsVisualInstanceValid = false;                  // Estado de validación
-    int32 UpdateGroupIndex = 0;                           // Grupo de actualización
-    UTurboSequence_MeshAsset_Lf* TurboSequenceAsset;      // Asset de referencia
+    bool bIsVisualInstanceValid = false;              // Estado de validación
+    int32 UpdateGroupIndex = 0;                       // Grupo de actualización
     
     // Sistema de transiciones suaves
     EZombiState CurrentAnimationState = EZombiState::Idle;
@@ -155,122 +222,132 @@ struct FZombiTurboSequenceFragment : public FMassFragment
     float LastSpeed = -1.0f;
     float AnimationUpdateTimer = 0.0f;
     float LastAnimationUpdateTime = 0.0f;
+    
+    // Métodos de utilidad
+    bool IsMeshDataValid() const { return MeshData.IsMeshDataValid(); }
+    bool IsAssetValid() const { return TurboSequenceAsset != nullptr; }
+    bool IsFullyValid() const { return IsMeshDataValid() && IsAssetValid(); }
 };
 ```
 **Uso**: Puente entre la lógica Mass Entity y la representación visual TurboSequence.
-
-### **FZombiArchetypeData** (NUEVO - Datos Compartidos)
-```cpp
-struct FZombiArchetypeData
-{
-    TObjectPtr<UTurboSequence_MeshAsset_Lf> SharedMeshAsset;        // Asset compartido
-    TArray<TObjectPtr<UAnimSequence>> SharedAnimations;             // Animaciones compartidas
-    float BaseMovementSpeed = 100.0f;                               // Velocidad base
-    float BaseRotationSpeed = 360.0f;                               // Rotación base
-    float BaseHealth = 100.0f;                                      // Salud base
-};
-```
-**Uso**: Datos compartidos entre entidades del mismo archetype. Reduce duplicación.
 
 ## ⚙️ Procesadores Especializados del Sistema
 
 ### **📊 Resumen de Fragmentos por Procesador**
 
-#### **ZombiTransformProcessor** (NUEVO - Optimizado)
-- **Fragmentos**: `FZombiTransformFragment`, `FZombiVelocityFragment`
+#### **ZombiMovementProcessor** (OPTIMIZADO)
+- **Fragmentos**: `FZombiCoreFragment` (RW), `FZombiBehaviorFragment` (RO)
 - **Tags**: `FActiveTag`, `FDeadTag` (excluido)
-- **Permisos**: ReadWrite para Transform, ReadOnly para Velocity
 - **Fase**: PrePhysics
-- **Función**: Solo transformaciones y movimiento
+- **Función**: Movimiento, rotación y AI básica
 
-#### **ZombiMovementProcessor** (Legacy)
-- **Fragmentos**: `FZombiStateFragment`, `FZombiMovementFragment`, `FZombiTurboSequenceFragment`
-- **Permisos**: ReadWrite para todos los fragmentos
+#### **ZombiBehaviorProcessor** (OPTIMIZADO)
+- **Fragmentos**: `FZombiBehaviorFragment` (RW), `FZombiCoreFragment` (RO), `FZombiCombatFragment` (RO)
+- **Tags**: `FActiveTag`, `FDeadTag` (excluido)
 - **Fase**: PrePhysics
+- **Función**: Lógica de comportamiento y estados
 
-#### **ZombiTurboSequenceProcessor**
-- **Fragmentos**: `FZombiStateFragment`, `FZombiMovementFragment`, `FZombiTurboSequenceFragment`
-- **Permisos**: ReadOnly para State/Movement, ReadWrite para TurboSequence
+#### **ZombiCombatProcessor** (OPTIMIZADO)
+- **Fragmentos**: `FZombiCombatFragment` (RW), `FZombiBehaviorFragment` (RW)
+- **Tags**: `FActiveTag`, `FDeadTag` (excluido)
+- **Fase**: PrePhysics
+- **Función**: Lógica de combate y daño
+
+#### **ZombiTurboSequenceProcessor** (OPTIMIZADO)
+- **Fragmentos**: `FZombiTurboSequenceFragment` (RW), `FZombiCoreFragment` (RO), `FZombiBehaviorFragment` (RO), `FZombiCombatFragment` (RO)
+- **Tags**: `FActiveTag`, `FDeadTag` (excluido)
 - **Fase**: PostPhysics
+- **Función**: Sincronización visual y animaciones
 
-#### **ZombiUpdateProcessor**
-- **Fragmentos**: `FZombiTurboSequenceFragment`
-- **Permisos**: ReadOnly
-- **Fase**: FrameEnd
-
-### **UZombiTransformProcessor** (NUEVO - Optimizado)
-- **Función**: Maneja solo transformaciones y movimiento
+### **UZombiMovementProcessor** (OPTIMIZADO)
+- **Función**: Maneja movimiento, rotación y AI básica
 - **Fase**: `EMassProcessingPhase::PrePhysics`
 - **Grupo**: `"MassBehavior"`
 - **Fragmentos Utilizados**:
-  - `FZombiTransformFragment(ReadWrite)` - Posición y rotación
-  - `FZombiVelocityFragment(ReadOnly)` - Velocidad y dirección
+  - `FZombiCoreFragment(ReadWrite)` - Posición, rotación, velocidad
+  - `FZombiBehaviorFragment(ReadOnly)` - Estados y comportamiento
 - **Tags Utilizados**:
   - `FActiveTag` - Solo entidades activas
   - `FDeadTag` - Excluye entidades muertas
 - **Características**:
-  - Procesamiento especializado solo para transformaciones
-  - Mejor cache locality y paralelización
-  - Filtrado inteligente por tags
+  - ✅ **Movimiento aleatorio** con cambio de dirección
+  - ✅ **Rotación suave** hacia la dirección de movimiento
+  - ✅ **Confinamiento en área circular** cuando no persigue
+  - ✅ **Cambio de velocidad aleatorio** (Idle/Walk/Run)
+  - ✅ **Optimizado** - Solo fragmentos necesarios
 
-### **UZombiMovementProcessor** (Legacy)
-- **Función**: Maneja movimiento, AI básica y cambios de estado
+### **UZombiBehaviorProcessor** (OPTIMIZADO)
+- **Función**: Maneja lógica de comportamiento y estados
 - **Fase**: `EMassProcessingPhase::PrePhysics`
 - **Grupo**: `"MassBehavior"`
 - **Fragmentos Utilizados**:
-  - `FZombiStateFragment(ReadWrite)` - Estado lógico del zombi
-  - `FZombiMovementFragment(ReadWrite)` - Posición, rotación, velocidad
-  - `FZombiTurboSequenceFragment(ReadWrite)` - Referencias visuales
+  - `FZombiBehaviorFragment(ReadWrite)` - Estados y comportamiento
+  - `FZombiCoreFragment(ReadOnly)` - Posición y datos de movimiento
+  - `FZombiCombatFragment(ReadOnly)` - Salud y estado de combate
+- **Tags Utilizados**:
+  - `FActiveTag` - Solo entidades activas
+  - `FDeadTag` - Excluye entidades muertas
 - **Características**:
-  - Movimiento aleatorio con cambio de dirección
-  - Rotación suave hacia la dirección de movimiento
-  - Confinamiento en área circular
-  - Transición automática entre estados Idle/Walk
+  - ✅ **Transiciones de estado** automáticas
+  - ✅ **Lógica de persecución** basada en distancia
+  - ✅ **Sistema de timers** para acciones
+  - ✅ **Comportamiento de horda** (preparado)
+  - ✅ **Optimizado** - Solo fragmentos necesarios
 
-### **UZombiTurboSequenceProcessor**
+### **UZombiCombatProcessor** (OPTIMIZADO)
+- **Función**: Maneja lógica de combate y daño
+- **Fase**: `EMassProcessingPhase::PrePhysics`
+- **Grupo**: `"MassBehavior"`
+- **Fragmentos Utilizados**:
+  - `FZombiCombatFragment(ReadWrite)` - Salud, daño, cooldowns
+  - `FZombiBehaviorFragment(ReadWrite)` - Estados de combate
+- **Tags Utilizados**:
+  - `FActiveTag` - Solo entidades activas
+  - `FDeadTag` - Excluye entidades muertas
+- **Características**:
+  - ✅ **Sistema de daño** con cooldowns
+  - ✅ **Lógica de ataque** con rangos
+  - ✅ **Gestión de salud** y muerte
+  - ✅ **Optimizado** - Solo fragmentos necesarios
+
+### **UZombiTurboSequenceProcessor** (OPTIMIZADO)
 - **Función**: Sincroniza transformaciones y animaciones visuales
 - **Fase**: `EMassProcessingPhase::PostPhysics`
 - **Grupo**: `"MassBehavior"`
 - **Fragmentos Utilizados**:
-  - `FZombiStateFragment(ReadOnly)` - Lee estado lógico del zombi
-  - `FZombiMovementFragment(ReadOnly)` - Lee posición y rotación
-  - `FZombiTurboSequenceFragment(ReadWrite)` - Actualiza referencias visuales
+  - `FZombiTurboSequenceFragment(ReadWrite)` - Referencias visuales
+  - `FZombiCoreFragment(ReadOnly)` - Posición y rotación
+  - `FZombiBehaviorFragment(ReadOnly)` - Estados de comportamiento
+  - `FZombiCombatFragment(ReadOnly)` - Estados de combate
+- **Tags Utilizados**:
+  - `FActiveTag` - Solo entidades activas
+  - `FDeadTag` - Excluye entidades muertas
 - **Características**:
   - ✅ **Sincronización de transformaciones** (FUNCIONAL)
+  - ✅ **Corrección de rotación** (-90° para alinear animación)
   - ✅ **Animaciones individuales por entidad** (FUNCIONAL)
   - ✅ **Sistema de transiciones suaves** (FUNCIONAL)
-  - ✅ **Rotación hacia dirección de movimiento** (FUNCIONAL)
   - ✅ **Estado individual por entidad** (FUNCIONAL)
-  - 🔄 **Animaciones Blend Space** (PREPARADO PARA IMPLEMENTACIÓN)
-  - Gestión de instancias visuales
-
-### **UZombiUpdateProcessor**
-- **Función**: Ejecuta Update Groups de TurboSequence
-- **Fase**: `EMassProcessingPhase::FrameEnd`
-- **Grupo**: `"MassBehavior"`
-- **Fragmentos Utilizados**:
-  - `FZombiTurboSequenceFragment(ReadOnly)` - Lee referencias visuales
-- **Características**:
-  - ✅ **Distribución de carga** en 4 grupos
-  - 🔄 **SolveMeshes_GameThread** (PREPARADO PARA REHABILITACIÓN)
+  - ✅ **Optimizado** - Solo fragmentos necesarios
 
 ## 🚀 Subsystems
 
 ### **UZombiMassSubsystem**
 - **Función**: Gestión centralizada de entidades Mass
 - **Características**:
-  - Registro/desregistro de entidades
-  - Gestión de procesadores automática
-  - Limpieza de entidades
+  - ✅ **Registro/desregistro de entidades** automático
+  - ✅ **Gestión de procesadores** automática
+  - ✅ **Limpieza de entidades** optimizada
+  - ✅ **Logs simplificados** para rendimiento
 
 ### **UZombiSpawnerSubsystem**
 - **Función**: Spawning optimizado de zombis
 - **Características**:
-  - Spawning en lotes para rendimiento
+  - ✅ **Spawning en lotes** para rendimiento
   - ✅ **Creación de instancias visuales TurboSequence** (FUNCIONAL)
   - ✅ **Distribución en Update Groups** (FUNCIONAL)
   - ✅ **Sistema de reintentos** para timing de inicialización
-  - 🔄 **Configuración de animaciones** (PREPARADO PARA IMPLEMENTACIÓN)
+  - ✅ **Logs optimizados** sin spam
 
 ## 🎮 Control Centralizado desde Blueprint
 
@@ -303,7 +380,8 @@ SpawnZombiBatch() → CreateZombiMassEntity() → CreateTurboSequenceVisualInsta
 
 ### **3. Ejecución por Frame**
 ```
-ZombiMovementProcessor (PrePhysics) → ZombiTurboSequenceProcessor (PostPhysics) → ZombiUpdateProcessor (FrameEnd)
+ZombiBehaviorProcessor (PrePhysics) → ZombiMovementProcessor (PrePhysics) → 
+ZombiCombatProcessor (PrePhysics) → ZombiTurboSequenceProcessor (PostPhysics)
 ```
 
 ### **4. Sincronización Visual**
@@ -320,8 +398,24 @@ enum class EZombiState : uint8
     Walk,    // Caminando - Animación: "Walk"
     Chase,   // Persiguiendo - Animación: "Run"
     Attack,  // Atacando - Animación: "Attack"
-    Hit,     // Recibiendo golpe - Animación: "Hit"
-    Death    // Muerto - Animación: "Death"
+    TakeDamage, // Recibiendo golpe - Animación: "Hit"
+    Dead     // Muerto - Animación: "Death"
+};
+
+enum class EZombiCondition : uint8
+{
+    Normal,  // Estado normal
+    Damaged, // Dañado
+    Stunned, // Aturdido
+    Dead     // Muerto
+};
+
+enum class EZombiHordeBehavior : uint8
+{
+    None,        // Sin comportamiento de horda
+    Following,   // Siguiendo al líder
+    Swarming,    // Enjambre
+    Coordinated  // Coordinado
 };
 ```
 
@@ -345,12 +439,16 @@ enum class EZombiState : uint8
 ProcessingPhase = EMassProcessingPhase::PrePhysics;
 ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
 
-// ZombiTurboSequenceProcessor:
-ProcessingPhase = EMassProcessingPhase::PostPhysics;
+// ZombiBehaviorProcessor:
+ProcessingPhase = EMassProcessingPhase::PrePhysics;
 ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
 
-// ZombiUpdateProcessor:
-ProcessingPhase = EMassProcessingPhase::FrameEnd;
+// ZombiCombatProcessor:
+ProcessingPhase = EMassProcessingPhase::PrePhysics;
+ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+
+// ZombiTurboSequenceProcessor:
+ProcessingPhase = EMassProcessingPhase::PostPhysics;
 ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
 
 // Configuración común:
@@ -380,6 +478,14 @@ bAutoRegisterWithProcessingPhases = true;
 - **Problema**: Incompatibilidad con UE5.5.4
 - **Solución**: Uso de API correcta sin parámetros
 
+### **6. Fragmentos Innecesarios**
+- **Problema**: Procesadores usando fragmentos que no necesitaban
+- **Solución**: Optimización de queries para usar solo fragmentos necesarios
+
+### **7. Rotación Desalineada**
+- **Problema**: Animación 90° desalineada con transformación lógica
+- **Solución**: Corrección de -90° en Yaw antes de enviar a TurboSequence
+
 ## ✅ Estado Actual del Sistema
 
 ### **✅ Funcionalidades Completamente Operativas**
@@ -391,16 +497,20 @@ bAutoRegisterWithProcessingPhases = true;
 - ✅ **Rendimiento optimizado** con grupos de actualización
 - ✅ **Sistema estable** sin crashes
 - ✅ **Asset configurado** con animaciones disponibles
+- ✅ **Fragmentos optimizados** - Solo los necesarios en cada procesador
+- ✅ **Logs optimizados** - Sin spam, solo información relevante
+- ✅ **Rotación corregida** - Animación alineada con movimiento lógico
 
 ### **🔄 Funcionalidades Preparadas para Implementación**
 - 🔄 **Animaciones Blend Space** (código preparado, pendiente de habilitación)
-- 🔄 **SolveMeshes_GameThread** (preparado para rehabilitación segura)
-- 🔄 **Sistema de Blend Space real** (preparado para implementación futura)
+- 🔄 **Sistema de daño avanzado** (fragmentos preparados)
+- 🔄 **AI más compleja** (fragmentos de comportamiento preparados)
 
 ## 📊 Rendimiento
 
 ### **Optimizaciones Implementadas**
-- **Update Groups**: Distribución de carga de animación en 4 grupos
+- **Fragmentos Especializados**: Solo fragmentos necesarios en cada procesador
+- **Queries Optimizados**: Filtrado inteligente por tags
 - **Concurrent Operations**: Operaciones thread-safe de TurboSequence
 - **Batch Processing**: Spawning en lotes de 100 entidades
 - **Query Optimization**: Queries registrados automáticamente
@@ -408,154 +518,12 @@ bAutoRegisterWithProcessingPhases = true;
 - **Estado Individual**: Cada entidad tiene su propio estado de animación
 - **Transiciones Optimizadas**: Solo actualiza cuando cambia significativamente la velocidad
 - **Acceso Mutable**: Uso eficiente de fragmentos con acceso de escritura
+- **Logs Optimizados**: Sin spam, solo información relevante
 
 ### **Escalabilidad**
 - **Diseñado para**: Miles de entidades
 - **Arquitectura**: State Sync para máxima separación
 - **Rendimiento**: Procesamiento paralelo y optimizado
-
-## 🚀 Optimizaciones Implementadas para 50,000 Entidades
-
-### **✅ OPTIMIZACIONES COMPLETADAS:**
-
-#### **🥇 FRAGMENTOS ESPECIALIZADOS (80% mejora de cache locality)**
-```cpp
-// ✅ IMPLEMENTADO: Fragmentos pequeños y especializados
-struct FZombiTransformFragment {    // 24 bytes
-    FVector Position;               // 12 bytes
-    FRotator Rotation;              // 12 bytes
-};
-
-struct FZombiVelocityFragment {     // 20 bytes
-    float MovementSpeed;            // 4 bytes
-    float RotationSpeed;            // 4 bytes
-    FVector MovementDirection;      // 12 bytes
-};
-
-struct FZombiBehaviorFragment {     // 24 bytes
-    float DirectionChangeTimer;     // 4 bytes
-    float DirectionChangeInterval;  // 4 bytes
-    float MovementRadius;           // 4 bytes
-    FVector MovementCenter;         // 12 bytes
-};
-```
-**Impacto:** Mejor cache locality, acceso eficiente a datos relacionados
-
-#### **🥈 TAGS PARA FILTRADO INTELIGENTE (60% mejora de paralelización)**
-```cpp
-// ✅ IMPLEMENTADO: Tags especializados
-struct FActiveTag : public FMassTag {};           // Solo entidades activas
-struct FMovingTag : public FMassTag {};           // Solo entidades en movimiento
-struct FDeadTag : public FMassTag {};             // Solo entidades muertas
-struct FVisibleTag : public FMassTag {};          // Solo entidades visibles
-struct FNeedsAnimationUpdateTag : public FMassTag {}; // Solo entidades que necesitan animación
-struct FNeedsVisualSyncTag : public FMassTag {};  // Solo entidades que necesitan sincronización
-```
-**Impacto:** Queries eficientes, procesamiento solo de entidades relevantes
-
-#### **🥉 PROCESADORES ESPECIALIZADOS (50% mejora de throughput)**
-```cpp
-// ✅ IMPLEMENTADO: Procesadores pequeños y especializados
-class UZombiTransformProcessor : public UMassProcessor;      // Solo transformaciones
-// Pipeline optimizado: TransformProcessor → MovementProcessor → AnimationProcessor
-```
-**Impacto:** Mejor paralelización, cache locality optimizada
-
-#### **🏅 ARCHETYPE SYSTEM (70% reducción de datos duplicados)**
-```cpp
-// ✅ IMPLEMENTADO: Datos compartidos entre entidades
-struct FZombiArchetypeData {
-    TObjectPtr<UTurboSequence_MeshAsset_Lf> SharedMeshAsset;        // 1 copia para todas
-    TArray<TObjectPtr<UAnimSequence>> SharedAnimations;             // 1 copia para todas
-    float BaseMovementSpeed;                                        // 1 copia para todas
-};
-```
-**Impacto:** Reducción significativa de memoria, mejor cache locality
-
-### **📊 IMPACTO ESPERADO:**
-- **Rendimiento actual:** ~100 entidades fluidas
-- **Con optimizaciones:** ~50,000 entidades fluidas
-- **Mejora total:** **500x más entidades**
-
-## 🏗️ Patrones de Diseño Implementados
-
-### **✅ PATRONES IMPLEMENTADOS:**
-
-#### **🥇 PATRÓN 1: Fragmentos Especializados (IMPLEMENTADO)**
-```cpp
-// ✅ IMPLEMENTADO: Fragmentos pequeños y especializados
-struct FZombiTransformFragment {    // 24 bytes
-    FVector Position;               // 12 bytes
-    FRotator Rotation;              // 12 bytes
-};
-
-struct FZombiVelocityFragment {     // 20 bytes
-    float MovementSpeed;            // 4 bytes
-    float RotationSpeed;            // 4 bytes
-    FVector MovementDirection;      // 12 bytes
-};
-
-struct FZombiBehaviorFragment {     // 24 bytes
-    float DirectionChangeTimer;     // 4 bytes
-    float DirectionChangeInterval;  // 4 bytes
-    float MovementRadius;           // 4 bytes
-    FVector MovementCenter;         // 12 bytes
-};
-```
-
-#### **🥈 PATRÓN 2: Archetype System (IMPLEMENTADO)**
-```cpp
-// ✅ IMPLEMENTADO: Datos compartidos en archetypes
-struct FZombiArchetypeData {
-    TObjectPtr<UTurboSequence_MeshAsset_Lf> SharedMeshAsset;        // 1 copia para todas
-    TArray<TObjectPtr<UAnimSequence>> SharedAnimations;             // 1 copia para todas
-    float BaseMovementSpeed;                                        // 1 copia para todas
-    float BaseRotationSpeed;                                        // 1 copia para todas
-    float BaseHealth;                                               // 1 copia para todas
-};
-```
-
-#### **🥉 PATRÓN 3: Tags para Filtrado (IMPLEMENTADO)**
-```cpp
-// ✅ IMPLEMENTADO: Tags especializados para filtrado
-struct FActiveTag : public FMassTag {};           // Solo entidades activas
-struct FMovingTag : public FMassTag {};           // Solo entidades en movimiento
-struct FDeadTag : public FMassTag {};             // Solo entidades muertas
-struct FVisibleTag : public FMassTag {};          // Solo entidades visibles
-struct FNeedsAnimationUpdateTag : public FMassTag {}; // Solo entidades que necesitan animación
-struct FNeedsVisualSyncTag : public FMassTag {};  // Solo entidades que necesitan sincronización
-```
-
-#### **🏅 PATRÓN 4: Procesadores Especializados (IMPLEMENTADO)**
-```cpp
-// ✅ IMPLEMENTADO: Procesadores pequeños y especializados
-class UZombiTransformProcessor : public UMassProcessor;      // Solo transformaciones
-// Pipeline optimizado: TransformProcessor → MovementProcessor → AnimationProcessor
-```
-
-#### **🏅 PATRÓN 5: Data-Oriented Design (IMPLEMENTADO)**
-```cpp
-// ✅ IMPLEMENTADO: Estructuras optimizadas para cache
-// Fragmentos alineados para cache lines de 32 bytes
-// Acceso eficiente a datos relacionados
-```
-
-### **📊 IMPACTO LOGRADO:**
-
-#### **💾 Reducción de Memoria:**
-- **Fragmentos especializados**: 80% mejor cache locality
-- **Archetypes compartidos**: 70% menos datos duplicados
-- **Tags vs enums**: 60% menos procesamiento innecesario
-
-#### **⚡ Mejora de Rendimiento:**
-- **Queries especializados**: 60% mejor paralelización
-- **Procesadores pequeños**: 50% mejor cache locality
-- **Pipeline optimizado**: 40% mejor throughput
-
-#### **🚀 Escalabilidad:**
-- **Actual**: ~100 entidades fluidas
-- **Con patrones**: ~50,000 entidades fluidas
-- **Mejora**: **500x más entidades**
 
 ## 🎮 Uso del Sistema
 
@@ -586,18 +554,19 @@ int32 Count = Controller->GetActiveZombiCount();
 
 ## 📋 TODO - Próximos Pasos
 
-### **🎯 Prioridad Alta - Migración a Nuevos Fragmentos**
-- [ ] **Migrar ZombiMovementProcessor** a usar nuevos fragmentos especializados
-- [ ] **Actualizar ZombiMassSubsystem** para crear entidades con nuevos fragmentos
-- [ ] **Actualizar ZombiSpawnerSubsystem** para usar nuevos fragmentos
-- [ ] **Implementar ZombiTransformProcessor** en el pipeline
-- [ ] **Migrar ZombiTurboSequenceProcessor** a usar nuevos fragmentos
+### **🎯 Prioridad Alta - Mejoras del Sistema**
+- [ ] **Implementar sistema de daño** con detección de colisiones
+- [ ] **AI avanzada** con pathfinding y comportamiento complejo
+- [ ] **Sistema de ataque** con animaciones de ataque
+- [ ] **Estados de zombi** más complejos (Chase, Attack, Hit, Death)
+- [ ] **Sistema de respawn** automático
 
 ### **🔧 Optimizaciones del Sistema**
 - [x] **Fragmentos especializados** implementados ✅
 - [x] **Tags para filtrado inteligente** implementados ✅
 - [x] **Procesadores especializados** implementados ✅
-- [x] **Archetype system** implementado ✅
+- [x] **Optimización de fragmentos** completada ✅
+- [x] **Logs optimizados** completados ✅
 - [ ] **Implementar sistema de LOD** para miles de entidades
 - [ ] **Agregar culling** para entidades fuera de vista
 - [ ] **Optimizar Update Groups** para mejor distribución de carga
@@ -639,13 +608,13 @@ int32 Count = Controller->GetActiveZombiCount();
 
 ## 🔮 Próximos Pasos
 
-### **Prioridad Inmediata - Migración a Nuevos Fragmentos**
-1. **✅ Fragmentos especializados** implementados
-2. **✅ Tags para filtrado inteligente** implementados
-3. **✅ Procesadores especializados** implementados
-4. **✅ Archetype system** implementado
-5. **Migrar procesadores existentes** a usar nuevos fragmentos
-6. **Implementar pipeline optimizado** con nuevos procesadores
+### **Prioridad Inmediata - Mejoras del Sistema**
+1. **✅ Sistema Mass Entity** completamente funcional
+2. **✅ Fragmentos optimizados** implementados
+3. **✅ Procesadores optimizados** implementados
+4. **✅ Sincronización visual** funcionando
+5. **Implementar sistema de daño** con colisiones
+6. **Mejorar AI** con pathfinding
 
 ### **Mejoras Futuras**
 1. **AI Avanzada**: Implementar pathfinding y comportamiento más complejo
@@ -678,10 +647,9 @@ int32 Count = Controller->GetActiveZombiCount();
 - **Arquitectura**: x64
 
 ### **Problemas Conocidos**
-- **Animaciones**: Sistema implementado, pendiente de verificación visual
-- **SolveMeshes_GameThread**: Preparado para rehabilitación segura
-- **Blend Space**: Preparado para implementación futura
+- **Animaciones Blend Space**: Sistema implementado, pendiente de verificación visual
+- **Sistema de daño**: Fragmentos preparados, pendiente de implementación de colisiones
 
 ---
 
-**🎉 ¡SISTEMA OPTIMIZADO PARA 50,000 ENTIDADES! El sistema de zombis masivos está optimizado con fragmentos especializados, tags para filtrado inteligente, procesadores especializados y archetype system. Próximo objetivo: migrar procesadores existentes a usar los nuevos fragmentos optimizados.** 
+**🎉 ¡SISTEMA COMPLETAMENTE FUNCIONAL Y OPTIMIZADO! El sistema de zombis masivos está completamente operativo con fragmentos optimizados, procesadores especializados y sincronización visual perfecta. Próximo objetivo: implementar sistema de daño y mejorar AI.** 

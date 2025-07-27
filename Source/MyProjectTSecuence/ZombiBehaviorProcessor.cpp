@@ -37,21 +37,10 @@ void UZombiBehaviorProcessor::ConfigureQueries()
     BehaviorQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiBehaviorProcessor: ConfigureQueries completado - optimizado para IA"));
-    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiBehaviorProcessor: CONFIGURACIÓN COMPLETADA - Procesador debería registrarse automáticamente"));
 }
 
 void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
-    // Log crítico para verificar que el procesador se está ejecutando
-    static bool bFirstExecute = true;
-    if (bFirstExecute)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiBehaviorProcessor: EXECUTE LLAMADO - Procesador está funcionando"));
-        bFirstExecute = false;
-    }
-
     // Solo ejecutar durante el juego (PIE), no en el editor
     if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
@@ -59,15 +48,6 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
     }
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
-
-    // Log para debugging
-    static float DebugTimer = 0.0f;
-    DebugTimer += DeltaTime;
-    if (DebugTimer >= 5.0f) // Log cada 5 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiBehaviorProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-        DebugTimer = 0.0f;
-    }
 
     // Procesa entidades activas para decisiones de IA
     BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)

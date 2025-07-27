@@ -34,24 +34,12 @@ void UZombiCombatProcessor::ConfigureQueries()
     // Query optimizada para combate - solo fragmentos necesarios
     CombatQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadWrite);
     CombatQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
-    CombatQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
     CombatQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     CombatQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiCombatProcessor: ConfigureQueries completado - optimizado para combate"));
-    UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiCombatProcessor: CONFIGURACIÓN COMPLETADA - Procesador debería registrarse automáticamente"));
 }
 
 void UZombiCombatProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
-    // Log crítico para verificar que el procesador se está ejecutando
-    static bool bFirstExecute = true;
-    if (bFirstExecute)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiCombatProcessor: EXECUTE LLAMADO - Procesador está funcionando"));
-        bFirstExecute = false;
-    }
-
     // Solo ejecutar durante el juego (PIE), no en el editor
     if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
@@ -60,28 +48,17 @@ void UZombiCombatProcessor::Execute(FMassEntityManager &EntityManager, FMassExec
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Log para debugging
-    static float DebugTimer = 0.0f;
-    DebugTimer += DeltaTime;
-    if (DebugTimer >= 6.0f) // Log cada 6 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiCombatProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-        DebugTimer = 0.0f;
-    }
-
     // Procesa entidades activas para combate
     CombatQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                    {
         TArrayView<FZombiCombatFragment> CombatFragments = Context.GetMutableFragmentView<FZombiCombatFragment>();
         TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiCombatFragment& CombatFragment = CombatFragments[i];
             FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCoreFragment& CoreFragment = CoreFragments[i];
 
             // Solo procesar si está vivo
             if (!CombatFragment.IsDead())
@@ -90,7 +67,7 @@ void UZombiCombatProcessor::Execute(FMassEntityManager &EntityManager, FMassExec
                 UpdateCombatCooldowns(CombatFragment, DeltaTime);
 
                 // Procesar lógica de ataque
-                ProcessAttackLogic(CombatFragment, BehaviorFragment, CoreFragment, DeltaTime);
+                ProcessAttackLogic(CombatFragment, BehaviorFragment, DeltaTime);
 
                 // Procesar lógica de daño
                 ProcessDamageLogic(CombatFragment, BehaviorFragment, DeltaTime);
@@ -104,7 +81,7 @@ void UZombiCombatProcessor::UpdateCombatCooldowns(FZombiCombatFragment &CombatFr
     CombatFragment.UpdateCooldowns(DeltaTime);
 }
 
-void UZombiCombatProcessor::ProcessAttackLogic(FZombiCombatFragment &CombatFragment, FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime)
+void UZombiCombatProcessor::ProcessAttackLogic(FZombiCombatFragment &CombatFragment, FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
 {
     // Lógica simplificada de ataque
     // TODO: Implementar detección de jugador y lógica de ataque real

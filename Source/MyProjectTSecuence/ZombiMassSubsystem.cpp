@@ -5,12 +5,14 @@
 #include "MassEntityManager.h"
 #include "ZombiCoreFragment.h"
 #include "ZombiBehaviorFragment.h"
+#include "ZombiUpdateFrequencyFragment.h"
 #include "ZombiCombatFragment.h"
 #include "ZombiTurboSequenceFragment.h"
 #include "ZombiMovementProcessor.h"
 #include "ZombiBehaviorProcessor.h"
 #include "ZombiCombatProcessor.h"
 #include "ZombiTurboSequenceProcessor.h"
+#include "ZombiPeriodicChaseProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 // ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
@@ -128,6 +130,12 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     TurboSequenceFragmentInstance.GetMutable<FZombiTurboSequenceFragment>() = TurboSequenceFragment;
     FragmentList.Add(TurboSequenceFragmentInstance);
 
+    // Instancia el fragmento de frecuencia de update (NUEVO - para optimización)
+    FInstancedStruct UpdateFrequencyFragmentInstance;
+    UpdateFrequencyFragmentInstance.InitializeAs<FZombiUpdateFrequencyFragment>();
+    UpdateFrequencyFragmentInstance.GetMutable<FZombiUpdateFrequencyFragment>() = FZombiUpdateFrequencyFragment();
+    FragmentList.Add(UpdateFrequencyFragmentInstance);
+
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
 
@@ -146,14 +154,8 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Debug: Verificar que la entidad tiene los fragmentos correctos
     DebugEntityFragments(EntityHandle);
 
-    // Debug adicional: Verificar tags después de un frame
-    GetWorld()->GetTimerManager().SetTimerForNextTick([this, EntityHandle]()
-                                                      { DebugEntityTags(EntityHandle); });
-
     // Verificación adicional: Log de confirmación de creación
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad %d creada con todos los fragmentos requeridos"), EntityHandle.Index);
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Fragmentos: Core ✓, Behavior ✓, Combat ✓, TurboSequence ✓"));
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Tags: ActiveTag ✓, DeadTag ✗ (requerido para queries)"));
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad %d creada exitosamente"), EntityHandle.Index);
 
     return EntityHandle;
 }
@@ -233,9 +235,6 @@ void UZombiMassSubsystem::RegisterMassProcessors()
 
         // Los procesadores se registran automáticamente en UE5.5.4
         UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Procesadores configurados para registro automático"));
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: ZombiMovementProcessor debería ejecutarse automáticamente"));
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: ZombiBehaviorProcessor debería ejecutarse automáticamente"));
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: ZombiCombatProcessor debería ejecutarse automáticamente"));
 
         // Verificar que los procesadores están registrados
         VerifyProcessorsRegistration();

@@ -6,7 +6,6 @@
 #include "MassEntityTypes.h"
 #include "ZombiCoreFragment.h"
 #include "ZombiBehaviorFragment.h"
-#include "ZombiCombatFragment.h"
 #include "ZombiTags.h"
 #include "Engine/Engine.h"
 #include "ZombiMovementProcessor.generated.h"

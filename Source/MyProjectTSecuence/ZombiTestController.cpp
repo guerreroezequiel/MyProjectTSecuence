@@ -180,20 +180,14 @@ void AZombiTestController::LogSystemStatus()
 {
     if (!SpawnerSubsystem)
     {
-        UE_LOG(LogTemp, Warning, TEXT("🎮 ZombiTestController: SpawnerSubsystem no disponible"));
         return;
     }
 
     int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
 
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Estado del Sistema:"));
-    UE_LOG(LogTemp, Log, TEXT("  📊 Entidades activas: %d"), CurrentEntityCount);
-    UE_LOG(LogTemp, Log, TEXT("  🎯 Sistema funcionando: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
-    UE_LOG(LogTemp, Log, TEXT("  🏃 Sistema de persecución: ✅ Activo (cada 10s por 5s)"));
-
     if (CurrentEntityCount != LastEntityCount)
     {
-        UE_LOG(LogTemp, Log, TEXT("  📈 Cambio en entidades: %d → %d"), LastEntityCount, CurrentEntityCount);
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Entidades activas: %d"), CurrentEntityCount);
         LastEntityCount = CurrentEntityCount;
     }
 }
