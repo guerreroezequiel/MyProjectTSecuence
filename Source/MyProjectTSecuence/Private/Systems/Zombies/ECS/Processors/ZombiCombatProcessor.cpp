@@ -1,15 +1,15 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "ZombiCombatProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiCombatProcessor.h"
 #include "MassProcessor.h"
 #include "MassExecutionContext.h"
-#include "ZombiCombatFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiTags.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
-#include "MyProjectTSecuenceCharacter.h"
+#include "MyProjectTSecuence/MyProjectTSecuenceCharacter.h"
 
 UZombiCombatProcessor::UZombiCombatProcessor()
 {

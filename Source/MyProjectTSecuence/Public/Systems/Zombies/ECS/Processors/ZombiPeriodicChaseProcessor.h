@@ -2,10 +2,10 @@
 
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiUpdateFrequencyFragment.h"
-#include "ZombiTags.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUpdateFrequencyFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "ZombiPeriodicChaseProcessor.generated.h"
 

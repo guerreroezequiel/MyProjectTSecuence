@@ -7,7 +7,7 @@
 #include "MassEntitySubsystem.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_MinimalData_Lf.h"
-#include "ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "ZombiSpawnerSubsystem.generated.h"
 
 // Subsystem optimizado para spawning masivo de zombis usando Mass Entity + TurboSequence

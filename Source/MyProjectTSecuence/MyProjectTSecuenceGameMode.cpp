@@ -5,7 +5,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
 #include "MassEntitySubsystem.h"
-#include "ZombiSpawnerSubsystem.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 
 AMyProjectTSecuenceGameMode::AMyProjectTSecuenceGameMode()
 {

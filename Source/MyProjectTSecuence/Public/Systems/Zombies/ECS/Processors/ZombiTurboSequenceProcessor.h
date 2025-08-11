@@ -3,12 +3,11 @@
 #pragma once
 
 #include "MassProcessor.h"
-#include "ZombiTurboSequenceFragment.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiCombatFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
 #include "TurboSequence_Manager_Lf.h"
-#include "ZombiBehaviorFragment.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**

@@ -1,23 +1,23 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "ZombiMassSubsystem.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiUpdateFrequencyFragment.h"
-#include "ZombiCombatFragment.h"
-#include "ZombiTurboSequenceFragment.h"
-#include "ZombiMovementProcessor.h"
-#include "ZombiBehaviorProcessor.h"
-#include "ZombiCombatProcessor.h"
-#include "ZombiTurboSequenceProcessor.h"
-#include "ZombiPeriodicChaseProcessor.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUpdateFrequencyFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiCombatProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiPeriodicChaseProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 // ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
-#include "ZombiTags.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 
 // Constructor del subsystem
 UZombiMassSubsystem::UZombiMassSubsystem()

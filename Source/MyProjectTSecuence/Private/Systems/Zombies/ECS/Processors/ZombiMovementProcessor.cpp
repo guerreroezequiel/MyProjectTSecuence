@@ -1,14 +1,14 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "ZombiMovementProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
 #include "MassProcessor.h"
 #include "MassExecutionContext.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiTags.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
-#include "MyProjectTSecuenceCharacter.h"
+#include "MyProjectTSecuence/MyProjectTSecuenceCharacter.h"
 
 UZombiMovementProcessor::UZombiMovementProcessor()
 {

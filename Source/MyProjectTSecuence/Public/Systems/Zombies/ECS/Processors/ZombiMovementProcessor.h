@@ -4,9 +4,9 @@
 
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"
-#include "ZombiCoreFragment.h"
-#include "ZombiBehaviorFragment.h"
-#include "ZombiTags.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "ZombiMovementProcessor.generated.h"
 

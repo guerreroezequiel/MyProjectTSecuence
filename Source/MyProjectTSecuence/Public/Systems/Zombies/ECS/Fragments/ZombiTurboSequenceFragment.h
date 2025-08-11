@@ -6,7 +6,7 @@
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Data_Lf.h"
-#include "ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**

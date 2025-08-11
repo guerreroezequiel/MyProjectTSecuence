@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "ZombiMassSubsystem.h"
-#include "ZombiSpawnerSubsystem.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 #include "MyProjectTSecuenceGameMode.generated.h"
 
 UCLASS(minimalapi)

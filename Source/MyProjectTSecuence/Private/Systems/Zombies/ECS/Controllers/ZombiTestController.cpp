@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "ZombiTestController.h"
-#include "ZombiSpawnerSubsystem.h"
-#include "ZombiMassSubsystem.h"
+#include "Systems/Zombies/ECS/Controllers/ZombiTestController.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
