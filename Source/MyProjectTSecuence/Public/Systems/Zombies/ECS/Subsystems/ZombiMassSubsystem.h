@@ -7,11 +7,11 @@
 #include "MassEntitySubsystem.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiCombatProcessor.h"
+
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 #include "ZombiMassSubsystem.generated.h"

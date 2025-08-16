@@ -299,8 +299,8 @@ void UZombiOptimizedProcessor::ProcessFullMovement(FZombiCoreFragment &CoreFragm
         return;
     }
 
-    // Procesar movimiento aleatorio solo si no está persiguiendo (ni periódicamente ni normalmente)
-    if (!BehaviorFragment.IsChasing() && !BehaviorFragment.IsPeriodicChaseActive())
+    // Procesar movimiento aleatorio solo si no está persiguiendo
+    if (!BehaviorFragment.IsChasing())
     {
         // Actualizar timer de cambio de dirección
         CoreFragment.BehaviorTimer += DeltaTime;
@@ -355,8 +355,8 @@ void UZombiOptimizedProcessor::ProcessFullMovement(FZombiCoreFragment &CoreFragm
         CoreFragment.Position += ForwardDirection * CoreFragment.MovementSpeed * DeltaTime;
     }
 
-    // Aplicar restricciones de área solo si no está persiguiendo (ni periódicamente ni normalmente)
-    if (!BehaviorFragment.IsChasing() && !BehaviorFragment.IsPeriodicChaseActive())
+    // Aplicar restricciones de área solo si no está persiguiendo
+    if (!BehaviorFragment.IsChasing())
     {
         CoreFragment.Position = ClampToMovementArea(CoreFragment.Position, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
     }

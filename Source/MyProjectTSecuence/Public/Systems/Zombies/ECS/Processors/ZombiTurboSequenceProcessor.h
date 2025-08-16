@@ -6,7 +6,7 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
 #include "TurboSequence_Manager_Lf.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
@@ -37,8 +37,7 @@ private:
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
 									 FZombiTurboSequenceFragment &TurboSequenceFragment,
 									 const FZombiBehaviorFragment &BehaviorFragment,
-									 const FZombiCoreFragment &CoreFragment,
-									 const FZombiCombatFragment &CombatFragment);
+									 const FZombiCoreFragment &CoreFragment);
 
 	// Función para cachear animaciones y optimizar búsquedas
 	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);

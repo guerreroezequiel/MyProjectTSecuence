@@ -16,8 +16,6 @@ enum class EZombiState : uint8
     Stand UMETA(DisplayName = "Stand"),
     WalkAround UMETA(DisplayName = "Walk Around"),
     Chase UMETA(DisplayName = "Chase"),
-    Attack UMETA(DisplayName = "Attack"),
-    TakeDamage UMETA(DisplayName = "Take Damage"),
     Dead UMETA(DisplayName = "Dead")
 };
 
@@ -28,8 +26,7 @@ UENUM(BlueprintType)
 enum class EZombiAction : uint8
 {
     None UMETA(DisplayName = "None"),
-    Attacking UMETA(DisplayName = "Attacking"),
-    Damaged UMETA(DisplayName = "Damaged"),
+
     Stunned UMETA(DisplayName = "Stunned"),
     Roaring UMETA(DisplayName = "Roaring")
 };
@@ -67,28 +64,31 @@ struct FZombiBehaviorFragment : public FMassFragment
 {
     GENERATED_BODY()
 
-    // Estados y comportamientos (8 bytes)
+    // Estados y comportamientos (8 bytes) - COMPATIBLE CON DOP
     UPROPERTY()
-    uint32 StateFlags = 0; // Estado principal (3 bits)
+    uint8 CurrentState = 0; // Estado actual (Chase, WalkAround, Attack, etc.)
 
     UPROPERTY()
-    uint32 ActionFlags = 0; // Acciones individuales (4 bits)
+    uint8 StateTimer = 0; // Timer del estado actual (0-255)
 
     UPROPERTY()
-    uint32 ConditionFlags = 0; // Condiciones físicas (2 bits)
+    uint8 StateFlags = 0; // Flags específicos del estado
 
     UPROPERTY()
-    uint32 HordeFlags = 0; // Comportamiento de horda (2 bits)
+    float StateData = 0.0f; // Datos específicos del estado (distancia, dirección, etc.)
+
+    UPROPERTY()
+    uint8 ActionFlags = 0; // Acciones individuales (4 bits)
+
+    UPROPERTY()
+    uint8 ConditionFlags = 0; // Condiciones físicas (2 bits)
+
+    UPROPERTY()
+    uint8 HordeFlags = 0; // Comportamiento de horda (2 bits)
 
     // Timers de comportamiento (16 bytes)
     UPROPERTY()
-    float StateTimer = 0.0f; // Timer del estado actual
-
-    UPROPERTY()
     float ActionTimer = 0.0f; // Timer de la acción actual
-
-    UPROPERTY()
-    float BehaviorTimer = 0.0f; // Timer general de comportamiento
 
     UPROPERTY()
     float DirectionChangeTimer = 0.0f; // Timer para cambio de dirección
@@ -110,19 +110,6 @@ struct FZombiBehaviorFragment : public FMassFragment
     UPROPERTY()
     float ChaseSpeed = 200.0f;
 
-    UPROPERTY()
-    float AttackRange = 150.0f;
-
-    // Configuración de persecución periódica
-    UPROPERTY()
-    float PeriodicChaseInterval = 10.0f; // Intervalo entre persecuciones (10 segundos)
-
-    UPROPERTY()
-    float PeriodicChaseDuration = 5.0f; // Duración de persecución (5 segundos)
-
-    UPROPERTY()
-    float PeriodicChaseDistance = 500.0f; // Distancia para activar persecución periódica (aumentada de 100 a 500)
-
     // Referencias de horda (8 bytes)
     UPROPERTY()
     int32 HordeLeaderIndex = -1; // Índice del líder de la horda
@@ -130,42 +117,38 @@ struct FZombiBehaviorFragment : public FMassFragment
     UPROPERTY()
     float HordeInfluenceRadius = 300.0f; // Radio de influencia de la horda
 
-    // Constructor por defecto
+    // Constructor por defecto - COMPATIBLE CON DOP
     FZombiBehaviorFragment()
     {
+        CurrentState = static_cast<uint8>(EZombiState::WalkAround); // Estado inicial
+        StateTimer = 0;
         StateFlags = 0;
+        StateData = 0.0f;
         ActionFlags = 0;
         ConditionFlags = 0;
         HordeFlags = 0;
-        StateTimer = 0.0f;
         ActionTimer = 0.0f;
-        BehaviorTimer = 0.0f;
         DirectionChangeTimer = 0.0f;
-        ChasePeriodicTimer = 0.0f;
-        ChaseDurationTimer = 0.0f;
         DirectionChangeInterval = 3.0f;
         ChaseDistance = 1000.0f;
         ChaseSpeed = 200.0f;
-        AttackRange = 150.0f;
-        PeriodicChaseInterval = 10.0f;
-        PeriodicChaseDuration = 5.0f;
-        PeriodicChaseDistance = 500.0f;
         HordeLeaderIndex = -1;
         HordeInfluenceRadius = 300.0f;
     }
 
-    // Getters para Estados
-    EZombiState GetState() const { return static_cast<EZombiState>(StateFlags & 0x07); }
+    // Getters para Estados - COMPATIBLE CON DOP
+    EZombiState GetState() const { return static_cast<EZombiState>(CurrentState); }
     bool IsStanding() const { return GetState() == EZombiState::Stand; }
     bool IsWalking() const { return GetState() == EZombiState::WalkAround; }
     bool IsChasing() const { return GetState() == EZombiState::Chase; }
-    bool IsAttacking() const { return GetState() == EZombiState::Attack; }
-    bool IsTakingDamage() const { return GetState() == EZombiState::TakeDamage; }
     bool IsDead() const { return GetState() == EZombiState::Dead; }
 
+    // Getters para datos del estado
+    float GetStateTimer() const { return static_cast<float>(StateTimer) / 100.0f; } // Convertir de 0-255 a segundos
+    uint8 GetStateFlags() const { return StateFlags; }
+    float GetStateData() const { return StateData; }
+
     // Getters para Acciones
-    bool IsAttackingAction() const { return (ActionFlags & 0x01) != 0; }
-    bool IsDamagedAction() const { return (ActionFlags & 0x02) != 0; }
     bool IsStunnedAction() const { return (ActionFlags & 0x04) != 0; }
     bool IsRoaringAction() const { return (ActionFlags & 0x08) != 0; }
 
@@ -183,16 +166,18 @@ struct FZombiBehaviorFragment : public FMassFragment
     bool IsSwarming() const { return GetHordeBehavior() == EZombiHordeBehavior::Swarming; }
     bool IsScattered() const { return GetHordeBehavior() == EZombiHordeBehavior::Scattered; }
 
-    // Setters para Estados
+    // Setters para Estados - COMPATIBLE CON DOP
     void SetState(EZombiState NewState)
     {
-        StateFlags = (StateFlags & 0xF8) | static_cast<uint32>(NewState);
-        StateTimer = 0.0f; // Reset timer al cambiar estado
+        CurrentState = static_cast<uint8>(NewState);
+        StateTimer = 0; // Reset timer al cambiar estado
     }
 
+    void SetStateTimer(float Timer) { StateTimer = static_cast<uint8>(Timer * 100.0f); } // Convertir segundos a 0-255
+    void SetStateFlags(uint8 Flags) { StateFlags = Flags; }
+    void SetStateData(float Data) { StateData = Data; }
+
     // Setters para Acciones
-    void SetAttackingAction(bool bAttacking) { ActionFlags = bAttacking ? (ActionFlags | 0x01) : (ActionFlags & ~0x01); }
-    void SetDamagedAction(bool bDamaged) { ActionFlags = bDamaged ? (ActionFlags | 0x02) : (ActionFlags & ~0x02); }
     void SetStunnedAction(bool bStunned) { ActionFlags = bStunned ? (ActionFlags | 0x04) : (ActionFlags & ~0x04); }
     void SetRoaringAction(bool bRoaring) { ActionFlags = bRoaring ? (ActionFlags | 0x08) : (ActionFlags & ~0x08); }
 
@@ -213,9 +198,4 @@ struct FZombiBehaviorFragment : public FMassFragment
     bool IsInHorde() const { return HordeLeaderIndex >= 0; }
 
     // Utilidades para persecución periódica
-    bool IsInPeriodicChaseDistance(float DistanceToPlayer) const { return DistanceToPlayer <= PeriodicChaseDistance; }
-    bool IsPeriodicChaseTime() const { return ChasePeriodicTimer >= PeriodicChaseInterval; }
-    bool IsPeriodicChaseActive() const { return ChaseDurationTimer > 0.0f; }
-    void StartPeriodicChase() { ChaseDurationTimer = PeriodicChaseDuration; }
-    void ResetPeriodicChaseTimer() { ChasePeriodicTimer = 0.0f; }
 };

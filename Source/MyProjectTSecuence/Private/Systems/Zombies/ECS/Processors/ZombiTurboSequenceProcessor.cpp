@@ -6,7 +6,7 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
 #include "TurboSequence_Manager_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "Animation/BlendSpace.h"
@@ -29,7 +29,7 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesador optimizado inicializado"));
+
         bLoggedConstructor = true;
     }
 }
@@ -40,7 +40,6 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     TransformSyncQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
-    TransformSyncQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -68,7 +67,7 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
         TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCombatFragment> CombatFragments = Context.GetFragmentView<FZombiCombatFragment>();
+
 
         // Log eliminado para optimización de rendimiento
         // static float EntityDebugTimer = 0.0f;
@@ -84,10 +83,10 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
             const FZombiCoreFragment& CoreFragment = CoreFragments[i];
             const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCombatFragment& CombatFragment = CombatFragments[i];
+
 
             // Actualizar animación basada en estado PRIMERO
-            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, BehaviorFragment, CoreFragment, CombatFragment);
+            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, BehaviorFragment, CoreFragment);
             
             // SINCRONIZAR TRANSFORMACIÓN con TurboSequence
             if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.MeshData.IsMeshDataValid())
@@ -115,8 +114,7 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
 void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
                                                                FZombiTurboSequenceFragment &TurboSequenceFragment,
                                                                const FZombiBehaviorFragment &BehaviorFragment,
-                                                               const FZombiCoreFragment &CoreFragment,
-                                                               const FZombiCombatFragment &CombatFragment)
+                                                               const FZombiCoreFragment &CoreFragment)
 {
     // Verificar que tenemos todo lo necesario
     if (!TurboSequenceFragment.TurboSequenceAsset || !TurboSequenceFragment.MeshData.IsMeshDataValid())
@@ -144,7 +142,7 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     float CurrentSpeed = CoreFragment.MovementSpeed;
 
     // Ajustar velocidad basada en estado de persecución
-    if (BehaviorFragment.IsChasing() || BehaviorFragment.IsPeriodicChaseActive())
+    if (BehaviorFragment.IsChasing())
     {
         // Durante persecución, usar velocidad de persecución
         CurrentSpeed = FMath::Max(CurrentSpeed, 80.0f); // Mínimo 80 para persecución

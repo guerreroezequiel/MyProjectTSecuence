@@ -5,7 +5,8 @@
 #include "MassExecutionContext.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
+#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
@@ -24,7 +25,7 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiBehaviorProcessor: Procesador de IA inicializado"));
+    
         bLoggedConstructor = true;
     }
 }
@@ -34,7 +35,8 @@ void UZombiBehaviorProcessor::ConfigureQueries()
     // Query optimizada para comportamiento - solo fragmentos necesarios
     BehaviorQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    BehaviorQuery.AddRequirement<FZombiCombatFragment>(EMassFragmentAccess::ReadOnly);
+
+    BehaviorQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadOnly);
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 }
@@ -54,14 +56,16 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                                      {
         TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-        TArrayView<const FZombiCombatFragment> CombatFragments = Context.GetFragmentView<FZombiCombatFragment>();
+
+        TArrayView<const FZombiStimuliFragment> StimuliFragments = Context.GetFragmentView<FZombiStimuliFragment>();
         const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
             const FZombiCoreFragment& CoreFragment = CoreFragments[i];
-            const FZombiCombatFragment& CombatFragment = CombatFragments[i];
+
+            const FZombiStimuliFragment& StimuliFragment = StimuliFragments[i];
 
             // Solo procesar si está vivo
             if (!BehaviorFragment.IsDead())
@@ -69,8 +73,11 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 // Actualizar timers de comportamiento
                 UpdateActionTimers(BehaviorFragment, DeltaTime);
 
-                // Actualizar estado de comportamiento
-                UpdateBehaviorState(BehaviorFragment, CoreFragment, CombatFragment, DeltaTime);
+                // Evaluar transiciones de estado (DOP-compatible)
+                EvaluateStateTransitions(BehaviorFragment, CoreFragment, StimuliFragment);
+
+                // Actualizar estado actual
+                UpdateCurrentState(BehaviorFragment, CoreFragment, StimuliFragment, DeltaTime);
 
                 // Actualizar comportamiento de horda
                 UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
@@ -78,42 +85,30 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
         } });
 }
 
-void UZombiBehaviorProcessor::UpdateBehaviorState(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiCombatFragment &CombatFragment, float DeltaTime)
+void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment)
 {
-    // Actualizar timer del estado actual
-    BehaviorFragment.StateTimer += DeltaTime;
-
     // Lógica de transición de estados basada en condiciones
     EZombiState CurrentState = BehaviorFragment.GetState();
 
-    // Verificar si está muerto
-    if (CombatFragment.IsDead())
-    {
-        if (CurrentState != EZombiState::Dead)
-        {
-            BehaviorFragment.SetState(EZombiState::Dead);
-            BehaviorFragment.ClearAllActions();
-        }
-        return;
-    }
 
-    // Verificar si está recibiendo daño
-    if (CombatFragment.LastDamageTime < 0.5f) // Acaba de recibir daño
-    {
-        if (CurrentState != EZombiState::TakeDamage)
-        {
-            BehaviorFragment.SetState(EZombiState::TakeDamage);
-            BehaviorFragment.SetDamagedAction(true);
-        }
-        return;
-    }
 
-    // Verificar si está atacando
-    if (BehaviorFragment.IsAttackingAction())
+
+
+
+
+    // NUEVO: Verificar estímulos del jugador (DOP-compatible)
+    if (StimuliFragment.HasPlayerStimulus() && StimuliFragment.HasAnyStimulus())
     {
-        if (CurrentState != EZombiState::Attack)
+        // Si tiene estímulo del jugador, cambiar a estado de persecución
+        if (CurrentState != EZombiState::Chase)
         {
-            BehaviorFragment.SetState(EZombiState::Attack);
+            BehaviorFragment.SetState(EZombiState::Chase);
+            // Guardar datos del estímulo en StateData
+            BehaviorFragment.SetStateData(StimuliFragment.StimulusDistance);
+
+            // Log para debugging
+            UE_LOG(LogTemp, Verbose, TEXT("🧠 BehaviorProcessor: Zombie cambió a Chase por estímulo del jugador - Distancia: %.1f, Intensidad: %d"),
+                   StimuliFragment.StimulusDistance, StimuliFragment.TotalStimulusIntensity);
         }
         return;
     }
@@ -131,6 +126,67 @@ void UZombiBehaviorProcessor::UpdateBehaviorState(FZombiBehaviorFragment &Behavi
         BehaviorFragment.SetState(EZombiState::WalkAround);
     }
 }
+
+void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime)
+{
+    // Actualizar timer del estado actual (DOP-compatible)
+    float CurrentTimer = BehaviorFragment.GetStateTimer();
+    CurrentTimer += DeltaTime;
+    BehaviorFragment.SetStateTimer(CurrentTimer);
+
+    // Lógica específica del estado actual
+    EZombiState CurrentState = BehaviorFragment.GetState();
+
+    switch (CurrentState)
+    {
+    case EZombiState::Chase:
+        // Lógica de persecución
+        UpdateChaseState(BehaviorFragment, StimuliFragment, DeltaTime);
+        break;
+
+    case EZombiState::WalkAround:
+        // Lógica de caminar aleatoriamente
+        UpdateWalkAroundState(BehaviorFragment, DeltaTime);
+        break;
+
+
+
+    default:
+        break;
+    }
+}
+
+void UZombiBehaviorProcessor::UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime)
+{
+    // Verificar si debe dejar de perseguir
+    if (!StimuliFragment.HasPlayerStimulus() || StimuliFragment.IsStimulusExpired())
+    {
+        BehaviorFragment.SetState(EZombiState::WalkAround);
+        return;
+    }
+
+    // Actualizar datos de persecución
+    float DistanceToPlayer = StimuliFragment.StimulusDistance;
+    BehaviorFragment.SetStateData(DistanceToPlayer);
+
+    // Log para debugging
+    UE_LOG(LogTemp, Verbose, TEXT("🧠 ChaseState: Zombie persiguiendo - Distancia: %.1f"), DistanceToPlayer);
+}
+
+void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
+{
+    // Lógica de caminar aleatoriamente
+    float Timer = BehaviorFragment.GetStateTimer();
+
+    // Cambiar dirección cada 3 segundos
+    if (Timer > 3.0f)
+    {
+        BehaviorFragment.SetStateTimer(0.0f);
+        // La dirección se maneja en el MovementProcessor
+    }
+}
+
+
 
 void UZombiBehaviorProcessor::UpdateHordeBehavior(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime)
 {
@@ -162,6 +218,8 @@ void UZombiBehaviorProcessor::UpdateActionTimers(FZombiBehaviorFragment &Behavio
         BehaviorFragment.ClearAllActions();
     }
 
-    // Actualizar timer general de comportamiento
-    BehaviorFragment.BehaviorTimer += DeltaTime;
+    // Actualizar timer de comportamiento (usando StateTimer)
+    float CurrentTimer = BehaviorFragment.GetStateTimer();
+    CurrentTimer += DeltaTime;
+    BehaviorFragment.SetStateTimer(CurrentTimer);
 }

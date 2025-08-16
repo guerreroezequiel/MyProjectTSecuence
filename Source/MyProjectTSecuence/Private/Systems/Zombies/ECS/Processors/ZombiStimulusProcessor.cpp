@@ -1,0 +1,131 @@
+#include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
+#include "Systems/StimulusSubsystem/StimulusSubsystem.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
+#include "MassEntitySubsystem.h"
+#include "MassExecutionContext.h"
+#include "Engine/Engine.h"
+
+UZombiStimulusProcessor::UZombiStimulusProcessor()
+{
+    // Configuración del processor
+    StimulusDetectionRange = 1000.0f; // Rango de detección de estímulos
+    StimulusUpdateInterval = 0.1f;    // Intervalo de actualización de estímulos
+
+    // Configurar orden de ejecución (CRÍTICO)
+    ExecutionOrder.ExecuteBefore.Add(TEXT("MassBehavior"));
+
+    // Ejecutar en PrePhysics para que BehaviorProcessor pueda usar los estímulos
+    ProcessingPhase = EMassProcessingPhase::PrePhysics;
+}
+
+void UZombiStimulusProcessor::ConfigureQueries()
+{
+    // Query para zombis vivos que pueden recibir estímulos
+    StimulusQuery.RegisterWithProcessor(*this);
+    StimulusQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+    StimulusQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadWrite);
+    StimulusQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    StimulusQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+}
+
+void UZombiStimulusProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
+{
+    // Obtener delta time
+    const float DeltaTime = Context.GetDeltaTimeSeconds();
+
+    // Actualizar cache de estímulos
+    UpdateStimulusCache(DeltaTime);
+
+    // Procesar estímulos para cada zombie
+    StimulusQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &ChunkContext)
+                                     {
+        // Obtener arrays de fragmentos
+        const TConstArrayView<FZombiCoreFragment> CoreFragments = ChunkContext.GetFragmentView<FZombiCoreFragment>();
+        TArrayView<FZombiStimuliFragment> StimuliFragments = ChunkContext.GetMutableFragmentView<FZombiStimuliFragment>();
+        
+        // Procesar cada zombie en el chunk
+        for (int32 EntityIndex = 0; EntityIndex < ChunkContext.GetNumEntities(); ++EntityIndex)
+        {
+            const FZombiCoreFragment& CoreFragment = CoreFragments[EntityIndex];
+            FZombiStimuliFragment& StimuliFragment = StimuliFragments[EntityIndex];
+            
+            // Actualizar timers de respuesta
+            UpdateResponseTimers(StimuliFragment, DeltaTime);
+            
+            // Procesar estímulos para este zombie
+            ProcessStimuliForZombie(CoreFragment.Position, StimuliFragment);
+        } });
+}
+
+void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
+{
+    // Actualizar cache periódicamente
+    CacheUpdateTimer += DeltaTime;
+    if (CacheUpdateTimer >= StimulusUpdateInterval)
+    {
+        // Obtener estímulos activos del StimulusSubsystem
+        if (StimulusSubsystem && StimulusSubsystem->IsValidLowLevel())
+        {
+            CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+        }
+        else
+        {
+            // Intentar obtener referencia al StimulusSubsystem
+            if (UWorld *World = GetWorld())
+            {
+                StimulusSubsystem = World->GetSubsystem<UStimulusSubsystem>();
+                if (StimulusSubsystem)
+                {
+                    CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+                }
+            }
+        }
+
+        CacheUpdateTimer = 0.0f;
+    }
+}
+
+void UZombiStimulusProcessor::ProcessStimuliForZombie(const FVector &ZombiePosition, FZombiStimuliFragment &StimuliFragment)
+{
+    // Limpiar estímulos expirados
+    if (StimuliFragment.IsStimulusExpired())
+    {
+        StimuliFragment.ClearStimuli();
+        return;
+    }
+
+    // Procesar cada estímulo activo
+    for (const FStimulusData &Stimulus : CachedActiveStimuli)
+    {
+        // Verificar si el estímulo está en rango
+        if (IsStimulusInRange(ZombiePosition, Stimulus))
+        {
+            // Actualizar estímulo del zombie
+            StimuliFragment.UpdateStimulus(Stimulus, ZombiePosition);
+
+            // Log para debugging (opcional)
+            UE_LOG(LogTemp, Verbose, TEXT("🧠 StimulusProcessor: Zombie recibió estímulo - Tipo: %d, Fuente: %d, Intensidad: %d"),
+                   Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), Stimulus.Intensity);
+        }
+    }
+}
+
+bool UZombiStimulusProcessor::IsStimulusInRange(const FVector &ZombiePosition, const FStimulusData &Stimulus) const
+{
+    // Calcular distancia al estímulo
+    float Distance = FVector::Dist(ZombiePosition, Stimulus.Position);
+
+    // Verificar si está en rango de detección y en radio del estímulo
+    return Distance <= StimulusDetectionRange && Distance <= Stimulus.Radius;
+}
+
+void UZombiStimulusProcessor::UpdateResponseTimers(FZombiStimuliFragment &StimuliFragment, float DeltaTime)
+{
+    // Actualizar timer de respuesta
+    if (StimuliFragment.HasAnyStimulus())
+    {
+        StimuliFragment.ResponseTimer += static_cast<uint16>(DeltaTime * 100.0f);
+    }
+}

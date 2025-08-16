@@ -6,13 +6,15 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiUpdateFrequencyFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiCombatProcessor.h"
+
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiPeriodicChaseProcessor.h"
+
+#include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 // ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
@@ -93,10 +95,6 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     BehaviorFragment.SetHordeBehavior(EZombiHordeBehavior::Individual);
     BehaviorFragment.ChaseDistance = 1000.0f;
     BehaviorFragment.ChaseSpeed = 200.0f;
-    BehaviorFragment.AttackRange = 150.0f;
-
-    // 3. Fragmento de Combate (salud + daño)
-    FZombiCombatFragment CombatFragment(100.0f, 25.0f, 150.0f); // MaxHealth, AttackDamage, AttackRange
 
     // 4. Fragmento de TurboSequence (visual)
     FZombiTurboSequenceFragment TurboSequenceFragment;
@@ -118,12 +116,6 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     BehaviorFragmentInstance.GetMutable<FZombiBehaviorFragment>() = BehaviorFragment;
     FragmentList.Add(BehaviorFragmentInstance);
 
-    // Instancia el fragmento de combate
-    FInstancedStruct CombatFragmentInstance;
-    CombatFragmentInstance.InitializeAs<FZombiCombatFragment>();
-    CombatFragmentInstance.GetMutable<FZombiCombatFragment>() = CombatFragment;
-    FragmentList.Add(CombatFragmentInstance);
-
     // Instancia el fragmento de TurboSequence
     FInstancedStruct TurboSequenceFragmentInstance;
     TurboSequenceFragmentInstance.InitializeAs<FZombiTurboSequenceFragment>();
@@ -135,6 +127,12 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     UpdateFrequencyFragmentInstance.InitializeAs<FZombiUpdateFrequencyFragment>();
     UpdateFrequencyFragmentInstance.GetMutable<FZombiUpdateFrequencyFragment>() = FZombiUpdateFrequencyFragment();
     FragmentList.Add(UpdateFrequencyFragmentInstance);
+
+    // Instancia el fragmento de estímulos (NUEVO - para sistema de estímulos)
+    FInstancedStruct StimuliFragmentInstance;
+    StimuliFragmentInstance.InitializeAs<FZombiStimuliFragment>();
+    StimuliFragmentInstance.GetMutable<FZombiStimuliFragment>() = FZombiStimuliFragment();
+    FragmentList.Add(StimuliFragmentInstance);
 
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
@@ -148,14 +146,8 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Guarda la referencia para limpieza
     RegisteredEntities.Add(EntityHandle);
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Entidad optimizada creada exitosamente - Handle: %d, Total entidades: %d"),
-           EntityHandle.Index, RegisteredEntities.Num());
-
     // Debug: Verificar que la entidad tiene los fragmentos correctos
     DebugEntityFragments(EntityHandle);
-
-    // Verificación adicional: Log de confirmación de creación
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad %d creada exitosamente"), EntityHandle.Index);
 
     return EntityHandle;
 }
@@ -180,8 +172,6 @@ void UZombiMassSubsystem::UnregisterZombiEntity(FMassEntityHandle EntityHandle)
 
     // Remueve de la lista de entidades registradas
     RegisteredEntities.Remove(EntityHandle);
-
-    UE_LOG(LogTemp, Log, TEXT("Entidad zombi desregistrada del Mass Entity System - Handle: %d"), EntityHandle.Index);
 }
 
 // Limpia todas las entidades registradas
@@ -203,8 +193,6 @@ void UZombiMassSubsystem::ClearAllEntities()
     }
 
     RegisteredEntities.Empty();
-
-    UE_LOG(LogTemp, Log, TEXT("Todas las entidades zombi eliminadas del Mass Entity System"));
 }
 
 // OPTIMIZACIÓN: Genera una rotación aleatoria (inline para mejor rendimiento)
@@ -263,9 +251,13 @@ void UZombiMassSubsystem::DebugEntityFragments(FMassEntityHandle EntityHandle)
     }
 
     // En UE5.5, no podemos verificar fragmentos directamente desde EntityManager
-    // Solo podemos loguear que la entidad fue creada exitosamente
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Entity %d - Entidad creada exitosamente"), EntityHandle.Index);
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Entity %d - Se espera que tenga: Core, Behavior, Combat, TurboSequence, ActiveTag"), EntityHandle.Index);
+    // Solo loguear la primera entidad para confirmar que funciona
+    static bool bFirstEntityLogged = false;
+    if (!bFirstEntityLogged)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🎮 Debug Entity %d - Primera entidad creada exitosamente"), EntityHandle.Index);
+        bFirstEntityLogged = true;
+    }
 }
 
 // Debug: Verifica que una entidad tiene los tags correctos

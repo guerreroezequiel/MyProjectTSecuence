@@ -5,7 +5,7 @@
 #include "MassEntityManager.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
 #include "TurboSequence_MinimalData_Lf.h"
@@ -43,8 +43,6 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
         UE_LOG(LogTemp, Error, TEXT("TurboSequence Asset no asignado. Usa SetZombiTurboSequenceAsset primero"));
         return;
     }
-
-    // Log eliminado para optimización de rendimiento
 
     // Spawna los zombis en lotes optimizados para máximo rendimiento
     const int32 BatchSize = 1000; // Aumentado a 1000 para mejor rendimiento
@@ -191,13 +189,6 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     FTransform SpawnTransform(SpawnRotation, SpawnLocation, FVector::OneVector);
 
     // Crear instancia visual de TurboSequence
-    // Log solo para las primeras 3 entidades
-    static int32 LoggedEntities = 0;
-    if (LoggedEntities < 3)
-    {
-        // Log eliminado para optimización de rendimiento
-        LoggedEntities++;
-    }
 
     // OPTIMIZACIÓN: Verificaciones combinadas para mejor rendimiento
     if (!TurboSequenceFragment.TurboSequenceAsset || !IsValid(TurboSequenceFragment.TurboSequenceAsset) || !GetWorld())
@@ -206,25 +197,13 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         return;
     }
 
-    // Log solo para las primeras 3 entidades
-    static int32 LoggedTransforms = 0;
-    if (LoggedTransforms < 3)
-    {
-        // Log eliminado para optimización de rendimiento
-        LoggedTransforms++;
-    }
+
 
     // Crear la instancia visual
     FTurboSequence_MeshSpawnData_Lf SpawnData;
     SpawnData.RootMotionMesh.Mesh = TurboSequenceFragment.TurboSequenceAsset;
 
-    // Logs de verificación solo para la primera entidad
-    static bool bLoggedVerification = false;
-    if (!bLoggedVerification)
-    {
-        // Log eliminado para optimización de rendimiento
-        bLoggedVerification = true;
-    }
+
 
     TurboSequenceFragment.MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
         SpawnData,
@@ -234,13 +213,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     // Verificar instancia creada
     if (TurboSequenceFragment.MeshData.IsMeshDataValid())
     {
-        // Log solo para las primeras 3 entidades
-        static int32 LoggedInstances = 0;
-        if (LoggedInstances < 3)
-        {
-            // Log eliminado para optimización de rendimiento
-            LoggedInstances++;
-        }
+        // Instancia creada exitosamente
     }
     else
     {
@@ -256,13 +229,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     // Configurar Blend Space para animaciones
     ConfigureBlendSpaceForEntity(TurboSequenceFragment);
 
-    // Log final solo para las primeras 3 entidades
-    static int32 LoggedFinal = 0;
-    if (LoggedFinal < 3)
-    {
-        // Log eliminado para optimización de rendimiento
-        LoggedFinal++;
-    }
+
 }
 
 // Procesa reintentos de instancias visuales pendientes

@@ -23,7 +23,7 @@ UZombiMovementProcessor::UZombiMovementProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMovementProcessor: Procesador de movimiento inicializado"));
+    
         bLoggedConstructor = true;
     }
 }

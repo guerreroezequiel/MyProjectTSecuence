@@ -187,7 +187,7 @@ void AZombiTestController::LogSystemStatus()
 
     if (CurrentEntityCount != LastEntityCount)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Entidades activas: %d"), CurrentEntityCount);
+    
         LastEntityCount = CurrentEntityCount;
     }
 }
@@ -202,7 +202,5 @@ void AZombiTestController::LogPerformanceMetrics()
 
     int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
 
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Métricas de Rendimiento:"));
-    UE_LOG(LogTemp, Log, TEXT("  🚀 Entidades procesadas: %d"), CurrentEntityCount);
-    UE_LOG(LogTemp, Log, TEXT("  ⚡ Sistema estable: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
+
 }
