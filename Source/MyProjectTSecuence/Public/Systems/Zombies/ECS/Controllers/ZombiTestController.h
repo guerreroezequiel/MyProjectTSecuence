@@ -43,6 +43,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Zombi Test")
 	void SetTurboSequenceAsset(UTurboSequence_MeshAsset_Lf *Asset);
 
+	// TurboSequence maneja automáticamente la optimización de sombras
+
 	// Asset de TurboSequence para los zombis
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Zombi Test")
 	UTurboSequence_MeshAsset_Lf *ZombiTurboSequenceAsset;
@@ -69,6 +71,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "System Control")
 	float LogInterval = 30.0f; // Logs cada 30 segundos
 
+	// TurboSequence maneja automáticamente la optimización de sombras y LODs
+
 private:
 	// Referencia al subsystem de spawning
 	UPROPERTY()
@@ -77,11 +81,17 @@ private:
 	// Timer para spawn inicial
 	FTimerHandle SpawnTimerHandle;
 
+	// Timer para retry de inicialización
+	FTimerHandle RetryTimerHandle;
+
 	// Control de logs centralizados
 	float SystemLogTimer = 0.0f;
 	float PerformanceLogTimer = 0.0f;
 	int32 LastEntityCount = 0;
 	bool bSystemInitialized = false;
+	bool bSpawnerInitialized = false;
+
+	// TurboSequence maneja automáticamente la optimización
 
 	// Función para spawn inicial con delay
 	void DelayedSpawn();
@@ -93,4 +103,9 @@ private:
 	void UpdateSystemControl(float DeltaTime);
 	void LogSystemStatus();
 	void LogPerformanceMetrics();
+
+	// Inicialización robusta del subsystem con reintentos
+	void InitializeSpawnerSubsystem();
+	void RetryInitializeSpawner();
+	UZombiSpawnerSubsystem *GetSpawnerSubsystem();
 };

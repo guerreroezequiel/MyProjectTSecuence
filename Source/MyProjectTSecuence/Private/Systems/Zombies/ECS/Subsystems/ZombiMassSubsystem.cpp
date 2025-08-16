@@ -3,21 +3,15 @@
 #include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiUpdateFrequencyFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiCombatProcessor.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUltraConsolidatedFragment.h"
+#include "Systems/Zombies/ECS/Processors/ZombiUltraConsolidatedProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiPeriodicChaseProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 // ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
+// Helpers eliminados - lógica movida al procesador ultra-consolidado
 
 // Constructor del subsystem
 UZombiMassSubsystem::UZombiMassSubsystem()
@@ -61,7 +55,7 @@ void UZombiMassSubsystem::Deinitialize()
     Super::Deinitialize();
 }
 
-// Registra una entidad zombi en el sistema Mass Entity (nuevo método sin Actors)
+// Registra una entidad zombi en el sistema Mass Entity usando fragmento ultra-consolidado
 FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnLocation,
                                                            UTurboSequence_MeshAsset_Lf *TurboSequenceAsset)
 {
@@ -79,62 +73,46 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Crea la entidad Mass usando el método más simple de UE5.5
     FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
 
-    // Crea los fragmentos especializados con los datos iniciales
-    // 1. Fragmento Core (movimiento + transformación)
-    FZombiCoreFragment CoreFragment(SpawnLocation, GenerateRandomRotation(), 500.0f);
-    CoreFragment.MovementSpeed = FMath::RandRange(25.0f, 80.0f);
-    CoreFragment.RotationSpeed = FMath::RandRange(60.0f, 120.0f);
-    CoreFragment.DirectionChangeInterval = FMath::RandRange(2.0f, 5.0f);
+    // Crea el fragmento ultra-consolidado con todos los datos necesarios
+    FZombiUltraConsolidatedFragment UltraFragment;
+    
+    // Datos de transformación
+    UltraFragment.Position = SpawnLocation;
+    UltraFragment.Rotation = GenerateRandomRotation();
+    UltraFragment.MovementSpeed = FMath::RandRange(80.0f, 150.0f);
+    
+    // Datos de estado
+    UltraFragment.State = ZombiStates::WALK; // Estado inicial
+    UltraFragment.Health = 100;
+    UltraFragment.Flags = 0;
+    UltraFragment.UpdatePriority = ZombiPriorities::NORMAL;
+    
+    // Datos de movimiento
+    UltraFragment.MovementDirection = FVector::ForwardVector;
+    UltraFragment.BehaviorTimer = 0.0f;
+    UltraFragment.DirectionChangeInterval = FMath::RandRange(1.0f, 3.0f);
+    
+    // Datos de combate
+    UltraFragment.AttackCooldown = 0.0f;
+    UltraFragment.DamageCooldown = 0.0f;
+    UltraFragment.LastDamageTime = 0.0f;
+    
+    // Datos de optimización
+    UltraFragment.DistanceToPlayer = 0.0f;
+    UltraFragment.LastUpdateTime = 0.0f;
+    UltraFragment.UpdateInterval = 1.0f / 60.0f;
+    
+    // Datos visuales
+    UltraFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // Distribuye en 4 grupos
 
-    // 2. Fragmento de Comportamiento (IA + estados)
-    FZombiBehaviorFragment BehaviorFragment;
-    BehaviorFragment.SetState(EZombiState::WalkAround); // Estado inicial
-    BehaviorFragment.SetCondition(EZombiCondition::Healthy);
-    BehaviorFragment.SetHordeBehavior(EZombiHordeBehavior::Individual);
-    BehaviorFragment.ChaseDistance = 1000.0f;
-    BehaviorFragment.ChaseSpeed = 200.0f;
-    BehaviorFragment.AttackRange = 150.0f;
-
-    // 3. Fragmento de Combate (salud + daño)
-    FZombiCombatFragment CombatFragment(100.0f, 25.0f, 150.0f); // MaxHealth, AttackDamage, AttackRange
-
-    // 4. Fragmento de TurboSequence (visual)
-    FZombiTurboSequenceFragment TurboSequenceFragment;
-    TurboSequenceFragment.TurboSequenceAsset = TurboSequenceAsset;
-    TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // Distribuye en 4 grupos
-
-    // Crea la entidad con los fragmentos ya instanciados (método correcto de UE5.5)
+    // Crea la entidad con el fragmento ultra-consolidado
     TArray<FInstancedStruct> FragmentList;
 
-    // Instancia el fragmento Core
-    FInstancedStruct CoreFragmentInstance;
-    CoreFragmentInstance.InitializeAs<FZombiCoreFragment>();
-    CoreFragmentInstance.GetMutable<FZombiCoreFragment>() = CoreFragment;
-    FragmentList.Add(CoreFragmentInstance);
-
-    // Instancia el fragmento de comportamiento
-    FInstancedStruct BehaviorFragmentInstance;
-    BehaviorFragmentInstance.InitializeAs<FZombiBehaviorFragment>();
-    BehaviorFragmentInstance.GetMutable<FZombiBehaviorFragment>() = BehaviorFragment;
-    FragmentList.Add(BehaviorFragmentInstance);
-
-    // Instancia el fragmento de combate
-    FInstancedStruct CombatFragmentInstance;
-    CombatFragmentInstance.InitializeAs<FZombiCombatFragment>();
-    CombatFragmentInstance.GetMutable<FZombiCombatFragment>() = CombatFragment;
-    FragmentList.Add(CombatFragmentInstance);
-
-    // Instancia el fragmento de TurboSequence
-    FInstancedStruct TurboSequenceFragmentInstance;
-    TurboSequenceFragmentInstance.InitializeAs<FZombiTurboSequenceFragment>();
-    TurboSequenceFragmentInstance.GetMutable<FZombiTurboSequenceFragment>() = TurboSequenceFragment;
-    FragmentList.Add(TurboSequenceFragmentInstance);
-
-    // Instancia el fragmento de frecuencia de update (NUEVO - para optimización)
-    FInstancedStruct UpdateFrequencyFragmentInstance;
-    UpdateFrequencyFragmentInstance.InitializeAs<FZombiUpdateFrequencyFragment>();
-    UpdateFrequencyFragmentInstance.GetMutable<FZombiUpdateFrequencyFragment>() = FZombiUpdateFrequencyFragment();
-    FragmentList.Add(UpdateFrequencyFragmentInstance);
+    // Instancia el fragmento ultra-consolidado
+    FInstancedStruct UltraFragmentInstance;
+    UltraFragmentInstance.InitializeAs<FZombiUltraConsolidatedFragment>();
+    UltraFragmentInstance.GetMutable<FZombiUltraConsolidatedFragment>() = UltraFragment;
+    FragmentList.Add(UltraFragmentInstance);
 
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
@@ -142,20 +120,8 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Agregar tags necesarios para que los queries optimizados funcionen
     EntityManager.AddTagToEntity(EntityHandle, FActiveTag::StaticStruct());
 
-    // IMPORTANTE: NO agregar FDeadTag - el query del MovementProcessor requiere EMassFragmentPresence::None para DeadTag
-    // Esto significa que las entidades NO deben tener el DeadTag para ser procesadas
-
     // Guarda la referencia para limpieza
     RegisteredEntities.Add(EntityHandle);
-
-    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Entidad optimizada creada exitosamente - Handle: %d, Total entidades: %d"),
-           EntityHandle.Index, RegisteredEntities.Num());
-
-    // Debug: Verificar que la entidad tiene los fragmentos correctos
-    DebugEntityFragments(EntityHandle);
-
-    // Verificación adicional: Log de confirmación de creación
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Entidad %d creada exitosamente"), EntityHandle.Index);
 
     return EntityHandle;
 }
@@ -181,7 +147,7 @@ void UZombiMassSubsystem::UnregisterZombiEntity(FMassEntityHandle EntityHandle)
     // Remueve de la lista de entidades registradas
     RegisteredEntities.Remove(EntityHandle);
 
-    UE_LOG(LogTemp, Log, TEXT("Entidad zombi desregistrada del Mass Entity System - Handle: %d"), EntityHandle.Index);
+    // Log de desregistro eliminado para optimización de rendimiento
 }
 
 // Limpia todas las entidades registradas
@@ -262,10 +228,7 @@ void UZombiMassSubsystem::DebugEntityFragments(FMassEntityHandle EntityHandle)
         return;
     }
 
-    // En UE5.5, no podemos verificar fragmentos directamente desde EntityManager
-    // Solo podemos loguear que la entidad fue creada exitosamente
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Entity %d - Entidad creada exitosamente"), EntityHandle.Index);
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Entity %d - Se espera que tenga: Core, Behavior, Combat, TurboSequence, ActiveTag"), EntityHandle.Index);
+    // Logs de debug eliminados para optimización de rendimiento
 }
 
 // Debug: Verifica que una entidad tiene los tags correctos
@@ -276,10 +239,7 @@ void UZombiMassSubsystem::DebugEntityTags(FMassEntityHandle EntityHandle)
         return;
     }
 
-    // En UE5.5, no podemos verificar tags directamente, pero podemos loguear información útil
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Tags Entity %d - Verificando tags después de un frame"), EntityHandle.Index);
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Tags Entity %d - Debe tener: ActiveTag ✓, DeadTag ✗"), EntityHandle.Index);
-    UE_LOG(LogTemp, Log, TEXT("🎮 Debug Tags Entity %d - Si no se procesa, verificar que NO tenga DeadTag"), EntityHandle.Index);
+    // Logs de debug eliminados para optimización de rendimiento
 }
 
 // Verifica que los procesadores están registrados correctamente
@@ -290,9 +250,5 @@ void UZombiMassSubsystem::VerifyProcessorsRegistration()
         return;
     }
 
-    // En UE5.5.4, los procesadores se registran automáticamente
-    // Solo podemos verificar que el sistema Mass Entity esté funcionando
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Verificando registro de procesadores"));
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: MassEntitySubsystem válido: %s"),
-           MassEntitySubsystem ? TEXT("Sí") : TEXT("No"));
+    // Logs de verificación eliminados para optimización de rendimiento
 }

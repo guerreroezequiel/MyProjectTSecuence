@@ -6,6 +6,7 @@
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
+#include "Engine/World.h"
 
 AZombiTestController::AZombiTestController()
 {
@@ -21,36 +22,43 @@ void AZombiTestController::BeginPlay()
     // Hace que este actor sea fácil de encontrar en el mundo (más seguro aquí)
     SetActorLabel(TEXT("ZombiTestController"));
 
-    // Obtiene el subsystem de spawning
-    SpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>();
-
-    if (SpawnerSubsystem)
+    // Verificar que estamos en el mundo correcto (solo servidor para spawning)
+    if (GetNetMode() == NM_Client)
     {
-        // Configura el asset de TurboSequence si está asignado
-        if (ZombiTurboSequenceAsset)
-        {
-            SpawnerSubsystem->SetZombiTurboSequenceAsset(ZombiTurboSequenceAsset);
-            UE_LOG(LogTemp, Log, TEXT("ZombiTestController: TurboSequence Asset configurado: %s"), *ZombiTurboSequenceAsset->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: Ejecutándose en cliente - spawning deshabilitado"));
+        return;
+    }
 
-            // Spawn automático con delay para asegurar que los subsystems estén listos
-            GetWorld()->GetTimerManager().SetTimer(SpawnTimerHandle, this, &AZombiTestController::DelayedSpawn, 1.0f, false);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: No hay TurboSequence Asset asignado"));
-        }
-    }
-    else
+    // Verificar que tenemos el asset de TurboSequence asignado
+    if (!ZombiTurboSequenceAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: SpawnerSubsystem no disponible"));
+        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: No hay TurboSequence Asset asignado. Asigna uno en el Blueprint antes de ejecutar."));
+        return;
     }
+
+    // TurboSequence maneja automáticamente la optimización de sombras
+    // No necesitamos optimización manual
+
+    // Inicialización robusta del subsystem con reintentos
+    InitializeSpawnerSubsystem();
+
+    // Configurar timer de retry para asegurar que el subsystem esté disponible
+    GetWorld()->GetTimerManager().SetTimer(RetryTimerHandle, this, &AZombiTestController::RetryInitializeSpawner, 0.5f, true);
 }
 
 void AZombiTestController::SpawnZombiBatch(int32 Count)
 {
-    if (!SpawnerSubsystem)
+    // Verificar que tenemos el asset configurado
+    if (!ZombiTurboSequenceAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: SpawnerSubsystem no disponible"));
+        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: No hay TurboSequence Asset asignado. Asigna uno en el Blueprint antes de spawnear."));
+        return;
+    }
+
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: SpawnerSubsystem no disponible - reintentando en el próximo frame"));
         return;
     }
 
@@ -61,14 +69,22 @@ void AZombiTestController::SpawnZombiBatch(int32 Count)
         SpawnLocation = GetActorLocation();
     }
 
-    SpawnerSubsystem->SpawnZombiBatch(Count, SpawnLocation, SpawnRadius);
+    Spawner->SpawnZombiBatch(Count, SpawnLocation, SpawnRadius);
 }
 
 void AZombiTestController::SpawnSingleZombi()
 {
-    if (!SpawnerSubsystem)
+    // Verificar que tenemos el asset configurado
+    if (!ZombiTurboSequenceAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: SpawnerSubsystem no disponible"));
+        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: No hay TurboSequence Asset asignado. Asigna uno en el Blueprint antes de spawnear."));
+        return;
+    }
+
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: SpawnerSubsystem no disponible - reintentando en el próximo frame"));
         return;
     }
 
@@ -79,29 +95,31 @@ void AZombiTestController::SpawnSingleZombi()
         SpawnLocation = GetActorLocation();
     }
 
-    SpawnerSubsystem->SpawnSingleZombi(SpawnLocation);
+    Spawner->SpawnSingleZombi(SpawnLocation);
 }
 
 void AZombiTestController::ClearAllZombis()
 {
-    if (!SpawnerSubsystem)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: SpawnerSubsystem no disponible"));
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: SpawnerSubsystem no disponible - reintentando en el próximo frame"));
         return;
     }
 
-    SpawnerSubsystem->ClearAllZombis();
+    Spawner->ClearAllZombis();
 }
 
 int32 AZombiTestController::GetActiveZombiCount()
 {
-    if (!SpawnerSubsystem)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiTestController: SpawnerSubsystem no disponible"));
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: SpawnerSubsystem no disponible - reintentando en el próximo frame"));
         return 0;
     }
 
-    int32 Count = SpawnerSubsystem->GetActiveZombiCount();
+    int32 Count = Spawner->GetActiveZombiCount();
     return Count;
 }
 
@@ -109,12 +127,16 @@ void AZombiTestController::SetTurboSequenceAsset(UTurboSequence_MeshAsset_Lf *As
 {
     ZombiTurboSequenceAsset = Asset;
 
-    if (SpawnerSubsystem && Asset)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (Spawner && Asset)
     {
-        SpawnerSubsystem->SetZombiTurboSequenceAsset(Asset);
+        Spawner->SetZombiTurboSequenceAsset(Asset);
         UE_LOG(LogTemp, Log, TEXT("ZombiTestController: TurboSequence Asset configurado: %s"), *Asset->GetName());
     }
 }
+
+// TurboSequence maneja automáticamente la optimización de sombras
+// No necesitamos optimización manual
 
 void AZombiTestController::DelayedSpawn()
 {
@@ -141,9 +163,10 @@ void AZombiTestController::Tick(float DeltaTime)
     UpdateSystemControl(DeltaTime);
 
     // Procesa instancias visuales pendientes
-    if (SpawnerSubsystem)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (Spawner)
     {
-        SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
+        Spawner->ProcessPendingVisualInstances(DeltaTime);
     }
 
     // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización
@@ -178,31 +201,91 @@ void AZombiTestController::UpdateSystemControl(float DeltaTime)
 // Logs centralizados del estado del sistema
 void AZombiTestController::LogSystemStatus()
 {
-    if (!SpawnerSubsystem)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
     {
         return;
     }
 
-    int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
+    int32 CurrentEntityCount = Spawner->GetActiveZombiCount();
 
-    if (CurrentEntityCount != LastEntityCount)
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Entidades activas: %d"), CurrentEntityCount);
-        LastEntityCount = CurrentEntityCount;
-    }
+    // Log de cambio de entidades eliminado para optimización de rendimiento
+    LastEntityCount = CurrentEntityCount;
 }
 
 // Logs centralizados de métricas de rendimiento
 void AZombiTestController::LogPerformanceMetrics()
 {
-    if (!SpawnerSubsystem)
+    UZombiSpawnerSubsystem *Spawner = GetSpawnerSubsystem();
+    if (!Spawner)
     {
         return;
     }
 
-    int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
+    int32 CurrentEntityCount = Spawner->GetActiveZombiCount();
 
-    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTestController: Métricas de Rendimiento:"));
-    UE_LOG(LogTemp, Log, TEXT("  🚀 Entidades procesadas: %d"), CurrentEntityCount);
-    UE_LOG(LogTemp, Log, TEXT("  ⚡ Sistema estable: %s"), CurrentEntityCount > 0 ? TEXT("✅") : TEXT("❌"));
+    // Logs de métricas eliminados para optimización de rendimiento
+}
+
+// Inicialización robusta del SpawnerSubsystem con manejo de dependencias
+void AZombiTestController::InitializeSpawnerSubsystem()
+{
+    // Intentar obtener el subsystem
+    SpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>();
+
+    if (SpawnerSubsystem)
+    {
+        UE_LOG(LogTemp, Log, TEXT("ZombiTestController: SpawnerSubsystem inicializado exitosamente"));
+
+        // Configurar el asset de TurboSequence si está asignado
+        if (ZombiTurboSequenceAsset)
+        {
+            SpawnerSubsystem->SetZombiTurboSequenceAsset(ZombiTurboSequenceAsset);
+            UE_LOG(LogTemp, Log, TEXT("ZombiTestController: TurboSequence Asset configurado: %s"), *ZombiTurboSequenceAsset->GetName());
+
+            // Spawn automático con delay para asegurar que los subsystems estén listos
+            GetWorld()->GetTimerManager().SetTimer(SpawnTimerHandle, this, &AZombiTestController::DelayedSpawn, 1.0f, false);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: No hay TurboSequence Asset asignado"));
+        }
+
+        // Detener el timer de retry ya que el subsystem está disponible
+        GetWorld()->GetTimerManager().ClearTimer(RetryTimerHandle);
+        bSpawnerInitialized = true;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ZombiTestController: SpawnerSubsystem no disponible - reintentando..."));
+        bSpawnerInitialized = false;
+    }
+}
+
+// Método de retry para inicialización del SpawnerSubsystem
+void AZombiTestController::RetryInitializeSpawner()
+{
+    // Solo reintentar si aún no está inicializado
+    if (!bSpawnerInitialized)
+    {
+        InitializeSpawnerSubsystem();
+    }
+}
+
+// Método seguro para obtener el SpawnerSubsystem con reintento
+UZombiSpawnerSubsystem *AZombiTestController::GetSpawnerSubsystem()
+{
+    if (!SpawnerSubsystem)
+    {
+        // Intentar obtener el subsystem una vez más
+        SpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>();
+
+        if (SpawnerSubsystem)
+        {
+            UE_LOG(LogTemp, Log, TEXT("ZombiTestController: SpawnerSubsystem obtenido en retry"));
+            bSpawnerInitialized = true;
+        }
+    }
+
+    return SpawnerSubsystem;
 }

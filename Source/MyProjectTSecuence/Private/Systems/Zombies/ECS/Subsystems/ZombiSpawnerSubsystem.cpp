@@ -3,10 +3,7 @@
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUltraConsolidatedFragment.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
@@ -40,7 +37,7 @@ void UZombiSpawnerSubsystem::SpawnZombiBatch(int32 Count, const FVector &CenterL
 {
     if (!ZombiTurboSequenceAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("TurboSequence Asset no asignado. Usa SetZombiTurboSequenceAsset primero"));
+        UE_LOG(LogTemp, Error, TEXT("TurboSequence Asset no asignado. Asigna el asset en el ZombiTestController antes de spawnear."));
         return;
     }
 
@@ -87,7 +84,7 @@ void UZombiSpawnerSubsystem::SpawnSingleZombi(const FVector &Location)
 {
     if (!ZombiTurboSequenceAsset)
     {
-        UE_LOG(LogTemp, Error, TEXT("TurboSequence Asset no asignado para spawning individual"));
+        UE_LOG(LogTemp, Error, TEXT("TurboSequence Asset no asignado. Asigna el asset en el ZombiTestController antes de spawnear."));
         return;
     }
 
@@ -178,13 +175,12 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         }
     }
 
-    // Obtener el fragmento de TurboSequence
-    FZombiTurboSequenceFragment &TurboSequenceFragment = MassEntitySubsystem->GetEntityManager()
-                                                             .GetFragmentDataChecked<FZombiTurboSequenceFragment>(EntityHandle);
+    // Obtener el fragmento ultra-consolidado
+    FZombiUltraConsolidatedFragment &UltraFragment = MassEntitySubsystem->GetEntityManager()
+                                                             .GetFragmentDataChecked<FZombiUltraConsolidatedFragment>(EntityHandle);
 
-    // Configurar el asset y grupo de actualización
-    TurboSequenceFragment.TurboSequenceAsset = ZombiTurboSequenceAsset;
-    TurboSequenceFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // 4 grupos de actualización
+    // Configurar el grupo de actualización
+    UltraFragment.UpdateGroupIndex = FMath::RandRange(0, 3); // 4 grupos de actualización
 
     // Crear transform de spawn sin offset - el asset ya está orientado correctamente
     FRotator SpawnRotation = GenerateRandomRotation();
@@ -200,7 +196,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     }
 
     // OPTIMIZACIÓN: Verificaciones combinadas para mejor rendimiento
-    if (!TurboSequenceFragment.TurboSequenceAsset || !IsValid(TurboSequenceFragment.TurboSequenceAsset) || !GetWorld())
+    if (!ZombiTurboSequenceAsset || !IsValid(ZombiTurboSequenceAsset) || !GetWorld())
     {
         UE_LOG(LogTemp, Error, TEXT("ZombiSpawnerSubsystem: Asset o World inválido para entidad %d"), EntityHandle.Index);
         return;
@@ -216,7 +212,7 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
 
     // Crear la instancia visual
     FTurboSequence_MeshSpawnData_Lf SpawnData;
-    SpawnData.RootMotionMesh.Mesh = TurboSequenceFragment.TurboSequenceAsset;
+    SpawnData.RootMotionMesh.Mesh = ZombiTurboSequenceAsset;
 
     // Logs de verificación solo para la primera entidad
     static bool bLoggedVerification = false;
@@ -226,13 +222,13 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         bLoggedVerification = true;
     }
 
-    TurboSequenceFragment.MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
+    UltraFragment.MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
         SpawnData,
         SpawnTransform,
         GetWorld());
 
     // Verificar instancia creada
-    if (TurboSequenceFragment.MeshData.IsMeshDataValid())
+    if (UltraFragment.MeshData.IsMeshDataValid())
     {
         // Log solo para las primeras 3 entidades
         static int32 LoggedInstances = 0;
@@ -250,11 +246,11 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
 
     // Agregar al grupo de actualización
     ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(
-        TurboSequenceFragment.UpdateGroupIndex,
-        TurboSequenceFragment.MeshData);
+        UltraFragment.UpdateGroupIndex,
+        UltraFragment.MeshData);
 
     // Configurar Blend Space para animaciones
-    ConfigureBlendSpaceForEntity(TurboSequenceFragment);
+    ConfigureBlendSpaceForEntity(UltraFragment);
 
     // Log final solo para las primeras 3 entidades
     static int32 LoggedFinal = 0;
@@ -287,14 +283,12 @@ void UZombiSpawnerSubsystem::ProcessPendingVisualInstances(float DeltaTime)
         MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
         if (!MassEntitySubsystem)
         {
-            UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: MassEntitySubsystem aún no disponible, %d instancias pendientes"),
-                   PendingVisualInstances.Num());
+            // Log eliminado para optimización de rendimiento
             return;
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Procesando %d instancias visuales pendientes"),
-           PendingVisualInstances.Num());
+    // Log eliminado para optimización de rendimiento
 
     // Procesar instancias pendientes
     TArray<FMassEntityHandle> StillPending;
@@ -304,10 +298,10 @@ void UZombiSpawnerSubsystem::ProcessPendingVisualInstances(float DeltaTime)
         if (EntityHandle.IsValid())
         {
             // Obtener la posición de la entidad para recrear la instancia visual
-            FZombiCoreFragment &CoreFragment = MassEntitySubsystem->GetEntityManager()
-                                                   .GetFragmentDataChecked<FZombiCoreFragment>(EntityHandle);
+            FZombiUltraConsolidatedFragment &UltraFragment = MassEntitySubsystem->GetEntityManager()
+                                                   .GetFragmentDataChecked<FZombiUltraConsolidatedFragment>(EntityHandle);
 
-            CreateTurboSequenceVisualInstance(EntityHandle, CoreFragment.Position);
+            CreateTurboSequenceVisualInstance(EntityHandle, UltraFragment.Position);
         }
         else
         {
@@ -319,22 +313,22 @@ void UZombiSpawnerSubsystem::ProcessPendingVisualInstances(float DeltaTime)
     PendingVisualInstances = StillPending;
 }
 
-void UZombiSpawnerSubsystem::ConfigureBlendSpaceForEntity(FZombiTurboSequenceFragment &TurboSequenceFragment)
+void UZombiSpawnerSubsystem::ConfigureBlendSpaceForEntity(FZombiUltraConsolidatedFragment &UltraFragment)
 {
-    if (!TurboSequenceFragment.MeshData.IsMeshDataValid())
+    if (!UltraFragment.MeshData.IsMeshDataValid())
     {
         UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: MeshData no válido"));
         return;
     }
 
     // Verificación estricta del asset antes de usarlo
-    if (!TurboSequenceFragment.TurboSequenceAsset)
+    if (!ZombiTurboSequenceAsset)
     {
         UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: TurboSequenceAsset es null"));
         return;
     }
 
-    if (!IsValid(TurboSequenceFragment.TurboSequenceAsset))
+    if (!IsValid(ZombiTurboSequenceAsset))
     {
         UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: TurboSequenceAsset no es válido"));
         return;
@@ -345,32 +339,29 @@ void UZombiSpawnerSubsystem::ConfigureBlendSpaceForEntity(FZombiTurboSequenceFra
     if (!bLoggedAssetDiagnostic)
     {
         UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Asset configurado - %d animaciones disponibles"),
-               TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary ? TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() : 0);
+               ZombiTurboSequenceAsset->AnimationLibrary ? ZombiTurboSequenceAsset->AnimationLibrary->Animations.Num() : 0);
         bLoggedAssetDiagnostic = true;
     }
 
-    /*
-    // Configurar animación por defecto
-    if (TurboSequenceFragment.TurboSequenceAsset->OverrideDefaultAnimation)
+    // Configurar animación por defecto para el fragmento ultra-consolidado
+    if (ZombiTurboSequenceAsset->OverrideDefaultAnimation)
     {
-        UE_LOG(LogTemp, Log, TEXT("ZombiSpawnerSubsystem: Animación por defecto disponible: %s (reproducción temporalmente deshabilitada)"),
-               *TurboSequenceFragment.TurboSequenceAsset->OverrideDefaultAnimation->GetName());
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Configurando animación por defecto: %s"),
+               *ZombiTurboSequenceAsset->OverrideDefaultAnimation->GetName());
 
-        // TEMPORAL: Comentar reproducción de animaciones para evitar crash
-        // Configurar animación por defecto - usar configuración mínima
-        // FTurboSequence_AnimPlaySettings_Lf AnimSettings;
-        // Los campos específicos se configurarán según la estructura real
+        // Configurar animación por defecto
+        FTurboSequence_AnimPlaySettings_Lf AnimSettings;
+        // Los campos se configuran automáticamente por TurboSequence
 
         // Reproducir animación por defecto
-        // ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-        //     TurboSequenceFragment.MeshData,
-        //     TurboSequenceFragment.TurboSequenceAsset->OverrideDefaultAnimation,
-        //     AnimSettings
-        // );
+        ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+            UltraFragment.MeshData,
+            Cast<UAnimSequence>(ZombiTurboSequenceAsset->OverrideDefaultAnimation),
+            AnimSettings
+        );
     }
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("ZombiSpawnerSubsystem: No hay animación por defecto configurada"));
     }
-    */
 }

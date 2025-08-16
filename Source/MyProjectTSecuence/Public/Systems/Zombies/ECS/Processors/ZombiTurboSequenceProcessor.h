@@ -3,16 +3,15 @@
 #pragma once
 
 #include "MassProcessor.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCombatFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUltraConsolidatedFragment.h"
+// Helpers eliminados - lógica movida al procesador ultra-consolidado
 #include "TurboSequence_Manager_Lf.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**
  * Procesador para sincronizar entidades Mass con instancias visuales TurboSequence
- * Optimizado para usar fragmentos especializados
+ * Simplificado para usar fragmento ultra-consolidado
+ * Solo sincroniza transformaciones - las animaciones se manejan automáticamente por TurboSequence
  */
 UCLASS()
 class UZombiTurboSequenceProcessor : public UMassProcessor
@@ -30,16 +29,12 @@ private:
 	// Query para sincronizar transformaciones
 	FMassEntityQuery TransformSyncQuery{*this};
 
-	// Query para actualizar Blend Space (futuro)
-	FMassEntityQuery BlendSpaceQuery{*this};
-
-	// Función para actualizar animaciones basadas en estado del zombi
+	/**
+	 * @brief Método simplificado para el fragmento ultra-consolidado
+	 * @param Context Contexto de ejecución
+	 * @param EntityIndex Índice de la entidad
+	 * @param UltraFragment Fragmento ultra-consolidado
+	 */
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
-									 FZombiTurboSequenceFragment &TurboSequenceFragment,
-									 const FZombiBehaviorFragment &BehaviorFragment,
-									 const FZombiCoreFragment &CoreFragment,
-									 const FZombiCombatFragment &CombatFragment);
-
-	// Función para cachear animaciones y optimizar búsquedas
-	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);
+									 FZombiUltraConsolidatedFragment &UltraFragment);
 };

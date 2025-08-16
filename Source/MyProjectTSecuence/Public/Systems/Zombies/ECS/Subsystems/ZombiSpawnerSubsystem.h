@@ -7,7 +7,7 @@
 #include "MassEntitySubsystem.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_MinimalData_Lf.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiUltraConsolidatedFragment.h"
 #include "ZombiSpawnerSubsystem.generated.h"
 
 // Subsystem optimizado para spawning masivo de zombis usando Mass Entity + TurboSequence
@@ -47,10 +47,11 @@ public:
 	// Procesa reintentos de instancias visuales pendientes
 	void ProcessPendingVisualInstances(float DeltaTime);
 
-private:
-	// Asset de TurboSequence para los zombis
+	// Asset de TurboSequence para los zombis (público para acceso desde procesadores)
 	UPROPERTY()
 	TObjectPtr<UTurboSequence_MeshAsset_Lf> ZombiTurboSequenceAsset;
+
+private:
 
 	// Referencia al MassEntitySubsystem
 	UPROPERTY()
@@ -74,7 +75,7 @@ private:
 	FMassEntityHandle CreateZombiMassEntity(const FVector &SpawnLocation);
 
 	// Configura el Blend Space para una entidad
-	void ConfigureBlendSpaceForEntity(FZombiTurboSequenceFragment &TurboSequenceFragment);
+	void ConfigureBlendSpaceForEntity(FZombiUltraConsolidatedFragment &UltraFragment);
 
 	// Genera una ubicación de spawn aleatoria
 	FVector GenerateRandomSpawnLocation(const FVector &Center, float Radius) const;
