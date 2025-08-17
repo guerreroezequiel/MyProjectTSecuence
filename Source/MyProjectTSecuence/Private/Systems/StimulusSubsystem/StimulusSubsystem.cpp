@@ -129,6 +129,14 @@ void UStimulusSubsystem::AddStimulus(const FStimulusData &Stimulus)
     // Log para debugging (opcional)
     UE_LOG(LogTemp, Verbose, TEXT("🧠 StimulusSubsystem: Estímulo agregado - Tipo: %d, Fuente: %d, Intensidad: %d, Radio: %.1f"),
            Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), Stimulus.Intensity, Stimulus.Radius);
+
+    // DEBUG: Log para verificar que se están recibiendo estímulos
+    static int32 DebugCounter = 0;
+    if (++DebugCounter % 50 == 0) // Log cada 5 segundos (50 * 0.1s)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🧠 StimulusSubsystem: Estímulo recibido - Tipo: %d, Fuente: %d, Pos: %s"),
+               Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), *Stimulus.Position.ToString());
+    }
 }
 
 void UStimulusSubsystem::CleanupExpiredStimuli()

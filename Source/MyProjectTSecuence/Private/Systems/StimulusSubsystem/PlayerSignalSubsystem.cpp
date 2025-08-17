@@ -3,6 +3,7 @@
 #include "MyProjectTSecuence/MyProjectTSecuenceCharacter.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "Stats/Stats.h"
 
 UPlayerSignalSubsystem::UPlayerSignalSubsystem()
 {
@@ -51,6 +52,7 @@ void UPlayerSignalSubsystem::OnWorldBeginPlay(UWorld &InWorld)
     }
 }
 
+// FTickableGameObject interface
 void UPlayerSignalSubsystem::Tick(float DeltaTime)
 {
     // Solo ejecutar si el sistema está inicializado
@@ -71,7 +73,32 @@ void UPlayerSignalSubsystem::Tick(float DeltaTime)
     {
         EmitPositionSignal();
         PositionUpdateTimer = 0.0f;
+
+        // DEBUG: Log para verificar que se están enviando estímulos
+        static int32 DebugCounter = 0;
+        if (++DebugCounter % 100 == 0) // Log cada 10 segundos (100 * 0.1s)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎮 PlayerSignalSubsystem: Enviando estímulo de posición - Pos: %s"),
+                   *CurrentPlayerPosition.ToString());
+        }
     }
+}
+
+bool UPlayerSignalSubsystem::IsTickable() const
+{
+    // Solo tickable durante el juego, no en el editor
+    return GetWorld() && GetWorld()->IsGameWorld();
+}
+
+bool UPlayerSignalSubsystem::IsTickableInEditor() const
+{
+    // No tickable en el editor
+    return false;
+}
+
+TStatId UPlayerSignalSubsystem::GetStatId() const
+{
+    RETURN_QUICK_DECLARE_CYCLE_STAT(UPlayerSignalSubsystem, STATGROUP_Tickables);
 }
 
 void UPlayerSignalSubsystem::EmitPositionSignal()

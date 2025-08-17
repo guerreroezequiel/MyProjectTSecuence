@@ -4,7 +4,7 @@
 #include "MassProcessor.h"
 #include "Systems/StimulusSubsystem/StimulusTypes.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
 #include "ZombiStimulusProcessor.generated.h"
 
 // Forward declarations

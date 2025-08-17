@@ -5,11 +5,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "MassEntitySubsystem.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiMovementFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessorOptimized.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"

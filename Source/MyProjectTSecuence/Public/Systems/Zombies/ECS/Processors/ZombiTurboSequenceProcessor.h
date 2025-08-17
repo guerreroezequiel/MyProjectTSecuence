@@ -4,8 +4,8 @@
 
 #include "MassProcessor.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
 
 #include "TurboSequence_Manager_Lf.h"
 #include "ZombiTurboSequenceProcessor.generated.h"
@@ -36,8 +36,8 @@ private:
 	// Función para actualizar animaciones basadas en estado del zombi
 	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
 									 FZombiTurboSequenceFragment &TurboSequenceFragment,
-									 const FZombiBehaviorFragment &BehaviorFragment,
-									 const FZombiCoreFragment &CoreFragment);
+									 const FZombiStateFragment &StateFragment,
+									 const FZombiTransformFragment &TransformFragment);
 
 	// Función para cachear animaciones y optimizar búsquedas
 	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);

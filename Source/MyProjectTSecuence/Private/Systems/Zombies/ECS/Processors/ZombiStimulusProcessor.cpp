@@ -1,6 +1,6 @@
 #include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
 #include "Systems/StimulusSubsystem/StimulusSubsystem.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "MassEntitySubsystem.h"
@@ -24,7 +24,7 @@ void UZombiStimulusProcessor::ConfigureQueries()
 {
     // Query para zombis vivos que pueden recibir estímulos
     StimulusQuery.RegisterWithProcessor(*this);
-    StimulusQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+    StimulusQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
     StimulusQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadWrite);
     StimulusQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     StimulusQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
@@ -42,20 +42,20 @@ void UZombiStimulusProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
     StimulusQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &ChunkContext)
                                      {
         // Obtener arrays de fragmentos
-        const TConstArrayView<FZombiCoreFragment> CoreFragments = ChunkContext.GetFragmentView<FZombiCoreFragment>();
+        const TConstArrayView<FZombiTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FZombiTransformFragment>();
         TArrayView<FZombiStimuliFragment> StimuliFragments = ChunkContext.GetMutableFragmentView<FZombiStimuliFragment>();
         
         // Procesar cada zombie en el chunk
         for (int32 EntityIndex = 0; EntityIndex < ChunkContext.GetNumEntities(); ++EntityIndex)
         {
-            const FZombiCoreFragment& CoreFragment = CoreFragments[EntityIndex];
+            const FZombiTransformFragment& TransformFragment = TransformFragments[EntityIndex];
             FZombiStimuliFragment& StimuliFragment = StimuliFragments[EntityIndex];
             
             // Actualizar timers de respuesta
             UpdateResponseTimers(StimuliFragment, DeltaTime);
             
             // Procesar estímulos para este zombie
-            ProcessStimuliForZombie(CoreFragment.Position, StimuliFragment);
+            ProcessStimuliForZombie(TransformFragment.GetPosition(), StimuliFragment);
         } });
 }
 
@@ -69,6 +69,20 @@ void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
         if (StimulusSubsystem && StimulusSubsystem->IsValidLowLevel())
         {
             CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+
+            // DEBUG: Log estímulos activos
+            static int32 DebugCounter = 0;
+            if (++DebugCounter % 100 == 0) // Log cada 10 segundos (100 * 0.1s)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Estímulos activos: %d"), CachedActiveStimuli.Num());
+                if (CachedActiveStimuli.Num() > 0)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Primer estímulo - Pos: %s, Tipo: %d, Fuente: %d"),
+                           *CachedActiveStimuli[0].Position.ToString(),
+                           CachedActiveStimuli[0].GetStimulusType(),
+                           CachedActiveStimuli[0].GetStimulusSource());
+                }
+            }
         }
         else
         {
@@ -79,6 +93,10 @@ void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
                 if (StimulusSubsystem)
                 {
                     CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("🧠 StimulusProcessor: No se pudo obtener StimulusSubsystem"));
                 }
             }
         }

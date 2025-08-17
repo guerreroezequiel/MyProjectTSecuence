@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Engine/Engine.h"
 #include "StimulusTypes.h"
 #include "PlayerSignalSubsystem.generated.h"
 
@@ -15,7 +16,7 @@ class UStimulusSubsystem;
  * Optimizado para 10,000 entidades
  */
 UCLASS()
-class MYPROJECTTSECUENCE_API UPlayerSignalSubsystem : public UWorldSubsystem
+class MYPROJECTTSECUENCE_API UPlayerSignalSubsystem : public UWorldSubsystem, public FTickableGameObject
 {
     GENERATED_BODY()
 
@@ -27,8 +28,11 @@ public:
     virtual void Deinitialize() override;
     virtual void OnWorldBeginPlay(UWorld &InWorld) override;
 
-    // Tick del subsystem - se ejecuta en game thread
-    virtual void Tick(float DeltaTime);
+    // FTickableGameObject interface
+    virtual void Tick(float DeltaTime) override;
+    virtual bool IsTickable() const override;
+    virtual bool IsTickableInEditor() const override;
+    virtual TStatId GetStatId() const override;
 
     // Métodos para emitir señales del jugador
     UFUNCTION(BlueprintCallable, Category = "Player Signals")

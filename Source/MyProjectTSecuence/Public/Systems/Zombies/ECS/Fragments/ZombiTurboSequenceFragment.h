@@ -6,7 +6,7 @@
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Data_Lf.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
@@ -34,11 +34,11 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData;
 
-	// Sistema de transiciones suaves (usando el nuevo enum)
+	// Sistema de transiciones suaves (usando flags)
 	UPROPERTY()
-	EZombiState CurrentAnimationState = EZombiState::Stand;
+	uint8 CurrentAnimationState = 0;
 	UPROPERTY()
-	EZombiState TargetAnimationState = EZombiState::Stand;
+	uint8 TargetAnimationState = 0;
 
 	// Control de animaciones individual por entidad
 	UPROPERTY()

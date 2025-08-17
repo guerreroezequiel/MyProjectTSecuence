@@ -4,8 +4,9 @@
 
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiMovementFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
@@ -33,14 +34,15 @@ private:
     FMassEntityQuery BehaviorQuery{*this};
 
     // Funciones auxiliares de IA - COMPATIBLE CON DOP
-    void UpdateHordeBehavior(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime);
-    void UpdateActionTimers(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
+    void UpdateHordeBehavior(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, float DeltaTime);
+    void UpdateActionTimers(FZombiStateFragment &StateFragment, float DeltaTime);
 
     // Funciones de estados DOP-compatibles
-    void EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment);
-    void UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
+    void EvaluateStateTransitions(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment);
+    void UpdateCurrentState(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
 
     // Funciones específicas de estados
-    void UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
-    void UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
+    void UpdateChaseState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
+    void UpdateWalkAroundState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, const FZombiTransformFragment &TransformFragment, float DeltaTime);
+    void UpdateIdleState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, float DeltaTime);
 };

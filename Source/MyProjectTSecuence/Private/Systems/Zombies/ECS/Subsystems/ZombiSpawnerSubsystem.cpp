@@ -3,8 +3,8 @@
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
@@ -197,13 +197,9 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         return;
     }
 
-
-
     // Crear la instancia visual
     FTurboSequence_MeshSpawnData_Lf SpawnData;
     SpawnData.RootMotionMesh.Mesh = TurboSequenceFragment.TurboSequenceAsset;
-
-
 
     TurboSequenceFragment.MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
         SpawnData,
@@ -228,8 +224,6 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
 
     // Configurar Blend Space para animaciones
     ConfigureBlendSpaceForEntity(TurboSequenceFragment);
-
-
 }
 
 // Procesa reintentos de instancias visuales pendientes
@@ -271,10 +265,10 @@ void UZombiSpawnerSubsystem::ProcessPendingVisualInstances(float DeltaTime)
         if (EntityHandle.IsValid())
         {
             // Obtener la posición de la entidad para recrear la instancia visual
-            FZombiCoreFragment &CoreFragment = MassEntitySubsystem->GetEntityManager()
-                                                   .GetFragmentDataChecked<FZombiCoreFragment>(EntityHandle);
+            FZombiTransformFragment &TransformFragment = MassEntitySubsystem->GetEntityManager()
+                                                             .GetFragmentDataChecked<FZombiTransformFragment>(EntityHandle);
 
-            CreateTurboSequenceVisualInstance(EntityHandle, CoreFragment.Position);
+            CreateTurboSequenceVisualInstance(EntityHandle, TransformFragment.GetPosition());
         }
         else
         {
