@@ -18,8 +18,10 @@
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiChaseProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiWalkAroundProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiIdleProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
-// ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"

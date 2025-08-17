@@ -104,6 +104,8 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
             StateFragment.SetToChasing();
             MovementFragment.StartChasing(StimuliFragment.StimulusDirection, 150); // Velocidad alta para persecución
 
+            // NOTA: Tags no necesarios con enfoque híbrido DOP
+
             // Guardar datos del estímulo en StateData
             StateFragment.SetStateData(static_cast<uint32>(StimuliFragment.StimulusDistance));
 
@@ -123,18 +125,73 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
                StimuliFragment.HasAnyStimulus() ? TEXT("Sí") : TEXT("No"));
     }
 
-    // Verificar si está persiguiendo (lógica simplificada)
+    // Verificar si está persiguiendo y debe salir del estado
     if (bIsChasing)
     {
-        // Mantener estado de persecución
+        // NUEVO: Verificar condiciones para salir del Chase
+        float ChaseTimer = StateFragment.GetStateTimerSeconds();
+
+        // Salir del Chase si:
+        // 1. No hay estímulo del jugador
+        // 2. El estímulo expiró
+        // 3. Ha estado persiguiendo demasiado tiempo (5 segundos)
+        if (!StimuliFragment.HasPlayerStimulus() ||
+            StimuliFragment.IsStimulusExpired() ||
+            ChaseTimer > 5.0f)
+        {
+            // Decidir entre Idle o WalkAround aleatoriamente
+            float RandomChoice = FMath::RandRange(0.0f, 1.0f);
+            if (RandomChoice < 0.6f) // 60% chance de WalkAround
+            {
+                StateFragment.SetToWalking();
+                MovementFragment.StartMoving(TransformFragment.GetForwardVector(), 50);
+                UE_LOG(LogTemp, Log, TEXT("🧠 Chase → WalkAround (%.1fs chase)"), ChaseTimer);
+            }
+            else // 40% chance de Idle
+            {
+                StateFragment.SetToIdle();
+                MovementFragment.Stop();
+                UE_LOG(LogTemp, Log, TEXT("🧠 Chase → Idle (%.1fs chase)"), ChaseTimer);
+            }
+        }
         return;
     }
 
-    // Estado por defecto: caminar aleatoriamente
-    if (!bIsWalking)
+    // Transiciones entre Idle y WalkAround
+    if (bIsIdle)
     {
-        StateFragment.SetToWalking();
-        MovementFragment.StartMoving(TransformFragment.GetForwardVector(), 50); // Velocidad normal para caminar
+        float IdleTimer = StateFragment.GetStateTimerSeconds();
+        // Idle → WalkAround después de 2-4 segundos
+        if (IdleTimer > FMath::RandRange(2.0f, 4.0f))
+        {
+            StateFragment.SetToWalking();
+            // Generar dirección aleatoria
+            FVector RandomDirection = FVector(
+                                          FMath::RandRange(-1.0f, 1.0f),
+                                          FMath::RandRange(-1.0f, 1.0f),
+                                          0.0f)
+                                          .GetSafeNormal();
+            MovementFragment.StartMoving(RandomDirection, 50);
+            UE_LOG(LogTemp, Verbose, TEXT("🧠 Idle → WalkAround (%.1fs idle)"), IdleTimer);
+        }
+    }
+    else if (bIsWalking)
+    {
+        float WalkTimer = StateFragment.GetStateTimerSeconds();
+        // WalkAround → Idle después de 5-8 segundos
+        if (WalkTimer > FMath::RandRange(5.0f, 8.0f))
+        {
+            StateFragment.SetToIdle();
+            MovementFragment.Stop();
+            UE_LOG(LogTemp, Verbose, TEXT("🧠 WalkAround → Idle (%.1fs walking)"), WalkTimer);
+        }
+    }
+    else
+    {
+        // Estado por defecto: empezar en Idle
+        StateFragment.SetToIdle();
+        MovementFragment.Stop();
+        UE_LOG(LogTemp, Log, TEXT("🧠 Estado inicial → Idle"));
     }
 }
 
@@ -189,9 +246,11 @@ void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiStateFragment &StateFr
     // Lógica de caminar aleatoriamente
     float Timer = StateFragment.GetStateTimerSeconds();
 
-    // Cambiar dirección cada 3 segundos
-    if (Timer > 3.0f)
+    // Cambiar dirección cada 2-4 segundos para más variedad
+    float DirectionChangeInterval = FMath::RandRange(2.0f, 4.0f);
+    if (Timer > DirectionChangeInterval)
     {
+        // Resetear timer para el próximo cambio de dirección
         StateFragment.SetStateTimerSeconds(0.0f);
 
         // Generar nueva dirección aleatoria
@@ -202,19 +261,27 @@ void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiStateFragment &StateFr
                                       .GetSafeNormal();
 
         MovementFragment.SetDirection(RandomDirection);
+        MovementFragment.SetSpeed(static_cast<uint8>(FMath::RandRange(30, 70))); // Velocidad variable
+
+        UE_LOG(LogTemp, Verbose, TEXT("🚶 WalkAround: Nueva dirección - Dir: %s, Speed: %d"),
+               *RandomDirection.ToString(), static_cast<int32>(MovementFragment.GetSpeed()));
     }
 }
 
 void UZombiBehaviorProcessor::UpdateIdleState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, float DeltaTime)
 {
-    // Lógica de estado inactivo
-    float Timer = StateFragment.GetStateTimerSeconds();
+    // En estado Idle, el zombie está inmóvil
+    // Las transiciones se manejan en EvaluateStateTransitions()
 
-    // Cambiar a caminar después de 2 segundos de inactividad
-    if (Timer > 2.0f)
+    // Asegurarse de que está realmente parado
+    MovementFragment.Stop();
+
+    // Comportamiento ocasional: girar la cabeza/cuerpo ligeramente
+    float Timer = StateFragment.GetStateTimerSeconds();
+    if (Timer > FMath::RandRange(1.0f, 3.0f))
     {
-        StateFragment.SetToWalking();
-        MovementFragment.StartMoving(MovementFragment.GetDirection(), 30); // Velocidad baja
+        // Pequeño ajuste de rotación para simular "mirar alrededor"
+        // (Este procesamiento se maneja en TransformProcessor)
     }
 }
 

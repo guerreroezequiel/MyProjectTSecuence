@@ -59,15 +59,34 @@ void UZombiMovementProcessorOptimized::Execute(FMassEntityManager &EntityManager
 {
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // OPTIMIZACIÓN: Procesar por prioridad usando tags
-    // Entidades persiguiendo (60 FPS) - máxima prioridad
-    ProcessChasingMovement(EntityManager, Context, DeltaTime);
+    // NUEVO: Usar un solo query y procesar por StateFlags (DOP híbrido)
+    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                     {
+        const int32 NumEntities = Context.GetNumEntities();
+        auto TransformFragments = Context.GetMutableFragmentView<FZombiTransformFragment>();
+        auto MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
+        auto StateFragments = Context.GetFragmentView<FZombiStateFragment>();
 
-    // Entidades caminando (30 FPS) - prioridad media
-    ProcessWalkingMovement(EntityManager, Context, DeltaTime);
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            FZombiTransformFragment& TransformFragment = TransformFragments[i];
+            FZombiMovementFragment& MovementFragment = MovementFragments[i];
+            const FZombiStateFragment& StateFragment = StateFragments[i];
 
-    // Entidades inactivas (15 FPS) - baja prioridad
-    ProcessIdleMovement(EntityManager, Context, DeltaTime);
+            // Procesar según el estado actual usando flags
+            if (StateFragment.IsChasing())
+            {
+                ApplyChasingMovement(MovementFragment, TransformFragment, StateFragment, DeltaTime);
+            }
+            else if (StateFragment.IsWalking())
+            {
+                ApplyWalkingMovement(MovementFragment, TransformFragment, StateFragment, DeltaTime);
+            }
+            else if (StateFragment.IsIdle())
+            {
+                ApplyIdleMovement(MovementFragment, TransformFragment, StateFragment, DeltaTime);
+            }
+        } });
 }
 
 void UZombiMovementProcessorOptimized::ProcessChasingMovement(FMassEntityManager &EntityManager, FMassExecutionContext &Context, float DeltaTime)
@@ -135,26 +154,32 @@ void UZombiMovementProcessorOptimized::ApplyChasingMovement(FZombiMovementFragme
                                                             const FZombiStateFragment &StateFragment,
                                                             float DeltaTime)
 {
-    // Obtener posición del jugador usando cache optimizado
-    FVector PlayerLocation = GetPlayerLocationFromStimulus();
-
-    if (!PlayerLocation.IsZero())
+    // SIMPLIFICADO: Solo aplicar movimiento físico, ChaseProcessor maneja la lógica
+    if (MovementFragment.GetSpeed() > 0)
     {
-        // Calcular dirección hacia el jugador
-        FVector DirectionToPlayer = (PlayerLocation - TransformFragment.GetPosition()).GetSafeNormal();
+        FVector Direction = MovementFragment.GetDirection();
+        float Speed = MovementFragment.GetEffectiveSpeed();
 
-        // Actualizar dirección de movimiento hacia el jugador
-        MovementFragment.SetDirection(DirectionToPlayer);
-        MovementFragment.SetSpeed(static_cast<uint8>(150)); // Velocidad alta para persecución (uint8)
+        // Aplicar movimiento físico
+        FVector Movement = Direction * Speed * DeltaTime;
+        TransformFragment.AddPosition(Movement);
 
-        // Aplicar movimiento inmediato
-        TransformFragment.AddPosition(DirectionToPlayer * MovementFragment.GetSpeed() * DeltaTime);
+        // Aplicar rotación hacia la dirección de movimiento
+        if (!Direction.IsZero())
+        {
+            float TargetYaw = Direction.Rotation().Yaw;
+            float CurrentYaw = TransformFragment.GetYaw();
+            float NewYaw = FMath::FInterpTo(CurrentYaw, TargetYaw, DeltaTime, 360.0f);
+            TransformFragment.SetYaw(NewYaw);
+        }
 
-        // Rotación rápida hacia el jugador
-        float TargetYaw = DirectionToPlayer.Rotation().Yaw;
-        float CurrentYaw = TransformFragment.GetYaw();
-        float NewYaw = FMath::FInterpTo(CurrentYaw, TargetYaw, DeltaTime, 360.0f); // Rotación rápida
-        TransformFragment.SetYaw(NewYaw);
+        // DEBUG: Log simplificado
+        static int32 DebugCounter = 0;
+        if (++DebugCounter % 120 == 0) // Cada 2 segundos
+        {
+            UE_LOG(LogTemp, Log, TEXT("🚶 MovementProcessor: Aplicando movimiento - Speed: %d, Dir: %s"),
+                   static_cast<int32>(Speed), *Direction.ToString());
+        }
     }
 }
 
