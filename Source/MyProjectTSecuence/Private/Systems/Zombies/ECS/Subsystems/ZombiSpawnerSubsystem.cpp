@@ -176,9 +176,12 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         }
     }
 
-    // Obtener el fragmento de TurboSequence
+    // Obtener el fragmento de TurboSequence y shared visual
     FZombiTurboSequenceFragment &TurboSequenceFragment = MassEntitySubsystem->GetEntityManager()
                                                              .GetFragmentDataChecked<FZombiTurboSequenceFragment>(EntityHandle);
+    // Asegurar shared visual (creación si no existe)
+    FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    EntityManager.GetOrCreateSharedFragment<FZombiVisualSharedFragment>(FZombiVisualSharedFragment());
 
     // Configurar el asset y grupo de actualización
     TurboSequenceFragment.TurboSequenceAsset = ZombiTurboSequenceAsset;

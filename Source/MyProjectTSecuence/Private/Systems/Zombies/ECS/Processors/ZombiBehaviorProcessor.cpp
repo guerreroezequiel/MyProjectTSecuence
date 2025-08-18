@@ -9,6 +9,7 @@
 
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiConfigFragment.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "MyProjectTSecuence/MyProjectTSecuenceCharacter.h"
@@ -38,6 +39,7 @@ void UZombiBehaviorProcessor::ConfigureQueries()
     BehaviorQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
     BehaviorQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadOnly);
+    BehaviorQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 
     // Tags para filtrado rápido
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
@@ -108,22 +110,11 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
 
             // Guardar datos del estímulo en StateData
             StateFragment.SetStateData(static_cast<uint32>(StimuliFragment.StimulusDistance));
-
-            // Log para debugging
-            UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: Zombie cambió a Chase por estímulo del jugador - Distancia: %.1f, Intensidad: %d"),
-                   StimuliFragment.StimulusDistance, StimuliFragment.TotalStimulusIntensity);
         }
         return;
     }
 
-    // DEBUG: Log cuando no hay estímulos del jugador
-    static int32 DebugCounter = 0;
-    if (++DebugCounter % 300 == 0) // Log cada 30 segundos
-    {
-        UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: Zombie sin estímulos - HasPlayerStimulus: %s, HasAnyStimulus: %s"),
-               StimuliFragment.HasPlayerStimulus() ? TEXT("Sí") : TEXT("No"),
-               StimuliFragment.HasAnyStimulus() ? TEXT("Sí") : TEXT("No"));
-    }
+    // Sin logs en hot-path
 
     // Verificar si está persiguiendo y debe salir del estado
     if (bIsChasing)
@@ -144,14 +135,12 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
             if (RandomChoice < 0.6f) // 60% chance de WalkAround
             {
                 StateFragment.SetToWalking();
-                MovementFragment.StartMoving(TransformFragment.GetForwardVector(), 50);
-                UE_LOG(LogTemp, Log, TEXT("🧠 Chase → WalkAround (%.1fs chase)"), ChaseTimer);
+                MovementFragment.StartMoving(MovementFragment.GetDirection(), 50);
             }
             else // 40% chance de Idle
             {
                 StateFragment.SetToIdle();
                 MovementFragment.Stop();
-                UE_LOG(LogTemp, Log, TEXT("🧠 Chase → Idle (%.1fs chase)"), ChaseTimer);
             }
         }
         return;
@@ -172,7 +161,6 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
                                           0.0f)
                                           .GetSafeNormal();
             MovementFragment.StartMoving(RandomDirection, 50);
-            UE_LOG(LogTemp, Verbose, TEXT("🧠 Idle → WalkAround (%.1fs idle)"), IdleTimer);
         }
     }
     else if (bIsWalking)
@@ -183,7 +171,6 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
         {
             StateFragment.SetToIdle();
             MovementFragment.Stop();
-            UE_LOG(LogTemp, Verbose, TEXT("🧠 WalkAround → Idle (%.1fs walking)"), WalkTimer);
         }
     }
     else
@@ -191,7 +178,6 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
         // Estado por defecto: empezar en Idle
         StateFragment.SetToIdle();
         MovementFragment.Stop();
-        UE_LOG(LogTemp, Log, TEXT("🧠 Estado inicial → Idle"));
     }
 }
 
@@ -237,8 +223,7 @@ void UZombiBehaviorProcessor::UpdateChaseState(FZombiStateFragment &StateFragmen
     // Actualizar dirección de persecución
     MovementFragment.SetDirection(StimuliFragment.StimulusDirection);
 
-    // Log para debugging
-    UE_LOG(LogTemp, Verbose, TEXT("🧠 ChaseState: Zombie persiguiendo - Distancia: %.1f"), DistanceToPlayer);
+    // Sin logs en hot-path
 }
 
 void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, const FZombiTransformFragment &TransformFragment, float DeltaTime)
@@ -262,9 +247,6 @@ void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiStateFragment &StateFr
 
         MovementFragment.SetDirection(RandomDirection);
         MovementFragment.SetSpeed(static_cast<uint8>(FMath::RandRange(30, 70))); // Velocidad variable
-
-        UE_LOG(LogTemp, Verbose, TEXT("🚶 WalkAround: Nueva dirección - Dir: %s, Speed: %d"),
-               *RandomDirection.ToString(), static_cast<int32>(MovementFragment.GetSpeed()));
     }
 }
 

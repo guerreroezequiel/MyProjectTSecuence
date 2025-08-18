@@ -13,7 +13,7 @@
  * Se usa como Shared Fragment para reducir memoria y mejorar cache locality
  */
 USTRUCT()
-struct FZombiConfigFragment : public FMassFragment
+struct FZombiConfigFragment : public FMassSharedFragment
 {
     GENERATED_BODY()
 

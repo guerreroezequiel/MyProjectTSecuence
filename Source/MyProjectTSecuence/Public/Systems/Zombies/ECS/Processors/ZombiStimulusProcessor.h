@@ -40,6 +40,10 @@ private:
     // Cache de estímulos activos (actualizado en game thread)
     TArray<FStimulusData> CachedActiveStimuli;
 
+    // Vía rápida: último estímulo del jugador cacheado
+    FStimulusData CachedLatestPlayerStimulus;
+    bool bHasCachedPlayerStimulus = false;
+
     // Configuración de procesamiento
     UPROPERTY()
     float StimulusDetectionRange = 1000.0f; // Rango de detección de estímulos

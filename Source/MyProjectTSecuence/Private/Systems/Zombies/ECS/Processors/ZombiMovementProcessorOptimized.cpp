@@ -6,6 +6,7 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiMovementFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiTransformFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiConfigFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Systems/StimulusSubsystem/StimulusSubsystem.h"
 #include "Engine/Engine.h"
@@ -29,6 +30,7 @@ void UZombiMovementProcessorOptimized::ConfigureQueries()
     MovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     MovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
     MovementQuery.RegisterWithProcessor(*this);
+    MovementQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 
     // Query para entidades persiguiendo (alta prioridad)
     ChasingQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
@@ -37,6 +39,7 @@ void UZombiMovementProcessorOptimized::ConfigureQueries()
     ChasingQuery.AddTagRequirement<FChasingTag>(EMassFragmentPresence::All);
     ChasingQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     ChasingQuery.RegisterWithProcessor(*this);
+    ChasingQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 
     // Query para entidades caminando (prioridad media)
     WalkingQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
@@ -45,6 +48,7 @@ void UZombiMovementProcessorOptimized::ConfigureQueries()
     WalkingQuery.AddTagRequirement<FWalkingTag>(EMassFragmentPresence::All);
     WalkingQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     WalkingQuery.RegisterWithProcessor(*this);
+    WalkingQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 
     // Query para entidades inactivas (baja prioridad)
     IdleQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
@@ -53,6 +57,7 @@ void UZombiMovementProcessorOptimized::ConfigureQueries()
     IdleQuery.AddTagRequirement<FIdleTag>(EMassFragmentPresence::All);
     IdleQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     IdleQuery.RegisterWithProcessor(*this);
+    IdleQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 }
 
 void UZombiMovementProcessorOptimized::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -173,13 +178,7 @@ void UZombiMovementProcessorOptimized::ApplyChasingMovement(FZombiMovementFragme
             TransformFragment.SetYaw(NewYaw);
         }
 
-        // DEBUG: Log simplificado
-        static int32 DebugCounter = 0;
-        if (++DebugCounter % 120 == 0) // Cada 2 segundos
-        {
-            UE_LOG(LogTemp, Log, TEXT("🚶 MovementProcessor: Aplicando movimiento - Speed: %d, Dir: %s"),
-                   static_cast<int32>(Speed), *Direction.ToString());
-        }
+        // Sin logs en hot-path
     }
 }
 
@@ -198,8 +197,12 @@ void UZombiMovementProcessorOptimized::ApplyWalkingMovement(FZombiMovementFragme
     // Aplicar movimiento caminando
     if (MovementFragment.GetSpeed() > 0.0f)
     {
-        FVector ForwardDirection = TransformFragment.GetForwardVector();
-        TransformFragment.AddPosition(ForwardDirection * MovementFragment.GetSpeed() * DeltaTime);
+        // Usar siempre la dirección del fragmento de movimiento (evita trig innecesaria)
+        const FVector MoveDir = MovementFragment.GetDirection();
+        if (!MoveDir.IsNearlyZero())
+        {
+            TransformFragment.AddPosition(MoveDir * MovementFragment.GetSpeed() * DeltaTime);
+        }
 
         // Rotación suave hacia la dirección de movimiento
         if (MovementFragment.GetDirection().SizeSquared() > 0.0f)

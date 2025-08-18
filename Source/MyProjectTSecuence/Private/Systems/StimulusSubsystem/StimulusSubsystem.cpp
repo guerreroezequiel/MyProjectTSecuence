@@ -1,6 +1,7 @@
 #include "Systems/StimulusSubsystem/StimulusSubsystem.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "Stats/Stats.h"
 
 UStimulusSubsystem::UStimulusSubsystem()
 {
@@ -14,8 +15,8 @@ void UStimulusSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
 
-    // Log de inicialización
-    UE_LOG(LogTemp, Log, TEXT("🧠 StimulusSubsystem: Inicializando"));
+    // Log mínimo (no hot-path)
+    UE_LOG(LogTemp, Verbose, TEXT("StimulusSubsystem: Inicializando"));
 }
 
 void UStimulusSubsystem::Deinitialize()
@@ -25,7 +26,7 @@ void UStimulusSubsystem::Deinitialize()
     PlayerStimuli.Empty();
     EnvironmentStimuli.Empty();
 
-    UE_LOG(LogTemp, Log, TEXT("🧠 StimulusSubsystem: Desinicializando"));
+    UE_LOG(LogTemp, Verbose, TEXT("StimulusSubsystem: Desinicializando"));
 
     Super::Deinitialize();
 }
@@ -37,7 +38,7 @@ void UStimulusSubsystem::OnWorldBeginPlay(UWorld &InWorld)
     // Marcar sistema como inicializado
     bSystemInitialized = true;
 
-    UE_LOG(LogTemp, Log, TEXT("🧠 StimulusSubsystem: Sistema listo para recibir estímulos"));
+    UE_LOG(LogTemp, Verbose, TEXT("StimulusSubsystem: Listo"));
 }
 
 void UStimulusSubsystem::Tick(float DeltaTime)
@@ -62,11 +63,27 @@ void UStimulusSubsystem::Tick(float DeltaTime)
     }
 }
 
+bool UStimulusSubsystem::IsTickable() const
+{
+    return GetWorld() && GetWorld()->IsGameWorld();
+}
+
+bool UStimulusSubsystem::IsTickableInEditor() const
+{
+    return false;
+}
+
+TStatId UStimulusSubsystem::GetStatId() const
+{
+    RETURN_QUICK_DECLARE_CYCLE_STAT(UStimulusSubsystem, STATGROUP_Tickables);
+}
+
 void UStimulusSubsystem::AddPlayerStimulus(const FVector &Position, const FVector &Direction,
                                            EStimulusType Type, uint8 Intensity, float Radius)
 {
     FStimulusData Stimulus(Position, Direction, Type, EStimulusSource::Player, Intensity, Radius);
     AddStimulus(Stimulus);
+    UpdateLatestPlayerStimulus(Stimulus);
 }
 
 void UStimulusSubsystem::AddItemStimulus(const FVector &Position, const FVector &Direction,
@@ -115,6 +132,7 @@ void UStimulusSubsystem::AddStimulus(const FStimulusData &Stimulus)
     {
     case EStimulusSource::Player:
         PlayerStimuli.Add(Stimulus);
+        UpdateLatestPlayerStimulus(Stimulus);
         break;
     case EStimulusSource::Environment:
     case EStimulusSource::Item:
@@ -126,16 +144,26 @@ void UStimulusSubsystem::AddStimulus(const FStimulusData &Stimulus)
         break;
     }
 
-    // Log para debugging (opcional)
-    UE_LOG(LogTemp, Verbose, TEXT("🧠 StimulusSubsystem: Estímulo agregado - Tipo: %d, Fuente: %d, Intensidad: %d, Radio: %.1f"),
-           Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), Stimulus.Intensity, Stimulus.Radius);
+    // Sin logs en hot-path
+}
 
-    // DEBUG: Log para verificar que se están recibiendo estímulos
-    static int32 DebugCounter = 0;
-    if (++DebugCounter % 50 == 0) // Log cada 5 segundos (50 * 0.1s)
+bool UStimulusSubsystem::TryGetLatestPlayerStimulus(FStimulusData &OutStimulus) const
+{
+    if (bHasLatestPlayerStimulus && LatestPlayerStimulus.IsValid() && !LatestPlayerStimulus.HasExpired())
     {
-        UE_LOG(LogTemp, Log, TEXT("🧠 StimulusSubsystem: Estímulo recibido - Tipo: %d, Fuente: %d, Pos: %s"),
-               Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), *Stimulus.Position.ToString());
+        OutStimulus = LatestPlayerStimulus;
+        return true;
+    }
+    return false;
+}
+
+void UStimulusSubsystem::UpdateLatestPlayerStimulus(const FStimulusData &Stimulus)
+{
+    // Mantener el más fuerte/reciente
+    if (!bHasLatestPlayerStimulus || Stimulus.Intensity >= LatestPlayerStimulus.Intensity)
+    {
+        LatestPlayerStimulus = Stimulus;
+        bHasLatestPlayerStimulus = true;
     }
 }
 

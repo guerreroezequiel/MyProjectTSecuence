@@ -41,4 +41,14 @@ private:
 
 	// Función para cachear animaciones y optimizar búsquedas
 	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);
+
+	// Caché por-asset para animaciones comunes (Idle/Walk/Run)
+	struct FCachedAnims
+	{
+		class UAnimSequence *Idle = nullptr;
+		class UAnimSequence *Walk = nullptr;
+		class UAnimSequence *Run = nullptr;
+		bool bReady = false;
+	};
+	TMap<class UTurboSequence_MeshAsset_Lf *, FCachedAnims> AnimCacheByAsset;
 };

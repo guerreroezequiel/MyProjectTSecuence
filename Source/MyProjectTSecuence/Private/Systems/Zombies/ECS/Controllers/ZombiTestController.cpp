@@ -146,20 +146,12 @@ void AZombiTestController::Tick(float DeltaTime)
         SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
     }
 
-    // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización
-    for (int32 GroupIndex = 0; GroupIndex < 4; ++GroupIndex) // 4 grupos como configurado en el spawner
+    // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización (evitar baja frecuencia visual)
+    for (int32 GroupIndex = 0; GroupIndex < 4; ++GroupIndex)
     {
         FTurboSequence_UpdateContext_Lf UpdateContext;
         UpdateContext.GroupIndex = GroupIndex;
-
-        try
-        {
-            ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
-        }
-        catch (...)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("❌ ZombiTestController: Error en SolveMeshes_GameThread para grupo %d"), GroupIndex);
-        }
+        ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
     }
 
     // Timer reset eliminado para optimización
@@ -187,7 +179,7 @@ void AZombiTestController::LogSystemStatus()
 
     if (CurrentEntityCount != LastEntityCount)
     {
-    
+
         LastEntityCount = CurrentEntityCount;
     }
 }
@@ -201,6 +193,4 @@ void AZombiTestController::LogPerformanceMetrics()
     }
 
     int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
-
-
 }

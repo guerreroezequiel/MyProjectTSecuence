@@ -81,12 +81,7 @@ void UZombiIdleProcessor::ProcessIdleLogic(FZombiStateFragment &StateFragment,
         // Resetear timer
         StateFragment.SetStateTimerSeconds(0.0f);
 
-        // DEBUG
-        static int32 RotationCounter = 0;
-        if (++RotationCounter % 10 == 0)
-        {
-            UE_LOG(LogTemp, Log, TEXT("😴 IdleProcessor: Rotación idle - Yaw: %.1f → %.1f"), CurrentYaw, NewYaw);
-        }
+        // Sin logs en hot-path
     }
 }
 

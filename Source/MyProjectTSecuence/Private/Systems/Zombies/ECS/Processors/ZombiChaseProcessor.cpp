@@ -55,20 +55,19 @@ void UZombiChaseProcessor::Execute(FMassEntityManager &EntityManager, FMassExecu
             // Solo procesar si realmente está persiguiendo
             if (StateFragment.IsChasing())
             {
-                ProcessChaseLogic(StateFragment, const_cast<FZombiTransformFragment&>(TransformFragment), 
-                                MovementFragment, StimuliFragment, DeltaTime);
+                ProcessChaseLogic(StateFragment, TransformFragment, MovementFragment, StimuliFragment, DeltaTime);
             }
         } });
 }
 
 void UZombiChaseProcessor::ProcessChaseLogic(FZombiStateFragment &StateFragment,
-                                             FZombiTransformFragment &TransformFragment,
+                                             const FZombiTransformFragment &TransformFragment,
                                              FZombiMovementFragment &MovementFragment,
                                              const FZombiStimuliFragment &StimuliFragment,
                                              float DeltaTime)
 {
     // Calcular dirección hacia el objetivo
-    FVector ChaseDirection = CalculateChaseDirection(TransformFragment.GetPosition(), StimuliFragment);
+    FVector ChaseDirection = this->CalculateChaseDirection(TransformFragment.GetPosition(), StimuliFragment);
 
     if (ChaseDirection.IsZero())
     {
@@ -78,7 +77,7 @@ void UZombiChaseProcessor::ProcessChaseLogic(FZombiStateFragment &StateFragment,
     }
 
     // Calcular distancia al objetivo
-    FVector PlayerLocation = CachedPlayerLocation;
+    FVector PlayerLocation = this->CachedPlayerLocation;
     if (StimuliFragment.HasPlayerStimulus())
     {
         PlayerLocation = StimuliFragment.StrongestStimulus.Position;
@@ -87,7 +86,7 @@ void UZombiChaseProcessor::ProcessChaseLogic(FZombiStateFragment &StateFragment,
     float DistanceToTarget = FVector::Dist(TransformFragment.GetPosition(), PlayerLocation);
 
     // Verificar si debe continuar persiguiendo
-    if (!ShouldContinueChasing(StateFragment, StimuliFragment, DistanceToTarget))
+    if (!this->ShouldContinueChasing(StateFragment, StimuliFragment, DistanceToTarget))
     {
         // Dejar de perseguir - BehaviorProcessor manejará la transición de estado
         MovementFragment.Stop();
@@ -95,18 +94,12 @@ void UZombiChaseProcessor::ProcessChaseLogic(FZombiStateFragment &StateFragment,
     }
 
     // Calcular velocidad de persecución
-    uint8 ChaseSpeed = CalculateChaseSpeed(DistanceToTarget, StimuliFragment);
+    uint8 ChaseSpeed = this->CalculateChaseSpeed(DistanceToTarget, StimuliFragment);
 
     // Aplicar movimiento de persecución
     MovementFragment.StartChasing(ChaseDirection, ChaseSpeed);
 
-    // DEBUG: Log cada segundo
-    static int32 DebugCounter = 0;
-    if (++DebugCounter % 60 == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🏃 ChaseProcessor: Persiguiendo - Dist: %.1f, Speed: %d, Dir: %s"),
-               DistanceToTarget, ChaseSpeed, *ChaseDirection.ToString());
-    }
+    // Sin logs en hot-path
 }
 
 FVector UZombiChaseProcessor::CalculateChaseDirection(const FVector &ZombiePosition,

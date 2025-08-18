@@ -15,7 +15,7 @@ void UZombiWalkAroundProcessor::ConfigureQueries()
 {
     // Query especializado para entidades caminando
     WalkAroundQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
-    WalkAroundQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadWrite);
+    WalkAroundQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
     WalkAroundQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
 
     // Tags para filtrado DOP
@@ -34,13 +34,13 @@ void UZombiWalkAroundProcessor::Execute(FMassEntityManager &EntityManager, FMass
                                        {
         const int32 NumEntities = Context.GetNumEntities();
         auto StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
-        auto TransformFragments = Context.GetMutableFragmentView<FZombiTransformFragment>();
+        auto TransformFragments = Context.GetFragmentView<FZombiTransformFragment>();
         auto MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FZombiStateFragment& StateFragment = StateFragments[i];
-            FZombiTransformFragment& TransformFragment = TransformFragments[i];
+            const FZombiTransformFragment& TransformFragment = TransformFragments[i];
             FZombiMovementFragment& MovementFragment = MovementFragments[i];
 
             // Solo procesar si realmente está caminando
@@ -52,7 +52,7 @@ void UZombiWalkAroundProcessor::Execute(FMassEntityManager &EntityManager, FMass
 }
 
 void UZombiWalkAroundProcessor::ProcessWalkAroundLogic(FZombiStateFragment &StateFragment,
-                                                       FZombiTransformFragment &TransformFragment,
+                                                       const FZombiTransformFragment &TransformFragment,
                                                        FZombiMovementFragment &MovementFragment,
                                                        float DeltaTime)
 {
@@ -68,13 +68,7 @@ void UZombiWalkAroundProcessor::ProcessWalkAroundLogic(FZombiStateFragment &Stat
         // Resetear timer para el próximo cambio de dirección
         StateFragment.SetStateTimerSeconds(0.0f);
 
-        // DEBUG: Log cambio de dirección
-        static int32 DebugCounter = 0;
-        if (++DebugCounter % 30 == 0) // Cada ~30 cambios
-        {
-            UE_LOG(LogTemp, Log, TEXT("🚶 WalkAroundProcessor: Nueva dirección - Dir: %s, Speed: %d"),
-                   *NewDirection.ToString(), NewSpeed);
-        }
+        // Sin logs en hot-path
     }
 
     // SIN colisiones, SIN límites de área - mantener simple

@@ -68,20 +68,21 @@ void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
         // Obtener estímulos activos del StimulusSubsystem
         if (StimulusSubsystem && StimulusSubsystem->IsValidLowLevel())
         {
-            CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+            CachedActiveStimuli = StimulusSubsystem->GetEnvironmentStimuli();
 
-            // DEBUG: Log estímulos activos
-            static int32 DebugCounter = 0;
-            if (++DebugCounter % 100 == 0) // Log cada 10 segundos (100 * 0.1s)
+            // Vía rápida: cachear último estímulo del jugador
+            FStimulusData LatestPlayerStimulus;
+            bHasCachedPlayerStimulus = StimulusSubsystem->TryGetLatestPlayerStimulus(LatestPlayerStimulus);
+            if (bHasCachedPlayerStimulus)
             {
-                UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Estímulos activos: %d"), CachedActiveStimuli.Num());
-                if (CachedActiveStimuli.Num() > 0)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Primer estímulo - Pos: %s, Tipo: %d, Fuente: %d"),
-                           *CachedActiveStimuli[0].Position.ToString(),
-                           CachedActiveStimuli[0].GetStimulusType(),
-                           CachedActiveStimuli[0].GetStimulusSource());
-                }
+                CachedLatestPlayerStimulus = LatestPlayerStimulus;
+            }
+
+            // DEBUG: Log estímulos activos (muy infrecuente)
+            static int32 DebugCounter = 0;
+            if (++DebugCounter % 100 == 0)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Env stimuli: %d, PlayerCached: %s"), CachedActiveStimuli.Num(), bHasCachedPlayerStimulus ? TEXT("Sí") : TEXT("No"));
             }
         }
         else
@@ -92,7 +93,15 @@ void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
                 StimulusSubsystem = World->GetSubsystem<UStimulusSubsystem>();
                 if (StimulusSubsystem)
                 {
-                    CachedActiveStimuli = StimulusSubsystem->GetActiveStimuli();
+                    CachedActiveStimuli = StimulusSubsystem->GetEnvironmentStimuli();
+
+                    // Vía rápida: cachear último estímulo del jugador
+                    FStimulusData LatestPlayerStimulus;
+                    bHasCachedPlayerStimulus = StimulusSubsystem->TryGetLatestPlayerStimulus(LatestPlayerStimulus);
+                    if (bHasCachedPlayerStimulus)
+                    {
+                        CachedLatestPlayerStimulus = LatestPlayerStimulus;
+                    }
                 }
                 else
                 {
@@ -114,7 +123,13 @@ void UZombiStimulusProcessor::ProcessStimuliForZombie(const FVector &ZombiePosit
         return;
     }
 
-    // Procesar cada estímulo activo
+    // Vía rápida: estímulo del jugador cacheado
+    if (bHasCachedPlayerStimulus && IsStimulusInRange(ZombiePosition, CachedLatestPlayerStimulus))
+    {
+        StimuliFragment.UpdateStimulus(CachedLatestPlayerStimulus, ZombiePosition);
+    }
+
+    // Procesar cada estímulo activo (ambientales)
     for (const FStimulusData &Stimulus : CachedActiveStimuli)
     {
         // Verificar si el estímulo está en rango
@@ -122,10 +137,7 @@ void UZombiStimulusProcessor::ProcessStimuliForZombie(const FVector &ZombiePosit
         {
             // Actualizar estímulo del zombie
             StimuliFragment.UpdateStimulus(Stimulus, ZombiePosition);
-
-            // Log para debugging (opcional)
-            UE_LOG(LogTemp, Verbose, TEXT("🧠 StimulusProcessor: Zombie recibió estímulo - Tipo: %d, Fuente: %d, Intensidad: %d"),
-                   Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), Stimulus.Intensity);
+            // Log por-entidad eliminado del hot-path
         }
     }
 }

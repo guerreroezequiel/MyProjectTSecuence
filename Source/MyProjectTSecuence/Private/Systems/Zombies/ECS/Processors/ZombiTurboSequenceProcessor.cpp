@@ -40,6 +40,7 @@ void UZombiTurboSequenceProcessor::ConfigureQueries()
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     TransformSyncQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadOnly);
+    TransformSyncQuery.AddSharedRequirement<FZombiVisualSharedFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -67,6 +68,7 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
         TArrayView<const FZombiTransformFragment> TransformFragments = Context.GetFragmentView<FZombiTransformFragment>();
         TArrayView<const FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
+        const FZombiVisualSharedFragment& VisualShared = Context.GetSharedFragment<FZombiVisualSharedFragment>();
 
 
         // Log eliminado para optimización de rendimiento
@@ -88,24 +90,39 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             // Actualizar animación basada en estado PRIMERO
             UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, StateFragment, TransformFragment);
             
-            // SINCRONIZAR TRANSFORMACIÓN con TurboSequence
+            // SINCRONIZAR TRANSFORMACIÓN con TurboSequence (con dirty flags y umbrales)
             if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.MeshData.IsMeshDataValid())
             {
-                // Crear transformación desde los datos del TransformFragment
-                FTransform NewTransform;
-                NewTransform.SetLocation(TransformFragment.GetPosition());
-                
-                // CORREGIR ROTACIÓN: Compensar la diferencia de 90 grados entre animación y transformación
-                FRotator CorrectedRotation = TransformFragment.GetRotation();
-                CorrectedRotation.Yaw -= 90.0f; // Compensar la diferencia de orientación
-                
-                NewTransform.SetRotation(CorrectedRotation.Quaternion());
-                NewTransform.SetScale3D(FVector::OneVector);
+                const FVector CurrentPos = TransformFragment.GetPosition();
+                const float CurrentYaw = TransformFragment.GetYaw();
 
-                // Aplicar transformación usando el manager de TurboSequence
-                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-                    TurboSequenceFragment.MeshData,
-                    NewTransform);
+                // Usar thresholds compartidos si existen; fallback a per-entidad
+                const float PosThresh = VisualShared.SharedMinPositionDeltaForSync > 0.f ? VisualShared.SharedMinPositionDeltaForSync : TurboSequenceFragment.MinPositionDeltaForSync;
+                const float YawThresh = VisualShared.SharedMinYawDeltaForSync > 0.f ? VisualShared.SharedMinYawDeltaForSync : TurboSequenceFragment.MinYawDeltaForSync;
+                const bool bPosDirty = FVector::DistSquared(CurrentPos, TurboSequenceFragment.LastSyncedPosition) >= FMath::Square(PosThresh);
+                const bool bYawDirty = FMath::Abs(CurrentYaw - TurboSequenceFragment.LastSyncedYaw) >= YawThresh;
+                TurboSequenceFragment.bTransformDirty = TurboSequenceFragment.bTransformDirty || bPosDirty || bYawDirty;
+
+                if (TurboSequenceFragment.bTransformDirty)
+                {
+                    FTransform NewTransform;
+                    NewTransform.SetLocation(CurrentPos);
+
+                    // CORREGIR ROTACIÓN: Compensar la diferencia de 90 grados entre animación y transformación
+                    FRotator CorrectedRotation = TransformFragment.GetRotation();
+                    CorrectedRotation.Yaw -= 90.0f;
+
+                    NewTransform.SetRotation(CorrectedRotation.Quaternion());
+                    NewTransform.SetScale3D(FVector::OneVector);
+
+                    ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                        TurboSequenceFragment.MeshData,
+                        NewTransform);
+
+                    TurboSequenceFragment.LastSyncedPosition = CurrentPos;
+                    TurboSequenceFragment.LastSyncedYaw = CurrentYaw;
+                    TurboSequenceFragment.bTransformDirty = false;
+                }
             }
         } });
 }
@@ -165,6 +182,29 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     // Actualizar timer de animación
     TurboSequenceFragment.AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
 
+    // OPTIMIZACIÓN: Usa caché por-asset si está disponible
+    FCachedAnims *Cached = AnimCacheByAsset.Find(TurboSequenceFragment.TurboSequenceAsset);
+    if (!Cached || !Cached->bReady)
+    {
+        // Rellenar caché por-asset una vez
+        FCachedAnims NewCached;
+        for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+        {
+            if (!AnimItem.Animation)
+                continue;
+            const FString Name = AnimItem.Animation->GetName();
+            if (!NewCached.Idle && Name.Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+                NewCached.Idle = AnimItem.Animation;
+            else if (!NewCached.Walk && Name.Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                NewCached.Walk = AnimItem.Animation;
+            else if (!NewCached.Run && Name.Contains(TEXT("Run"), ESearchCase::IgnoreCase))
+                NewCached.Run = AnimItem.Animation;
+        }
+        NewCached.bReady = true;
+        AnimCacheByAsset.Add(TurboSequenceFragment.TurboSequenceAsset, NewCached);
+        Cached = AnimCacheByAsset.Find(TurboSequenceFragment.TurboSequenceAsset);
+    }
+
     // OPTIMIZACIÓN: Selección directa de animación sin cálculos innecesarios
     UAnimSequence *TargetAnimation = nullptr;
 
@@ -172,19 +212,19 @@ void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionCon
     if (StateFragment.IsChasing())
     {
         // Durante persecución, usar animación de correr
-        TargetAnimation = TurboSequenceFragment.CachedRunAnimation;
+        TargetAnimation = Cached && Cached->Run ? Cached->Run : static_cast<UAnimSequence *>(TurboSequenceFragment.CachedRunAnimation);
     }
     else if (NormalizedSpeed < 5.0f)
     {
-        TargetAnimation = TurboSequenceFragment.CachedIdleAnimation;
+        TargetAnimation = Cached && Cached->Idle ? Cached->Idle : static_cast<UAnimSequence *>(TurboSequenceFragment.CachedIdleAnimation);
     }
     else if (NormalizedSpeed < 50.0f)
     {
-        TargetAnimation = TurboSequenceFragment.CachedWalkAnimation;
+        TargetAnimation = Cached && Cached->Walk ? Cached->Walk : static_cast<UAnimSequence *>(TurboSequenceFragment.CachedWalkAnimation);
     }
     else
     {
-        TargetAnimation = TurboSequenceFragment.CachedRunAnimation;
+        TargetAnimation = Cached && Cached->Run ? Cached->Run : static_cast<UAnimSequence *>(TurboSequenceFragment.CachedRunAnimation);
     }
 
     // Log de debugging para selección de animación (reducido para mejor rendimiento)

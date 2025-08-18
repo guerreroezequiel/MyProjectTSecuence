@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "StimulusTypes.h"
+#include "Engine/Engine.h"
 #include "StimulusSubsystem.generated.h"
 
 /**
@@ -11,7 +12,7 @@
  * Optimizado para 10,000 entidades y escalable para futuros estímulos
  */
 UCLASS()
-class MYPROJECTTSECUENCE_API UStimulusSubsystem : public UWorldSubsystem
+class MYPROJECTTSECUENCE_API UStimulusSubsystem : public UWorldSubsystem, public FTickableGameObject
 {
     GENERATED_BODY()
 
@@ -24,7 +25,12 @@ public:
     virtual void OnWorldBeginPlay(UWorld &InWorld) override;
 
     // Tick del subsystem - se ejecuta en game thread
-    virtual void Tick(float DeltaTime);
+    virtual void Tick(float DeltaTime) override;
+
+    // FTickableGameObject interface
+    virtual bool IsTickable() const override;
+    virtual bool IsTickableInEditor() const override;
+    virtual TStatId GetStatId() const override;
 
     // Métodos para agregar estímulos (escalables para futuras fuentes)
     UFUNCTION(BlueprintCallable, Category = "Stimulus System")
@@ -56,6 +62,9 @@ public:
     const TArray<FStimulusData> &GetPlayerStimuli() const { return PlayerStimuli; }
     const TArray<FStimulusData> &GetEnvironmentStimuli() const { return EnvironmentStimuli; }
 
+    // Acceso rápido al último estímulo del jugador (vía rápida)
+    bool TryGetLatestPlayerStimulus(FStimulusData &OutStimulus) const;
+
     // Limpiar estímulos expirados
     void CleanupExpiredStimuli();
 
@@ -74,6 +83,11 @@ private:
 
     UPROPERTY()
     TArray<FStimulusData> EnvironmentStimuli;
+
+    // Cache del último estímulo del jugador (vía rápida)
+    UPROPERTY()
+    FStimulusData LatestPlayerStimulus;
+    bool bHasLatestPlayerStimulus = false;
 
     // Flags de estado
     bool bSystemInitialized = false;
@@ -96,4 +110,6 @@ private:
     void OrganizeStimuli();
     void LimitActiveStimuli();
     bool IsStimulusValid(const FStimulusData &Stimulus) const;
+
+    void UpdateLatestPlayerStimulus(const FStimulusData &Stimulus);
 };

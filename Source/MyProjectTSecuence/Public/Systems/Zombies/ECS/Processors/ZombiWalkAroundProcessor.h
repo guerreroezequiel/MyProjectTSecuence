@@ -36,7 +36,7 @@ private:
 
     // Lógica de caminar sin rumbo
     void ProcessWalkAroundLogic(FZombiStateFragment &StateFragment,
-                                FZombiTransformFragment &TransformFragment,
+                                const FZombiTransformFragment &TransformFragment,
                                 FZombiMovementFragment &MovementFragment,
                                 float DeltaTime);
 

@@ -10,6 +10,30 @@
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
+ * Fragmento compartido (Shared) para configuración visual de zombies
+ * Centraliza thresholds y punteros de animación comunes por arquetipo/asset
+ */
+USTRUCT()
+struct FZombiVisualSharedFragment : public FMassSharedFragment
+{
+	GENERATED_BODY()
+
+	// Punteros opcionales a animaciones base
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> SharedIdleAnimation = nullptr;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> SharedWalkAnimation = nullptr;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> SharedRunAnimation = nullptr;
+
+	// Thresholds de sincronización
+	UPROPERTY()
+	float SharedMinPositionDeltaForSync = 0.5f;
+	UPROPERTY()
+	float SharedMinYawDeltaForSync = 1.0f;
+};
+
+/**
  * Fragmento para manejar la representación visual de entidades zombi usando TurboSequence
  * Enfoque: State Sync Architecture - Blend Space para animaciones
  */
@@ -72,6 +96,20 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	float TransitionDuration = 0.3f; // Duración de transición en segundos
 	UPROPERTY()
 	bool bIsTransitioning = false;
+
+	// Dirty flags y caches simples para reducir trabajo por frame
+	UPROPERTY()
+	FVector LastSyncedPosition = FVector::ZeroVector;
+	UPROPERTY()
+	float LastSyncedYaw = 0.0f;
+	UPROPERTY()
+	bool bTransformDirty = true;
+	UPROPERTY()
+	bool bAnimDirty = true;
+	UPROPERTY()
+	float MinPositionDeltaForSync = 0.5f; // umbral simple
+	UPROPERTY()
+	float MinYawDeltaForSync = 1.0f; // grados
 
 	// Dirección de la animación (para sincronizar con movimiento) - TEMPORALMENTE COMENTADO
 	// UPROPERTY()

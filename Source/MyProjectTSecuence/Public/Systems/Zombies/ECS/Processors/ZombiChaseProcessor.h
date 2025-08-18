@@ -37,7 +37,7 @@ private:
 
     // Lógica de persecución
     void ProcessChaseLogic(FZombiStateFragment &StateFragment,
-                           FZombiTransformFragment &TransformFragment,
+                           const FZombiTransformFragment &TransformFragment,
                            FZombiMovementFragment &MovementFragment,
                            const FZombiStimuliFragment &StimuliFragment,
                            float DeltaTime);

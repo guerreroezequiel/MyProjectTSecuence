@@ -16,13 +16,12 @@ void UPlayerSignalSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
 
-    // Log de inicialización
-    UE_LOG(LogTemp, Log, TEXT("🎮 PlayerSignalSubsystem: Inicializando"));
+    UE_LOG(LogTemp, Verbose, TEXT("PlayerSignalSubsystem: Inicializando"));
 }
 
 void UPlayerSignalSubsystem::Deinitialize()
 {
-    UE_LOG(LogTemp, Log, TEXT("🎮 PlayerSignalSubsystem: Desinicializando"));
+    UE_LOG(LogTemp, Verbose, TEXT("PlayerSignalSubsystem: Desinicializando"));
 
     Super::Deinitialize();
 }
@@ -44,7 +43,7 @@ void UPlayerSignalSubsystem::OnWorldBeginPlay(UWorld &InWorld)
         LastPlayerPosition = CurrentPlayerPosition;
         bSystemInitialized = true;
 
-        UE_LOG(LogTemp, Log, TEXT("🎮 PlayerSignalSubsystem: Jugador y StimulusSubsystem encontrados en %s"), *CurrentPlayerPosition.ToString());
+        UE_LOG(LogTemp, Verbose, TEXT("PlayerSignalSubsystem: Ready %s"), *CurrentPlayerPosition.ToString());
     }
     else
     {
@@ -74,13 +73,7 @@ void UPlayerSignalSubsystem::Tick(float DeltaTime)
         EmitPositionSignal();
         PositionUpdateTimer = 0.0f;
 
-        // DEBUG: Log para verificar que se están enviando estímulos
-        static int32 DebugCounter = 0;
-        if (++DebugCounter % 100 == 0) // Log cada 10 segundos (100 * 0.1s)
-        {
-            UE_LOG(LogTemp, Log, TEXT("🎮 PlayerSignalSubsystem: Enviando estímulo de posición - Pos: %s"),
-                   *CurrentPlayerPosition.ToString());
-        }
+        // Sin logs en hot-path
     }
 }
 
