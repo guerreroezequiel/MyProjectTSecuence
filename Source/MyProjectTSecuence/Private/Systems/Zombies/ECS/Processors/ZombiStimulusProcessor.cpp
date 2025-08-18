@@ -32,6 +32,12 @@ void UZombiStimulusProcessor::ConfigureQueries()
 
 void UZombiStimulusProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    // Solo ejecutar durante el juego (PIE), no en el editor
+    if (!GetWorld() || !GetWorld()->IsGameWorld() || !GetWorld()->HasBegunPlay())
+    {
+        return;
+    }
+
     // Obtener delta time
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 

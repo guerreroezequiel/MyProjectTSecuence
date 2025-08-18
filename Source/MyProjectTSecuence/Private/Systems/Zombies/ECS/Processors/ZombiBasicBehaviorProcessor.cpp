@@ -14,7 +14,7 @@ UZombiBasicBehaviorProcessor::UZombiBasicBehaviorProcessor()
 
 void UZombiBasicBehaviorProcessor::ConfigureQueries()
 {
-    UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehaviorProcessor: ConfigureQueries llamado"));
+    // ConfigureQueries se ejecuta al cargar Unreal (comportamiento normal)
 
     // Query para entidades en estado Idle
     IdleBehaviorQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
@@ -34,7 +34,7 @@ void UZombiBasicBehaviorProcessor::ConfigureQueries()
     WalkAroundBehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
     WalkAroundBehaviorQuery.RegisterWithProcessor(*this);
 
-    UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehaviorProcessor: Queries configuradas - Idle y WalkAround"));
+    // Queries configuradas - ready para Execute
 }
 
 void UZombiBasicBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -64,9 +64,9 @@ void UZombiBasicBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FM
             if (NumEntities > 0)
             {
                 static int32 IdleChunkCounter = 0;
-                if (++IdleChunkCounter % 150 == 0) // Debug cada 2.5 segundos aprox
+                if (++IdleChunkCounter % 60 == 0) // Debug cada segundo aprox
                 {
-                    UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehavior IdleChunk: %d entidades"), NumEntities);
+                    UE_LOG(LogTemp, Warning, TEXT("🧠 BasicBehavior IdleChunk: %d entidades PROCESANDO"), NumEntities);
                 }
             }
 
@@ -76,6 +76,7 @@ void UZombiBasicBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FM
 
             for (int32 i = 0; i < NumEntities; ++i)
             {
+                // SOLO LÓGICA: Ejecutar comportamiento Idle, NO manejar transiciones
                 ProcessIdleBehavior(StateFragments[i], TransformFragments[i], MovementFragments[i], DeltaTime * 4);
             } });
     }
@@ -90,9 +91,9 @@ void UZombiBasicBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FM
             if (NumEntities > 0)
             {
                 static int32 WalkChunkCounter = 0;
-                if (++WalkChunkCounter % 300 == 0) // Debug cada 5 segundos aprox
+                if (++WalkChunkCounter % 120 == 0) // Debug cada 2 segundos aprox
                 {
-                    UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehavior WalkChunk: %d entidades"), NumEntities);
+                    UE_LOG(LogTemp, Warning, TEXT("🧠 BasicBehavior WalkChunk: %d entidades PROCESANDO"), NumEntities);
                 }
             }
 
@@ -102,6 +103,7 @@ void UZombiBasicBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FM
 
             for (int32 i = 0; i < NumEntities; ++i)
             {
+                // SOLO LÓGICA: Ejecutar comportamiento WalkAround, NO manejar transiciones
                 ProcessWalkAroundBehavior(StateFragments[i], TransformFragments[i], MovementFragments[i], DeltaTime * 2);
             } });
     }
@@ -118,7 +120,9 @@ void UZombiBasicBehaviorProcessor::ProcessIdleBehavior(FZombiStateFragment &Stat
         MovementFragment.Stop();
     }
 
-    // SIMPLE: Solo rotar un poco hacia los costados cada tanto
+    // SOLO LÓGICA: No manejar transiciones de estado, solo comportamiento visual
+
+    // SIMPLE: Solo rotar un poco hacia los costados cada tanto (menos frecuente)
     if (ShouldPlayIdleAnimation(StateFragment))
     {
         // Rotar un poco hacia la izquierda o derecha
@@ -127,8 +131,8 @@ void UZombiBasicBehaviorProcessor::ProcessIdleBehavior(FZombiStateFragment &Stat
         float NewYaw = CurrentYaw + RandomRotation;
         TransformFragment.SetYaw(NewYaw);
 
-        // Resetear timer
-        StateFragment.SetStateTimerSeconds(0.0f);
+        // NO resetear timer aquí - queremos que siga contando para la transición
+        UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehavior: Idle animation | Yaw=%.1f"), NewYaw);
     }
 }
 
@@ -137,7 +141,9 @@ void UZombiBasicBehaviorProcessor::ProcessWalkAroundBehavior(FZombiStateFragment
                                                              FZombiMovementFragment &MovementFragment,
                                                              float DeltaTime)
 {
-    // Verificar si debe cambiar de dirección
+    // SOLO LÓGICA: No manejar transiciones de estado, solo refinar movimiento
+
+    // Verificar si debe cambiar de dirección (sin volver a Idle)
     if (ShouldChangeDirection(StateFragment))
     {
         // Generar nueva dirección aleatoria
@@ -148,6 +154,8 @@ void UZombiBasicBehaviorProcessor::ProcessWalkAroundBehavior(FZombiStateFragment
 
         // Resetear timer para el próximo cambio de dirección
         StateFragment.SetStateTimerSeconds(0.0f);
+
+        UE_LOG(LogTemp, Log, TEXT("🧠 BasicBehavior: WalkAround nueva dirección | Dir=%s"), *NewDirection.ToString());
     }
 }
 

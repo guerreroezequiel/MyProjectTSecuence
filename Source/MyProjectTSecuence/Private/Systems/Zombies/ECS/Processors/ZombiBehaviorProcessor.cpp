@@ -36,7 +36,7 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
 
 void UZombiBehaviorProcessor::ConfigureQueries()
 {
-    UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: ConfigureQueries llamado"));
+    // ConfigureQueries se ejecuta al cargar Unreal (comportamiento normal)
 
     // Query optimizada para comportamiento - solo fragmentos necesarios
     BehaviorQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
@@ -50,7 +50,7 @@ void UZombiBehaviorProcessor::ConfigureQueries()
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 
-    UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: Query configurada correctamente"));
+    // Query configurada - ready para Execute
 }
 
 void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -121,16 +121,27 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                                                      UE_LOG(LogTemp, Warning, TEXT("🧠 Entity[%d]: FORZADO a Idle - no tenía estado válido"), i);
                                                  }
 
-                                                 // Actualizar timers de comportamiento
+                                                 // ORQUESTADOR: BehaviorProcessor maneja timers y transiciones de estado
+
+                                                 // Actualizar timers de comportamiento (centralizado)
                                                  UpdateActionTimers(StateFragment, DeltaTime);
 
-                                                 // Evaluar transiciones de estado (DOP-compatible)
+                                                 // Evaluar transiciones de estado (todas: Idle ↔ WalkAround ↔ Chase)
                                                  EvaluateStateTransitions(StateFragment, TransformFragment, MovementFragment, StimuliFragment);
 
-                                                 // Actualizar estado actual
-                                                 UpdateCurrentState(StateFragment, TransformFragment, MovementFragment, StimuliFragment, DeltaTime);
+                                                 // Actualizar timer del estado actual (centralizado)
+                                                 float CurrentTimer = StateFragment.GetStateTimerSeconds();
+                                                 CurrentTimer += DeltaTime;
+                                                 StateFragment.SetStateTimerSeconds(CurrentTimer);
 
-                                                 // Si está Idle, promover a WalkAround tras intervalo hardcoded
+                                                 // TEMPORAL: Lógica de transiciones Idle/Walk movida a BasicBehaviorProcessor
+                                                 // Esta lógica está comentada para evitar conflictos con BasicBehaviorProcessor
+
+                                                 // Las transiciones Idle ↔ WalkAround ahora se manejan en:
+                                                 // - BasicBehaviorProcessor::ProcessIdleBehavior()
+                                                 // - BasicBehaviorProcessor::ProcessWalkAroundBehavior()
+
+                                                 /*
                                                  if (StateFragment.IsIdle())
                                                  {
                                                      const float IdleTimer = StateFragment.GetStateTimerSeconds();
@@ -156,6 +167,7 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                                                          UE_LOG(LogTemp, Log, TEXT("🧠 Behavior: WalkAround → Idle"));
                                                      }
                                                  }
+                                                 */
 
                                                  // Actualizar comportamiento de horda
                                                  UpdateHordeBehavior(StateFragment, TransformFragment, DeltaTime);
@@ -236,20 +248,21 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
     bool bIsWalking = StateFragment.IsWalking();
     bool bIsIdle = StateFragment.IsIdle();
 
-    // NUEVO: Verificar estímulos del jugador (DOP-compatible)
-    if (StimuliFragment.HasPlayerStimulus() && StimuliFragment.HasAnyStimulus())
+    // TEMPORAL: Desactivar Chase para testear Idle/WalkAround
+    if (false && StimuliFragment.HasPlayerStimulus() && StimuliFragment.HasAnyStimulus())
     {
         // Si tiene estímulo del jugador, cambiar a estado de persecución
         if (!bIsChasing)
         {
             // DEBUG TEMPORAL: Log por qué cambia a Chase
             static int32 ChaseChangeCounter = 0;
-            if (++ChaseChangeCounter % 100 == 0)
+            if (++ChaseChangeCounter % 50 == 0)
             {
-                UE_LOG(LogTemp, Error, TEXT("🧠 CAMBIANDO A CHASE: PlayerStimulus=%s AnyStimulus=%s Distance=%.1f"),
+                UE_LOG(LogTemp, Error, TEXT("🧠 CAMBIANDO A CHASE: PlayerStimulus=%s AnyStimulus=%s Distance=%.1f ZombiePos=%s"),
                        StimuliFragment.HasPlayerStimulus() ? TEXT("✓") : TEXT("✗"),
                        StimuliFragment.HasAnyStimulus() ? TEXT("✓") : TEXT("✗"),
-                       StimuliFragment.StimulusDistance);
+                       StimuliFragment.StimulusDistance,
+                       *TransformFragment.GetPosition().ToString());
             }
 
             StateFragment.SetToChasing();
@@ -311,17 +324,18 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
                                           0.0f)
                                           .GetSafeNormal();
             MovementFragment.StartMoving(RandomDirection, 50);
-            UE_LOG(LogTemp, Log, TEXT("🧠 Fallback: Idle → WalkAround (timer=%.2f)"), IdleTimer);
+            UE_LOG(LogTemp, Warning, TEXT("🧠 ORQUESTADOR: Idle → WalkAround | Timer=%.1f Dir=%s"),
+                   IdleTimer, *RandomDirection.ToString());
         }
     }
     else if (bIsWalking)
     {
         float WalkTimer = StateFragment.GetStateTimerSeconds();
-        if (WalkTimer > 6.0f) // 6 segundos fijos para ser determinístico
+        if (WalkTimer > 4.0f) // 4 segundos para ser más rápido en testing
         {
             StateFragment.SetToIdle();
             MovementFragment.Stop();
-            UE_LOG(LogTemp, Log, TEXT("🧠 Fallback: WalkAround → Idle (timer=%.2f)"), WalkTimer);
+            UE_LOG(LogTemp, Warning, TEXT("🧠 ORQUESTADOR: WalkAround → Idle | Timer=%.1f"), WalkTimer);
         }
     }
     else
@@ -344,7 +358,17 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiStateFragment &StateFragm
     CurrentTimer += DeltaTime;
     StateFragment.SetStateTimerSeconds(CurrentTimer);
 
-    // Lógica específica del estado actual usando flags
+    // Debug temporal: verificar que el timer funciona
+    static int32 TimerDebugCounter = 0;
+    if (++TimerDebugCounter % 300 == 0) // Cada 5 segundos aprox
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🕐 Timer Debug: CurrentTimer=%.2f DeltaTime=%.3f"), CurrentTimer, DeltaTime);
+    }
+
+    // TEMPORAL: Lógica específica de estado comentada para evitar conflictos con BasicBehaviorProcessor
+    // Estas funciones están reseteando el timer constantemente
+
+    /*
     if (StateFragment.IsChasing())
     {
         // Lógica de persecución
@@ -360,6 +384,7 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiStateFragment &StateFragm
         // Lógica de estado inactivo
         UpdateIdleState(StateFragment, MovementFragment, DeltaTime);
     }
+    */
 }
 
 void UZombiBehaviorProcessor::UpdateChaseState(FZombiStateFragment &StateFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime)

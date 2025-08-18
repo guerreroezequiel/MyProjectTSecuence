@@ -12,8 +12,10 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiConfigFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessorOptimized.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBasicBehaviorProcessor.h"
+// LEGACY: Procesadores viejos comentados para testing del nuevo enfoque
+// #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
+// #include "Systems/Zombies/ECS/Processors/ZombiBasicBehaviorProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiUnifiedBehaviorProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiTransformProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
@@ -105,6 +107,13 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     StateFragment.SetToIdle(); // Estado inicial Idle para transiciones automáticas
     StateFragment.SetHealthy(true);
     StateFragment.SetIndividual(true);
+
+    // DEBUG: Log spawn con posición
+    UE_LOG(LogTemp, Warning, TEXT("🧱 SPAWN: Zombie creado en Pos=%s | Estado=IDLE forzado"),
+           *SpawnLocation.ToString());
+
+    // IMPORTANTE: Asegurar que timer empiece en 0 para transiciones
+    StateFragment.SetStateTimerSeconds(0.0f);
 
     // 4. Fragmento de TurboSequence (visual)
     FZombiTurboSequenceFragment TurboSequenceFragment;

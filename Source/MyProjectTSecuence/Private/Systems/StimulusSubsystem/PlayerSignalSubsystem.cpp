@@ -112,8 +112,8 @@ void UPlayerSignalSubsystem::EmitPositionSignal()
         CurrentPlayerPosition,
         FVector::ZeroVector, // Sin dirección específica
         EStimulusType::Visual,
-        50,     // Intensidad baja para posición
-        1000.0f // Radio grande para posición
+        30,    // Intensidad reducida para posición
+        150.0f // Radio mucho menor para posición (era 1000 → ahora 150)
     );
 }
 
