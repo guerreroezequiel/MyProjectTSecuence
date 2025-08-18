@@ -20,6 +20,7 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+    ExecutionOrder.ExecuteAfter.Add(TEXT("StimulusProcessor")); // Explícito después de stimulus
     bRequiresGameThreadExecution = false;
     bAutoRegisterWithProcessingPhases = true;
 
@@ -27,67 +28,205 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-
+        UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: Constructor llamado - autoregister=%s"),
+               bAutoRegisterWithProcessingPhases ? TEXT("true") : TEXT("false"));
         bLoggedConstructor = true;
     }
 }
 
 void UZombiBehaviorProcessor::ConfigureQueries()
 {
+    UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: ConfigureQueries llamado"));
+
     // Query optimizada para comportamiento - solo fragmentos necesarios
     BehaviorQuery.AddRequirement<FZombiStateFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiTransformFragment>(EMassFragmentAccess::ReadOnly);
     BehaviorQuery.AddRequirement<FZombiMovementFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadOnly);
-    BehaviorQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
+    // TEMPORAL: Comentamos shared requirement para debug
+    // BehaviorQuery.AddSharedRequirement<FZombiConfigFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
 
     // Tags para filtrado rápido
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: Query configurada correctamente"));
 }
 
 void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
     // Solo ejecutar durante el juego (PIE), no en el editor
-    if (!GetWorld() || !GetWorld()->IsGameWorld())
+    if (!GetWorld() || !GetWorld()->IsGameWorld() || !GetWorld()->HasBegunPlay())
     {
         return;
     }
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
+    // Debug: Verificar si el procesador se está ejecutando
+    static int32 ExecuteCounter = 0;
+    if (++ExecuteCounter % 300 == 0) // Cada 5 segundos aprox
+    {
+        UE_LOG(LogTemp, Log, TEXT("🧠 BehaviorProcessor: EJECUTÁNDOSE | Execute count: %d | DeltaTime: %.3f"), ExecuteCounter, DeltaTime);
+    }
+
     // Procesa entidades activas para decisiones de IA
     BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                      {
-        TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
-        TArrayView<const FZombiTransformFragment> TransformFragments = Context.GetFragmentView<FZombiTransformFragment>();
-        TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
-        TArrayView<const FZombiStimuliFragment> StimuliFragments = Context.GetFragmentView<FZombiStimuliFragment>();
-        const float DeltaTime = Context.GetDeltaTimeSeconds();
+                                         TArrayView<FZombiStateFragment> StateFragments = Context.GetMutableFragmentView<FZombiStateFragment>();
+                                         TArrayView<const FZombiTransformFragment> TransformFragments = Context.GetFragmentView<FZombiTransformFragment>();
+                                         TArrayView<FZombiMovementFragment> MovementFragments = Context.GetMutableFragmentView<FZombiMovementFragment>();
+                                         TArrayView<const FZombiStimuliFragment> StimuliFragments = Context.GetFragmentView<FZombiStimuliFragment>();
+                                         // TEMPORAL: Usar valores hardcoded mientras debuggeamos
+                                         // const FZombiConfigFragment& Config = Context.GetSharedFragment<FZombiConfigFragment>();
+                                         const float DeltaTime = Context.GetDeltaTimeSeconds();
 
+                                         // Log por chunk para debug
+                                         static int32 DebugCounter = 0;
+                                         if (++DebugCounter % 300 == 0) // Cada 5 segundos aprox
+                                         {
+                                             UE_LOG(LogTemp, Log, TEXT("🧠 Behavior Chunk: %d entidades | HARDCODED values for debug"),
+                                                    Context.GetNumEntities());
+                                         }
+
+                                         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+                                         {
+                                             FZombiStateFragment &StateFragment = StateFragments[i];
+                                             const FZombiTransformFragment &TransformFragment = TransformFragments[i];
+                                             FZombiMovementFragment &MovementFragment = MovementFragments[i];
+                                             const FZombiStimuliFragment &StimuliFragment = StimuliFragments[i];
+
+                                             // Debug individual por entidad (menos frecuente)
+                                             static int32 EntityDebugCounter = 0;
+                                             const bool bShouldDebugEntity = (++EntityDebugCounter % 600 == 0); // Cada 10 segundos para una entidad
+
+                                             if (bShouldDebugEntity && i == 0)
+                                             {
+                                                 const float IdleTimer = StateFragment.GetStateTimerSeconds();
+                                                 UE_LOG(LogTemp, Log, TEXT("🧠 Entity[%d]: Idle=%s Walk=%s Chase=%s Dead=%s | IdleTimer=%.2f Required=%.2f"),
+                                                        i, StateFragment.IsIdle() ? TEXT("✓") : TEXT("✗"),
+                                                        StateFragment.IsWalking() ? TEXT("✓") : TEXT("✗"),
+                                                        StateFragment.IsChasing() ? TEXT("✓") : TEXT("✗"),
+                                                        StateFragment.IsDead() ? TEXT("✓") : TEXT("✗"),
+                                                        IdleTimer, 2.0f);
+                                             }
+
+                                             // Solo procesar si está vivo
+                                             if (!StateFragment.IsDead())
+                                             {
+                                                 // FORZAR estado Idle si no tiene ningún estado válido
+                                                 if (!StateFragment.IsIdle() && !StateFragment.IsWalking() && !StateFragment.IsChasing())
+                                                 {
+                                                     StateFragment.SetToIdle();
+                                                     UE_LOG(LogTemp, Warning, TEXT("🧠 Entity[%d]: FORZADO a Idle - no tenía estado válido"), i);
+                                                 }
+
+                                                 // Actualizar timers de comportamiento
+                                                 UpdateActionTimers(StateFragment, DeltaTime);
+
+                                                 // Evaluar transiciones de estado (DOP-compatible)
+                                                 EvaluateStateTransitions(StateFragment, TransformFragment, MovementFragment, StimuliFragment);
+
+                                                 // Actualizar estado actual
+                                                 UpdateCurrentState(StateFragment, TransformFragment, MovementFragment, StimuliFragment, DeltaTime);
+
+                                                 // Si está Idle, promover a WalkAround tras intervalo hardcoded
+                                                 if (StateFragment.IsIdle())
+                                                 {
+                                                     const float IdleTimer = StateFragment.GetStateTimerSeconds();
+                                                     if (IdleTimer > 2.0f) // Hardcoded 2 segundos
+                                                     {
+                                                         StateFragment.SetToWalking();
+                                                         const FVector RandomDirection = FVector(
+                                                                                             FMath::RandRange(-1.0f, 1.0f),
+                                                                                             FMath::RandRange(-1.0f, 1.0f),
+                                                                                             0.0f)
+                                                                                             .GetSafeNormal();
+                                                         MovementFragment.StartMoving(RandomDirection, 50); // Hardcoded 50 speed
+                                                         UE_LOG(LogTemp, Log, TEXT("🧠 Behavior: Idle → WalkAround | Dir=%s Speed=%d"), *RandomDirection.ToString(), (int32)MovementFragment.GetSpeed());
+                                                     }
+                                                 }
+                                                 else if (StateFragment.IsWalking())
+                                                 {
+                                                     const float WalkTimer = StateFragment.GetStateTimerSeconds();
+                                                     if (WalkTimer > 4.0f) // Hardcoded 4 segundos
+                                                     {
+                                                         StateFragment.SetToIdle();
+                                                         MovementFragment.Stop();
+                                                         UE_LOG(LogTemp, Log, TEXT("🧠 Behavior: WalkAround → Idle"));
+                                                     }
+                                                 }
+
+                                                 // Actualizar comportamiento de horda
+                                                 UpdateHordeBehavior(StateFragment, TransformFragment, DeltaTime);
+                                             }
+                                         } // Cerrar el for loop
+                                     }); // Cerrar el ForEachEntityChunk lambda
+
+    // GESTIÓN AUTOMÁTICA DE TAGS - Ejecutar después de procesar todas las entidades
+    UpdateEntityTags(EntityManager, Context);
+}
+
+void UZombiBehaviorProcessor::UpdateEntityTags(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
+{
+    // OPTIMIZACIÓN: Recopilar cambios primero, aplicar después (evita modificar arrays durante iteración)
+    struct FTagChange
+    {
+        FMassEntityHandle Entity;
+        bool bIsIdle = false;
+        bool bIsWalking = false;
+        bool bIsChasing = false;
+    };
+
+    TArray<FTagChange> TagChanges;
+    TagChanges.Reserve(64); // Pre-allocate para performance
+
+    // PASO 1: Recopilar todos los cambios necesarios
+    BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [&TagChanges](FMassExecutionContext &Context)
+                                     {
+        TArrayView<const FZombiStateFragment> StateFragments = Context.GetFragmentView<FZombiStateFragment>();
+        
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
-            FZombiStateFragment& StateFragment = StateFragments[i];
-            const FZombiTransformFragment& TransformFragment = TransformFragments[i];
-            FZombiMovementFragment& MovementFragment = MovementFragments[i];
-            const FZombiStimuliFragment& StimuliFragment = StimuliFragments[i];
-
-            // Solo procesar si está vivo
-            if (!StateFragment.IsDead())
-            {
-                // Actualizar timers de comportamiento
-                UpdateActionTimers(StateFragment, DeltaTime);
-
-                // Evaluar transiciones de estado (DOP-compatible)
-                EvaluateStateTransitions(StateFragment, TransformFragment, MovementFragment, StimuliFragment);
-
-                // Actualizar estado actual
-                UpdateCurrentState(StateFragment, TransformFragment, MovementFragment, StimuliFragment, DeltaTime);
-
-                // Actualizar comportamiento de horda
-                UpdateHordeBehavior(StateFragment, TransformFragment, DeltaTime);
-            }
+            const FZombiStateFragment& StateFragment = StateFragments[i];
+            FMassEntityHandle Entity = Context.GetEntity(i);
+            
+            FTagChange& Change = TagChanges.AddDefaulted_GetRef();
+            Change.Entity = Entity;
+            Change.bIsIdle = StateFragment.IsIdle();
+            Change.bIsWalking = StateFragment.IsWalking();
+            Change.bIsChasing = StateFragment.IsChasing();
         } });
+
+    // PASO 2: Aplicar todos los cambios fuera de la iteración
+    for (const FTagChange &Change : TagChanges)
+    {
+        // Remover todas las tags de estado primero
+        EntityManager.RemoveTagFromEntity(Change.Entity, FIdleTag::StaticStruct());
+        EntityManager.RemoveTagFromEntity(Change.Entity, FWalkingTag::StaticStruct());
+        EntityManager.RemoveTagFromEntity(Change.Entity, FChasingTag::StaticStruct());
+
+        // Agregar tag correspondiente al estado actual
+        if (Change.bIsIdle)
+        {
+            EntityManager.AddTagToEntity(Change.Entity, FIdleTag::StaticStruct());
+        }
+        else if (Change.bIsWalking)
+        {
+            EntityManager.AddTagToEntity(Change.Entity, FWalkingTag::StaticStruct());
+        }
+        else if (Change.bIsChasing)
+        {
+            EntityManager.AddTagToEntity(Change.Entity, FChasingTag::StaticStruct());
+        }
+    }
+
+    // Debug: Log cada 10 segundos el número de tags actualizadas
+    static int32 TagUpdateCounter = 0;
+    if (++TagUpdateCounter % 600 == 0 && TagChanges.Num() > 0)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🏷️ Tags actualizadas: %d entidades"), TagChanges.Num());
+    }
 }
 
 void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment)
@@ -103,6 +242,16 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
         // Si tiene estímulo del jugador, cambiar a estado de persecución
         if (!bIsChasing)
         {
+            // DEBUG TEMPORAL: Log por qué cambia a Chase
+            static int32 ChaseChangeCounter = 0;
+            if (++ChaseChangeCounter % 100 == 0)
+            {
+                UE_LOG(LogTemp, Error, TEXT("🧠 CAMBIANDO A CHASE: PlayerStimulus=%s AnyStimulus=%s Distance=%.1f"),
+                       StimuliFragment.HasPlayerStimulus() ? TEXT("✓") : TEXT("✗"),
+                       StimuliFragment.HasAnyStimulus() ? TEXT("✓") : TEXT("✗"),
+                       StimuliFragment.StimulusDistance);
+            }
+
             StateFragment.SetToChasing();
             MovementFragment.StartChasing(StimuliFragment.StimulusDirection, 150); // Velocidad alta para persecución
 
@@ -146,12 +295,13 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
         return;
     }
 
-    // Transiciones entre Idle y WalkAround
+    // Transiciones determinísticas entre Idle y WalkAround (compatibles con shared config)
     if (bIsIdle)
     {
+        // NOTA: Esta lógica está duplicada intencionalmente con la del main loop
+        // para garantizar transiciones en cualquier código path
         float IdleTimer = StateFragment.GetStateTimerSeconds();
-        // Idle → WalkAround después de 2-4 segundos
-        if (IdleTimer > FMath::RandRange(2.0f, 4.0f))
+        if (IdleTimer > 2.0f) // 2 segundos fijos para ser determinístico
         {
             StateFragment.SetToWalking();
             // Generar dirección aleatoria
@@ -161,23 +311,29 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiStateFragment &Stat
                                           0.0f)
                                           .GetSafeNormal();
             MovementFragment.StartMoving(RandomDirection, 50);
+            UE_LOG(LogTemp, Log, TEXT("🧠 Fallback: Idle → WalkAround (timer=%.2f)"), IdleTimer);
         }
     }
     else if (bIsWalking)
     {
         float WalkTimer = StateFragment.GetStateTimerSeconds();
-        // WalkAround → Idle después de 5-8 segundos
-        if (WalkTimer > FMath::RandRange(5.0f, 8.0f))
+        if (WalkTimer > 6.0f) // 6 segundos fijos para ser determinístico
         {
             StateFragment.SetToIdle();
             MovementFragment.Stop();
+            UE_LOG(LogTemp, Log, TEXT("🧠 Fallback: WalkAround → Idle (timer=%.2f)"), WalkTimer);
         }
     }
     else
     {
-        // Estado por defecto: empezar en Idle
-        StateFragment.SetToIdle();
-        MovementFragment.Stop();
+        // Solo forzar Idle si no tiene ningún estado válido, pero SIN resetear timer
+        if (!StateFragment.IsIdle() && !StateFragment.IsWalking() && !StateFragment.IsChasing())
+        {
+            StateFragment.SetToIdle();
+            MovementFragment.Stop();
+            UE_LOG(LogTemp, Log, TEXT("🧠 EvaluateStateTransitions: Forzando estado Idle por defecto"));
+        }
+        // Si ya está en Idle, NO tocarlo para que el timer pueda aumentar
     }
 }
 

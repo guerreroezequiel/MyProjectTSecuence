@@ -36,6 +36,7 @@ private:
     // Funciones auxiliares de IA - COMPATIBLE CON DOP
     void UpdateHordeBehavior(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, float DeltaTime);
     void UpdateActionTimers(FZombiStateFragment &StateFragment, float DeltaTime);
+    void UpdateEntityTags(FMassEntityManager &EntityManager, FMassExecutionContext &Context);
 
     // Funciones de estados DOP-compatibles
     void EvaluateStateTransitions(FZombiStateFragment &StateFragment, const FZombiTransformFragment &TransformFragment, FZombiMovementFragment &MovementFragment, const FZombiStimuliFragment &StimuliFragment);

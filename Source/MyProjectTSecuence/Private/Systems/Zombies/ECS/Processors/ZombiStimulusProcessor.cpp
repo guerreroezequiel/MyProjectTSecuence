@@ -35,12 +35,26 @@ void UZombiStimulusProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
     // Obtener delta time
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
+    // Debug: Verificar si el procesador se está ejecutando
+    static int32 StimulusExecuteCounter = 0;
+    if (++StimulusExecuteCounter % 300 == 0) // Cada 5 segundos aprox
+    {
+        UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: EJECUTÁNDOSE | Execute count: %d"), StimulusExecuteCounter);
+    }
+
     // Actualizar cache de estímulos
     UpdateStimulusCache(DeltaTime);
 
     // Procesar estímulos para cada zombie
     StimulusQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &ChunkContext)
                                      {
+        // Debug del chunk
+        static int32 ChunkDebugCounter = 0;
+        if (++ChunkDebugCounter % 300 == 0) // Cada 5 segundos aprox
+        {
+            UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor Chunk: %d entidades procesadas"), ChunkContext.GetNumEntities());
+        }
+
         // Obtener arrays de fragmentos
         const TConstArrayView<FZombiTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FZombiTransformFragment>();
         TArrayView<FZombiStimuliFragment> StimuliFragments = ChunkContext.GetMutableFragmentView<FZombiStimuliFragment>();
@@ -78,11 +92,19 @@ void UZombiStimulusProcessor::UpdateStimulusCache(float DeltaTime)
                 CachedLatestPlayerStimulus = LatestPlayerStimulus;
             }
 
-            // DEBUG: Log estímulos activos (muy infrecuente)
+            // DEBUG: Log estímulos activos (más detalle)
             static int32 DebugCounter = 0;
             if (++DebugCounter % 100 == 0)
             {
-                UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Env stimuli: %d, PlayerCached: %s"), CachedActiveStimuli.Num(), bHasCachedPlayerStimulus ? TEXT("Sí") : TEXT("No"));
+                if (bHasCachedPlayerStimulus)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("🧠 StimulusProcessor: PlayerSignal DETECTADA | Pos=%s Intensity=%d Radius=%.0f"),
+                           *CachedLatestPlayerStimulus.Position.ToString(),
+                           CachedLatestPlayerStimulus.Intensity,
+                           CachedLatestPlayerStimulus.Radius);
+                }
+                UE_LOG(LogTemp, Log, TEXT("🧠 StimulusProcessor: Env stimuli: %d, PlayerCached: %s"),
+                       CachedActiveStimuli.Num(), bHasCachedPlayerStimulus ? TEXT("Sí") : TEXT("No"));
             }
         }
         else

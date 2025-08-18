@@ -13,14 +13,14 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiConfigFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessorOptimized.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
+#include "Systems/Zombies/ECS/Processors/ZombiBasicBehaviorProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiTransformProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiChaseProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiWalkAroundProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiIdleProcessor.h"
+// ZombiWalkAroundProcessor y ZombiIdleProcessor eliminados - migrados a ZombiBasicBehaviorProcessor
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
@@ -43,6 +43,10 @@ void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
     if (MassEntitySubsystem)
     {
         UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
+
+        // Asegurar Shared Fragments globales
+        FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+        EntityManager.GetOrCreateSharedFragment<FZombiConfigFragment>(FZombiConfigFragment());
     }
     else
     {
@@ -98,7 +102,7 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
 
     // 3. Fragmento de Estado (16 bytes) - usando flags en lugar de enums
     FZombiStateFragment StateFragment;
-    StateFragment.SetToWalking(); // Estado inicial usando flags
+    StateFragment.SetToIdle(); // Estado inicial Idle para transiciones automáticas
     StateFragment.SetHealthy(true);
     StateFragment.SetIndividual(true);
 

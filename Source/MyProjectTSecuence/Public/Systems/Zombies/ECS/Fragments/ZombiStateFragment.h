@@ -19,21 +19,21 @@ struct FZombiStateFragment : public FMassFragment
 
     // Flags de estado (8 bytes)
     UPROPERTY()
-    uint8 StateFlags = 0;        // Estados principales (bits 0-7)
+    uint8 StateFlags = 0; // Estados principales (bits 0-7)
     UPROPERTY()
-    uint8 ActionFlags = 0;       // Acciones activas (bits 0-7)
+    uint8 ActionFlags = 0; // Acciones activas (bits 0-7)
     UPROPERTY()
-    uint8 ConditionFlags = 0;    // Condiciones físicas (bits 0-7)
+    uint8 ConditionFlags = 0; // Condiciones físicas (bits 0-7)
     UPROPERTY()
-    uint8 HordeFlags = 0;        // Comportamiento de horda (bits 0-7)
+    uint8 HordeFlags = 0; // Comportamiento de horda (bits 0-7)
 
     // Timers y datos (8 bytes)
     UPROPERTY()
-    uint16 StateTimer = 0;       // Timer del estado actual (0-65535)
+    uint16 StateTimer = 0; // Timer del estado actual (0-65535)
     UPROPERTY()
-    uint16 ActionTimer = 0;      // Timer de acciones (0-65535)
+    uint16 ActionTimer = 0; // Timer de acciones (0-65535)
     UPROPERTY()
-    uint32 StateData = 0;        // Datos comprimidos del estado
+    uint32 StateData = 0; // Datos comprimidos del estado
 
     // Constructor por defecto
     FZombiStateFragment()
@@ -61,45 +61,45 @@ struct FZombiStateFragment : public FMassFragment
 
     // ===== FLAGS DE ESTADO (StateFlags) =====
     // Estados principales (bits 0-7)
-    static constexpr uint8 FLAG_STATE_IDLE = 0x01;        // 0000 0001 - Inactivo
-    static constexpr uint8 FLAG_STATE_WALKING = 0x02;     // 0000 0010 - Caminando
-    static constexpr uint8 FLAG_STATE_CHASING = 0x04;     // 0000 0100 - Persiguiendo
-    static constexpr uint8 FLAG_STATE_ATTACKING = 0x08;   // 0000 1000 - Atacando
-    static constexpr uint8 FLAG_STATE_DEAD = 0x10;        // 0001 0000 - Muerto
-    static constexpr uint8 FLAG_STATE_STUNNED = 0x20;     // 0010 0000 - Aturdido
-    static constexpr uint8 FLAG_STATE_FLEEING = 0x40;     // 0100 0000 - Huyendo
-    static constexpr uint8 FLAG_STATE_RESERVED = 0x80;    // 1000 0000 - Reservado
+    static constexpr uint8 FLAG_STATE_IDLE = 0x01;      // 0000 0001 - Inactivo
+    static constexpr uint8 FLAG_STATE_WALKING = 0x02;   // 0000 0010 - Caminando
+    static constexpr uint8 FLAG_STATE_CHASING = 0x04;   // 0000 0100 - Persiguiendo
+    static constexpr uint8 FLAG_STATE_ATTACKING = 0x08; // 0000 1000 - Atacando
+    static constexpr uint8 FLAG_STATE_DEAD = 0x10;      // 0001 0000 - Muerto
+    static constexpr uint8 FLAG_STATE_STUNNED = 0x20;   // 0010 0000 - Aturdido
+    static constexpr uint8 FLAG_STATE_FLEEING = 0x40;   // 0100 0000 - Huyendo
+    static constexpr uint8 FLAG_STATE_RESERVED = 0x80;  // 1000 0000 - Reservado
 
     // ===== FLAGS DE ACCIÓN (ActionFlags) =====
     // Acciones individuales (bits 0-7)
-    static constexpr uint8 FLAG_ACTION_NONE = 0x00;       // 0000 0000 - Sin acción
-    static constexpr uint8 FLAG_ACTION_ROARING = 0x01;    // 0000 0001 - Rugiendo
-    static constexpr uint8 FLAG_ACTION_EATING = 0x02;     // 0000 0010 - Comiendo
+    static constexpr uint8 FLAG_ACTION_NONE = 0x00;          // 0000 0000 - Sin acción
+    static constexpr uint8 FLAG_ACTION_ROARING = 0x01;       // 0000 0001 - Rugiendo
+    static constexpr uint8 FLAG_ACTION_EATING = 0x02;        // 0000 0010 - Comiendo
     static constexpr uint8 FLAG_ACTION_INVESTIGATING = 0x04; // 0000 0100 - Investigando
-    static constexpr uint8 FLAG_ACTION_ALERTING = 0x08;   // 0000 1000 - Alertando
-    static constexpr uint8 FLAG_ACTION_RECOVERING = 0x10; // 0001 0000 - Recuperándose
-    static constexpr uint8 FLAG_ACTION_SPAWNING = 0x20;   // 0010 0000 - Apareciendo
-    static constexpr uint8 FLAG_ACTION_RESERVED = 0xC0;   // 1100 0000 - Reservado
+    static constexpr uint8 FLAG_ACTION_ALERTING = 0x08;      // 0000 1000 - Alertando
+    static constexpr uint8 FLAG_ACTION_RECOVERING = 0x10;    // 0001 0000 - Recuperándose
+    static constexpr uint8 FLAG_ACTION_SPAWNING = 0x20;      // 0010 0000 - Apareciendo
+    static constexpr uint8 FLAG_ACTION_RESERVED = 0xC0;      // 1100 0000 - Reservado
 
     // ===== FLAGS DE CONDICIÓN (ConditionFlags) =====
     // Condiciones físicas (bits 0-7)
-    static constexpr uint8 FLAG_CONDITION_HEALTHY = 0x01; // 0000 0001 - Saludable
-    static constexpr uint8 FLAG_CONDITION_INJURED = 0x02; // 0000 0010 - Herido
+    static constexpr uint8 FLAG_CONDITION_HEALTHY = 0x01;  // 0000 0001 - Saludable
+    static constexpr uint8 FLAG_CONDITION_INJURED = 0x02;  // 0000 0010 - Herido
     static constexpr uint8 FLAG_CONDITION_CRITICAL = 0x04; // 0000 0100 - Crítico
-    static constexpr uint8 FLAG_CONDITION_DYING = 0x08;   // 0000 1000 - Muriendo
+    static constexpr uint8 FLAG_CONDITION_DYING = 0x08;    // 0000 1000 - Muriendo
     static constexpr uint8 FLAG_CONDITION_BLEEDING = 0x10; // 0001 0000 - Sangrando
     static constexpr uint8 FLAG_CONDITION_INFECTED = 0x20; // 0010 0000 - Infectado
     static constexpr uint8 FLAG_CONDITION_RESERVED = 0xC0; // 1100 0000 - Reservado
 
     // ===== FLAGS DE HORDA (HordeFlags) =====
     // Comportamiento de horda (bits 0-7)
-    static constexpr uint8 FLAG_HORDE_INDIVIDUAL = 0x01;  // 0000 0001 - Individual
-    static constexpr uint8 FLAG_HORDE_FOLLOWING = 0x02;   // 0000 0010 - Siguiendo
-    static constexpr uint8 FLAG_HORDE_SWARMING = 0x04;    // 0000 0100 - Enjambre
-    static constexpr uint8 FLAG_HORDE_SCATTERED = 0x08;   // 0000 1000 - Disperso
-    static constexpr uint8 FLAG_HORDE_LEADER = 0x10;      // 0001 0000 - Líder
-    static constexpr uint8 FLAG_HORDE_SUPPORT = 0x20;     // 0010 0000 - Soporte
-    static constexpr uint8 FLAG_HORDE_RESERVED = 0xC0;    // 1100 0000 - Reservado
+    static constexpr uint8 FLAG_HORDE_INDIVIDUAL = 0x01; // 0000 0001 - Individual
+    static constexpr uint8 FLAG_HORDE_FOLLOWING = 0x02;  // 0000 0010 - Siguiendo
+    static constexpr uint8 FLAG_HORDE_SWARMING = 0x04;   // 0000 0100 - Enjambre
+    static constexpr uint8 FLAG_HORDE_SCATTERED = 0x08;  // 0000 1000 - Disperso
+    static constexpr uint8 FLAG_HORDE_LEADER = 0x10;     // 0001 0000 - Líder
+    static constexpr uint8 FLAG_HORDE_SUPPORT = 0x20;    // 0010 0000 - Soporte
+    static constexpr uint8 FLAG_HORDE_RESERVED = 0xC0;   // 1100 0000 - Reservado
 
     // ===== GETTERS DE ESTADO =====
     FORCEINLINE bool IsIdle() const { return (StateFlags & FLAG_STATE_IDLE) != 0; }
@@ -173,31 +173,34 @@ struct FZombiStateFragment : public FMassFragment
     FORCEINLINE void ClearAllConditions() { ConditionFlags = 0; }
     FORCEINLINE void ClearAllHordeFlags() { HordeFlags = 0; }
 
-    FORCEINLINE void SetToIdle() 
-    { 
-        ClearAllStates(); 
-        SetIdle(true); 
+    FORCEINLINE void SetToIdle()
+    {
+        ClearAllStates();
+        SetIdle(true);
         StateTimer = 0;
+        // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
-    FORCEINLINE void SetToWalking() 
-    { 
-        ClearAllStates(); 
-        SetWalking(true); 
+    FORCEINLINE void SetToWalking()
+    {
+        ClearAllStates();
+        SetWalking(true);
         StateTimer = 0;
+        // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
-    FORCEINLINE void SetToChasing() 
-    { 
-        ClearAllStates(); 
-        SetChasing(true); 
+    FORCEINLINE void SetToChasing()
+    {
+        ClearAllStates();
+        SetChasing(true);
         StateTimer = 0;
+        // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
-    FORCEINLINE void SetToDead() 
-    { 
-        ClearAllStates(); 
-        SetDead(true); 
+    FORCEINLINE void SetToDead()
+    {
+        ClearAllStates();
+        SetDead(true);
         StateTimer = 0;
         ActionTimer = 0;
     }
@@ -205,15 +208,15 @@ struct FZombiStateFragment : public FMassFragment
     // ===== UTILIDADES DE TIMER =====
     FORCEINLINE float GetStateTimerSeconds() const { return static_cast<float>(StateTimer) / 60.0f; }
     FORCEINLINE float GetActionTimerSeconds() const { return static_cast<float>(ActionTimer) / 60.0f; }
-    
-    FORCEINLINE void SetStateTimerSeconds(float Seconds) 
-    { 
-        StateTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f)); 
+
+    FORCEINLINE void SetStateTimerSeconds(float Seconds)
+    {
+        StateTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f));
     }
-    
-    FORCEINLINE void SetActionTimerSeconds(float Seconds) 
-    { 
-        ActionTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f)); 
+
+    FORCEINLINE void SetActionTimerSeconds(float Seconds)
+    {
+        ActionTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f));
     }
 
     // ===== UTILIDADES DE DATOS COMPRIMIDOS =====
@@ -224,9 +227,9 @@ struct FZombiStateFragment : public FMassFragment
     FORCEINLINE bool IsValid() const
     {
         // Verificar que solo un estado principal esté activo
-        uint8 ActiveStates = StateFlags & (FLAG_STATE_IDLE | FLAG_STATE_WALKING | FLAG_STATE_CHASING | 
-                                          FLAG_STATE_ATTACKING | FLAG_STATE_DEAD | FLAG_STATE_STUNNED | 
-                                          FLAG_STATE_FLEEING);
+        uint8 ActiveStates = StateFlags & (FLAG_STATE_IDLE | FLAG_STATE_WALKING | FLAG_STATE_CHASING |
+                                           FLAG_STATE_ATTACKING | FLAG_STATE_DEAD | FLAG_STATE_STUNNED |
+                                           FLAG_STATE_FLEEING);
         return FMath::CountBits(ActiveStates) <= 1; // Solo un estado activo
     }
 

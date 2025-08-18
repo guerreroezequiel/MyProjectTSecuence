@@ -73,7 +73,13 @@ void UPlayerSignalSubsystem::Tick(float DeltaTime)
         EmitPositionSignal();
         PositionUpdateTimer = 0.0f;
 
-        // Sin logs en hot-path
+        // Debug temporal: Log emisión de señales
+        static int32 SignalCounter = 0;
+        if (++SignalCounter % 50 == 0) // Cada 5 segundos aprox
+        {
+            UE_LOG(LogTemp, Warning, TEXT("🎯 PlayerSignal: Emitiendo señal posición #%d | Pos=%s"),
+                   SignalCounter, *CurrentPlayerPosition.ToString());
+        }
     }
 }
 

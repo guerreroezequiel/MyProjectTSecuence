@@ -74,7 +74,7 @@ struct FZombiConfigFragment : public FMassSharedFragment
         DefaultMovementSpeed = 50.0f;
         ChaseSpeed = 200.0f;
         RotationSpeed = 90.0f;
-        DirectionChangeInterval = 3.0f;
+        DirectionChangeInterval = 2.0f; // Acelerar para testing (2 segundos)
         ChaseDistance = 1000.0f;
         MovementRadius = 500.0f;
         StimulusDecayTime = 5.0f;
