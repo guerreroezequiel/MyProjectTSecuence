@@ -77,8 +77,8 @@ void UPlayerSignalSubsystem::Tick(float DeltaTime)
         static int32 SignalCounter = 0;
         if (++SignalCounter % 50 == 0) // Cada 5 segundos aprox
         {
-            UE_LOG(LogTemp, Warning, TEXT("🎯 PlayerSignal: Emitiendo señal posición #%d | Pos=%s"),
-                   SignalCounter, *CurrentPlayerPosition.ToString());
+            // UE_LOG(LogTemp, Warning, TEXT("🎯 PlayerSignal: Emitiendo señal posición #%d | Pos=%s"),
+            //        SignalCounter, *CurrentPlayerPosition.ToString());
         }
     }
 }

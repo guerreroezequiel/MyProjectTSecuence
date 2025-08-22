@@ -11,17 +11,8 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiConfigFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessorOptimized.h"
-// LEGACY: Procesadores viejos comentados para testing del nuevo enfoque
-// #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-// #include "Systems/Zombies/ECS/Processors/ZombiBasicBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiUnifiedBehaviorProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiTransformProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiChaseProcessor.h"
+// NUEVO: Procesador unificado
+#include "Systems/Zombies/ECS/Processors/ZombiSimpleBehaviors.h"
 // ZombiWalkAroundProcessor y ZombiIdleProcessor eliminados - migrados a ZombiBasicBehaviorProcessor
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
@@ -246,8 +237,8 @@ void UZombiMassSubsystem::RegisterMassProcessors()
         // Solo necesitamos verificar que el sistema Mass Entity esté funcionando
         UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
 
-        // Los procesadores se registran automáticamente en UE5.5.4
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Procesadores configurados para registro automático"));
+        // NUEVO: Procesador unificado ZombiSimpleBehaviors
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Procesador unificado ZombiSimpleBehaviors configurado"));
 
         // Verificar que los procesadores están registrados
         VerifyProcessorsRegistration();
@@ -312,4 +303,5 @@ void UZombiMassSubsystem::VerifyProcessorsRegistration()
     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Verificando registro de procesadores"));
     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: MassEntitySubsystem válido: %s"),
            MassEntitySubsystem ? TEXT("Sí") : TEXT("No"));
+    UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Procesador unificado ZombiSimpleBehaviors activo"));
 }

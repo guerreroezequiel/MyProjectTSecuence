@@ -127,6 +127,9 @@ void UStimulusSubsystem::AddStimulus(const FStimulusData &Stimulus)
     // Agregar a la lista principal
     ActiveStimuli.Add(Stimulus);
 
+    // Agregar al grid espacial (NUEVO - optimización)
+    StimulusGrid.AddStimulus(Stimulus);
+
     // Organizar por categoría
     switch (Stimulus.GetStimulusSource())
     {
@@ -178,21 +181,16 @@ void UStimulusSubsystem::CleanupExpiredStimuli()
 
     EnvironmentStimuli.RemoveAll([](const FStimulusData &Stimulus)
                                  { return Stimulus.HasExpired(); });
+
+    // Limpiar grid espacial (NUEVO - optimización)
+    StimulusGrid.CleanupExpiredStimuli();
 }
 
 TArray<FStimulusData> UStimulusSubsystem::GetStimuliInRange(const FVector &Position, float Range) const
 {
+    // NUEVO: Usar grid espacial para optimización O(n + m) en lugar de O(n·m)
     TArray<FStimulusData> StimuliInRange;
-
-    for (const FStimulusData &Stimulus : ActiveStimuli)
-    {
-        float Distance = FVector::Dist(Position, Stimulus.Position);
-        if (Distance <= Range && Distance <= Stimulus.Radius)
-        {
-            StimuliInRange.Add(Stimulus);
-        }
-    }
-
+    StimulusGrid.GetStimuliInRange(Position, Range, StimuliInRange);
     return StimuliInRange;
 }
 
@@ -286,6 +284,9 @@ void UStimulusSubsystem::LimitActiveStimuli()
         // Reorganizar después de la limpieza
         OrganizeStimuli();
     }
+
+    // NUEVO: Limitar estímulos por celda en el grid espacial
+    StimulusGrid.LimitStimuliPerCell(10);
 }
 
 bool UStimulusSubsystem::IsStimulusValid(const FStimulusData &Stimulus) const

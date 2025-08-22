@@ -10,10 +10,6 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiStateFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessorOptimized.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 #include "ZombiMassSubsystem.generated.h"
 

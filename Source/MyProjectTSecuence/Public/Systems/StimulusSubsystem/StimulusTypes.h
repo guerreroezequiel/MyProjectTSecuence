@@ -113,3 +113,130 @@ struct FStimulusData
     void SetIntensity(uint8 InIntensity) { Intensity = InIntensity; }
     void SetRadius(float InRadius) { Radius = InRadius; }
 };
+
+/**
+ * Grid espacial para optimizar queries de estímulos
+ * Cambia complejidad de O(n·m) a O(n + m)
+ */
+USTRUCT()
+struct FStimulusGrid
+{
+    GENERATED_BODY()
+
+    // Configuración del grid
+    static constexpr int32 GRID_SIZE = 32;                     // 32x32 celdas
+    static constexpr float CELL_SIZE = 100.0f;                 // 100 unidades por celda
+    static constexpr float WORLD_SIZE = GRID_SIZE * CELL_SIZE; // 3200x3200 unidades
+
+    // Grid de estímulos por celda
+    TArray<FStimulusData> Grid[GRID_SIZE][GRID_SIZE];
+
+    // Constructor
+    FStimulusGrid()
+    {
+        // Inicializar todas las celdas vacías
+        for (int32 X = 0; X < GRID_SIZE; ++X)
+        {
+            for (int32 Y = 0; Y < GRID_SIZE; ++Y)
+            {
+                Grid[X][Y].Empty();
+            }
+        }
+    }
+
+    // Convertir posición mundial a coordenadas de grid
+    FORCEINLINE FIntPoint WorldToGrid(const FVector &WorldPosition) const
+    {
+        int32 GridX = FMath::Clamp(FMath::FloorToInt(WorldPosition.X / CELL_SIZE), 0, GRID_SIZE - 1);
+        int32 GridY = FMath::Clamp(FMath::FloorToInt(WorldPosition.Y / CELL_SIZE), 0, GRID_SIZE - 1);
+        return FIntPoint(GridX, GridY);
+    }
+
+    // Obtener celdas vecinas (incluyendo la celda actual)
+    FORCEINLINE void GetNeighborCells(const FVector &WorldPosition, TArray<FIntPoint> &OutCells) const
+    {
+        FIntPoint CenterCell = WorldToGrid(WorldPosition);
+        OutCells.Empty();
+        OutCells.Reserve(9); // 3x3 = 9 celdas
+
+        for (int32 DX = -1; DX <= 1; ++DX)
+        {
+            for (int32 DY = -1; DY <= 1; ++DY)
+            {
+                int32 X = CenterCell.X + DX;
+                int32 Y = CenterCell.Y + DY;
+
+                if (X >= 0 && X < GRID_SIZE && Y >= 0 && Y < GRID_SIZE)
+                {
+                    OutCells.Add(FIntPoint(X, Y));
+                }
+            }
+        }
+    }
+
+    // Agregar estímulo al grid
+    FORCEINLINE void AddStimulus(const FStimulusData &Stimulus)
+    {
+        FIntPoint Cell = WorldToGrid(Stimulus.Position);
+        if (Cell.X >= 0 && Cell.X < GRID_SIZE && Cell.Y >= 0 && Cell.Y < GRID_SIZE)
+        {
+            Grid[Cell.X][Cell.Y].Add(Stimulus);
+        }
+    }
+
+    // Obtener estímulos en rango (optimizado)
+    FORCEINLINE void GetStimuliInRange(const FVector &Position, float Range, TArray<FStimulusData> &OutStimuli) const
+    {
+        OutStimuli.Empty();
+
+        // Obtener celdas vecinas
+        TArray<FIntPoint> NeighborCells;
+        GetNeighborCells(Position, NeighborCells);
+
+        // Buscar estímulos en celdas vecinas
+        for (const FIntPoint &Cell : NeighborCells)
+        {
+            const TArray<FStimulusData> &CellStimuli = Grid[Cell.X][Cell.Y];
+
+            for (const FStimulusData &Stimulus : CellStimuli)
+            {
+                float Distance = FVector::Dist(Position, Stimulus.Position);
+                if (Distance <= Range && Distance <= Stimulus.Radius)
+                {
+                    OutStimuli.Add(Stimulus);
+                }
+            }
+        }
+    }
+
+    // Limpiar estímulos expirados
+    FORCEINLINE void CleanupExpiredStimuli()
+    {
+        for (int32 X = 0; X < GRID_SIZE; ++X)
+        {
+            for (int32 Y = 0; Y < GRID_SIZE; ++Y)
+            {
+                Grid[X][Y].RemoveAll([](const FStimulusData &Stimulus)
+                                     { return Stimulus.HasExpired(); });
+            }
+        }
+    }
+
+    // Limitar número de estímulos por celda
+    FORCEINLINE void LimitStimuliPerCell(int32 MaxPerCell = 10)
+    {
+        for (int32 X = 0; X < GRID_SIZE; ++X)
+        {
+            for (int32 Y = 0; Y < GRID_SIZE; ++Y)
+            {
+                if (Grid[X][Y].Num() > MaxPerCell)
+                {
+                    // Mantener solo los estímulos más intensos
+                    Grid[X][Y].Sort([](const FStimulusData &A, const FStimulusData &B)
+                                    { return A.Intensity > B.Intensity; });
+                    Grid[X][Y].SetNum(MaxPerCell);
+                }
+            }
+        }
+    }
+};

@@ -89,6 +89,10 @@ private:
     FStimulusData LatestPlayerStimulus;
     bool bHasLatestPlayerStimulus = false;
 
+    // Grid espacial para optimizar queries (NUEVO)
+    UPROPERTY()
+    FStimulusGrid StimulusGrid;
+
     // Flags de estado
     bool bSystemInitialized = false;
 

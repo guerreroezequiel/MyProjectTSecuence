@@ -27,11 +27,11 @@ struct FZombiStateFragment : public FMassFragment
     UPROPERTY()
     uint8 HordeFlags = 0; // Comportamiento de horda (bits 0-7)
 
-    // Timers y datos (8 bytes)
+    // Timers y datos (12 bytes)
     UPROPERTY()
-    uint16 StateTimer = 0; // Timer del estado actual (0-65535)
+    float StateTimer = 0.0f; // Timer del estado actual (precisión float)
     UPROPERTY()
-    uint16 ActionTimer = 0; // Timer de acciones (0-65535)
+    float ActionTimer = 0.0f; // Timer de acciones (precisión float)
     UPROPERTY()
     uint32 StateData = 0; // Datos comprimidos del estado
 
@@ -42,8 +42,8 @@ struct FZombiStateFragment : public FMassFragment
         ActionFlags = 0;
         ConditionFlags = 0;
         HordeFlags = 0;
-        StateTimer = 0;
-        ActionTimer = 0;
+        StateTimer = 0.0f;
+        ActionTimer = 0.0f;
         StateData = 0;
     }
 
@@ -54,8 +54,8 @@ struct FZombiStateFragment : public FMassFragment
         ActionFlags = InActionFlags;
         ConditionFlags = FLAG_CONDITION_HEALTHY;
         HordeFlags = FLAG_HORDE_INDIVIDUAL;
-        StateTimer = 0;
-        ActionTimer = 0;
+        StateTimer = 0.0f;
+        ActionTimer = 0.0f;
         StateData = 0;
     }
 
@@ -177,7 +177,7 @@ struct FZombiStateFragment : public FMassFragment
     {
         ClearAllStates();
         SetIdle(true);
-        StateTimer = 0;
+        // Timer NO se resetea - debe mantener continuidad
         // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
@@ -185,7 +185,7 @@ struct FZombiStateFragment : public FMassFragment
     {
         ClearAllStates();
         SetWalking(true);
-        StateTimer = 0;
+        // Timer NO se resetea - debe mantener continuidad
         // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
@@ -193,7 +193,7 @@ struct FZombiStateFragment : public FMassFragment
     {
         ClearAllStates();
         SetChasing(true);
-        StateTimer = 0;
+        // Timer NO se resetea - debe mantener continuidad
         // Tag se gestionará automáticamente en BehaviorProcessor
     }
 
@@ -201,22 +201,22 @@ struct FZombiStateFragment : public FMassFragment
     {
         ClearAllStates();
         SetDead(true);
-        StateTimer = 0;
-        ActionTimer = 0;
+        StateTimer = 0.0f;
+        ActionTimer = 0.0f;
     }
 
     // ===== UTILIDADES DE TIMER =====
-    FORCEINLINE float GetStateTimerSeconds() const { return static_cast<float>(StateTimer) / 60.0f; }
-    FORCEINLINE float GetActionTimerSeconds() const { return static_cast<float>(ActionTimer) / 60.0f; }
+    FORCEINLINE float GetStateTimerSeconds() const { return StateTimer; }
+    FORCEINLINE float GetActionTimerSeconds() const { return ActionTimer; }
 
     FORCEINLINE void SetStateTimerSeconds(float Seconds)
     {
-        StateTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f));
+        StateTimer = FMath::Max(0.0f, Seconds);
     }
 
     FORCEINLINE void SetActionTimerSeconds(float Seconds)
     {
-        ActionTimer = static_cast<uint16>(FMath::Clamp(Seconds * 60.0f, 0.0f, 65535.0f));
+        ActionTimer = FMath::Max(0.0f, Seconds);
     }
 
     // ===== UTILIDADES DE DATOS COMPRIMIDOS =====
