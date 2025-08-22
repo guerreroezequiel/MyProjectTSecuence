@@ -1,13 +1,7 @@
 # Sistema ECS Zombis - Unreal Engine 5.5.4
 
 ## 📋 Descripción
-Sistema de zombis masivos usando **Mass Entity System** + **TurboSequence** con arquitectura **State Sync**. Maneja miles de entidades con máximo rendimiento.
-
-## ✅ Estado Actual
-- **✅ Sistema Funcional**: Zombis se mueven, rotan y sincronizan visualmente
-- **✅ State Sync**: Lógica (Mass) separada de visual (TurboSequence)
-- **✅ Optimizado**: Fragmentos especializados y procesadores eficientes
-- **✅ Escalable**: Preparado para miles de entidades
+Sistema de zombis usando **Mass Entity System** + **TurboSequence** con arquitectura **State Sync**. Diseñado para manejar cientos de entidades con buen rendimiento.
 
 ## 🏗️ Arquitectura
 
@@ -21,16 +15,14 @@ Lógica (Mass Entity) ←→ Sincronización ←→ Visual (TurboSequence)
 #### **Fragmentos (Datos)**
 - `FZombiCoreFragment`: Posición, rotación, velocidad
 - `FZombiBehaviorFragment`: Estados, AI, timers
-- `FZombiCombatFragment`: Salud, daño, cooldowns
+- `FZombiStimuliFragment`: Estímulos y respuestas
 - `FZombiTurboSequenceFragment`: Referencias visuales
-- `FZombiUpdateFrequencyFragment`: Control de frecuencia de update
 
 #### **Procesadores (Lógica)**
-- `UZombiMovementProcessor`: Movimiento y rotación
 - `UZombiBehaviorProcessor`: Estados y AI
-- `UZombiCombatProcessor`: Combate y daño
+- `UZombiMovementProcessor`: Movimiento y rotación
+- `UZombiStimulusProcessor`: Procesamiento de estímulos
 - `UZombiTurboSequenceProcessor`: Sincronización visual
-- `UZombiPeriodicChaseProcessor`: Persecución periódica
 
 #### **Subsystems (Gestión)**
 - `UZombiMassSubsystem`: Gestión de entidades Mass
@@ -46,7 +38,7 @@ ZombiTestController → SpawnerSubsystem → MassSubsystem → TurboSequence
 
 ### **2. Por Frame**
 ```
-Behavior → Combat → Movement → TurboSequence (State Sync)
+Stimulus → Behavior → Movement → TurboSequence (State Sync)
 ```
 
 ### **3. Sincronización Visual**
@@ -72,16 +64,15 @@ GetActiveZombiCount();       // Contar activos
 ## 📊 Rendimiento
 
 ### **Optimizaciones**
-- **Fragmentos Especializados**: Solo datos necesarios por procesador
-- **Update Frequency Control**: Diferentes frecuencias por distancia
+- **Fragmentos Especializados**: Datos por procesador
 - **Batch Processing**: Spawning en lotes
 - **Concurrent Operations**: Thread-safe
-- **Query Optimization**: Filtrado inteligente
+- **Query Optimization**: Filtrado
 
 ### **Escalabilidad**
-- **Diseñado para**: Miles de entidades
-- **Arquitectura**: State Sync para máxima separación
-- **Rendimiento**: Procesamiento paralelo optimizado
+- **Diseñado para**: Cientos de entidades
+- **Arquitectura**: State Sync
+- **Rendimiento**: Procesamiento optimizado
 
 ## 🔧 Configuración Técnica
 
@@ -91,7 +82,7 @@ GetActiveZombiCount();       // Contar activos
 - `EnhancedInput` (UE5 nativo)
 
 ### **Fases de Procesamiento**
-- **PrePhysics**: Lógica (movimiento, AI, combate)
+- **PrePhysics**: Lógica (movimiento, AI, estímulos)
 - **PostPhysics**: Visual (TurboSequence sync)
 
 ### **Tags de Filtrado**
@@ -103,11 +94,11 @@ GetActiveZombiCount();       // Contar activos
 ```
 Source/MyProjectTSecuence/
 ├── Public/Systems/Zombies/ECS/
-│   ├── Fragments/           # Datos especializados
-│   ├── Processors/          # Lógica por dominio
-│   ├── Subsystems/          # Gestión centralizada
-│   ├── Controllers/         # Control Blueprint
-│   └── Tags/               # Filtrado inteligente
+│   ├── Fragments/           # Datos
+│   ├── Processors/          # Lógica
+│   ├── Subsystems/          # Gestión
+│   ├── Controllers/         # Control
+│   └── Tags/               # Filtrado
 └── Private/Systems/Zombies/ECS/
     └── [Implementaciones .cpp]
 ```
@@ -116,22 +107,22 @@ Source/MyProjectTSecuence/
 
 ```cpp
 enum EZombiState {
-    Stand, WalkAround, Chase, Attack, TakeDamage, Dead
+    Idle, WalkAround, Chase
 }
 ```
 
 ## ✅ Funcionalidades Implementadas
 
-- **✅ Spawning Masivo**: Lotes de 100+ zombis
-- **✅ Movimiento**: AI básica con rotación suave
-- **✅ Sincronización Visual**: Transformaciones perfectas
-- **✅ Animaciones**: Estados individuales por entidad
+- **✅ Spawning**: Lotes de zombis
+- **✅ Movimiento**: AI básica con rotación
+- **✅ Sincronización Visual**: Transformaciones básicas
+- **✅ Animaciones**: Estados por entidad
 - **✅ Optimización**: Fragmentos y procesadores especializados
-- **✅ Control Blueprint**: Interfaz completa desde editor
+- **✅ Control Blueprint**: Interfaz desde editor
 
 ## 🔮 Próximos Pasos
 Ver `HAZME.md` para roadmap detallado de desarrollo.
 
 ---
 
-**🎉 Sistema completamente funcional y optimizado para miles de entidades con arquitectura State Sync.** 
+**Sistema funcional para cientos de entidades con arquitectura State Sync.** 

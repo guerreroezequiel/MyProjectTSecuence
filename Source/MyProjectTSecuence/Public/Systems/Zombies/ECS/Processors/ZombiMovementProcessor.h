@@ -32,6 +32,5 @@ private:
 
 	// Funciones auxiliares
 	FVector GenerateRandomDirection() const;
-	bool IsWithinMovementRadius(const FVector &Position, const FVector &Center, float Radius) const;
 	FVector ClampToMovementArea(const FVector &Position, const FVector &Center, float Radius) const;
 };

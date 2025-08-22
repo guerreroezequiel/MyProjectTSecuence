@@ -104,10 +104,6 @@ void UZombiStimulusProcessor::ProcessStimuliForZombie(const FVector &ZombiePosit
         {
             // Actualizar estímulo del zombie
             StimuliFragment.UpdateStimulus(Stimulus, ZombiePosition);
-
-            // Log para debugging (opcional)
-            UE_LOG(LogTemp, Verbose, TEXT("🧠 StimulusProcessor: Zombie recibió estímulo - Tipo: %d, Fuente: %d, Intensidad: %d"),
-                   Stimulus.GetStimulusType(), Stimulus.GetStimulusSource(), Stimulus.Intensity);
         }
     }
 }

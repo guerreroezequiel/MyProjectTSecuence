@@ -17,7 +17,6 @@
 #include "ZombiMassSubsystem.generated.h"
 
 // Subsystem que maneja el registro de entidades zombi en el sistema Mass Entity
-// Optimizado con fragmentos especializados para mejor rendimiento
 UCLASS()
 class MYPROJECTTSECUENCE_API UZombiMassSubsystem : public UWorldSubsystem
 {
@@ -32,7 +31,6 @@ public:
 	virtual void OnWorldBeginPlay(UWorld &InWorld) override;
 
 	// Registra una entidad zombi en el sistema Mass Entity
-	// Usa fragmentos especializados para optimización
 	FMassEntityHandle RegisterZombiEntity(const FVector &SpawnLocation,
 										  class UTurboSequence_MeshAsset_Lf *TurboSequenceAsset);
 
@@ -62,17 +60,7 @@ private:
 	// Registra los procesadores de Mass Entity
 	void RegisterMassProcessors();
 
-public:
-	// Ejecuta los procesadores manualmente cada frame (DEPRECATED - Ahora se ejecutan automáticamente)
-	void ExecuteProcessorsManually(float DeltaTime);
-
 private:
-	// Debug: Verifica que una entidad tiene los fragmentos correctos
-	void DebugEntityFragments(FMassEntityHandle EntityHandle);
-
-	// Debug: Verifica que una entidad tiene los tags correctos
-	void DebugEntityTags(FMassEntityHandle EntityHandle);
-
 	// Verifica que los procesadores están registrados correctamente
 	void VerifyProcessorsRegistration();
 };

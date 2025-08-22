@@ -25,7 +25,7 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-    
+
         bLoggedConstructor = true;
     }
 }
@@ -90,12 +90,6 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &B
     // Lógica de transición de estados basada en condiciones
     EZombiState CurrentState = BehaviorFragment.GetState();
 
-
-
-
-
-
-
     // NUEVO: Verificar estímulos del jugador (DOP-compatible)
     if (StimuliFragment.HasPlayerStimulus() && StimuliFragment.HasAnyStimulus())
     {
@@ -105,10 +99,6 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &B
             BehaviorFragment.SetState(EZombiState::Chase);
             // Guardar datos del estímulo en StateData
             BehaviorFragment.SetStateData(StimuliFragment.StimulusDistance);
-
-            // Log para debugging
-            UE_LOG(LogTemp, Verbose, TEXT("🧠 BehaviorProcessor: Zombie cambió a Chase por estímulo del jugador - Distancia: %.1f, Intensidad: %d"),
-                   StimuliFragment.StimulusDistance, StimuliFragment.TotalStimulusIntensity);
         }
         return;
     }
@@ -149,8 +139,6 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &Behavio
         UpdateWalkAroundState(BehaviorFragment, DeltaTime);
         break;
 
-
-
     default:
         break;
     }
@@ -168,9 +156,6 @@ void UZombiBehaviorProcessor::UpdateChaseState(FZombiBehaviorFragment &BehaviorF
     // Actualizar datos de persecución
     float DistanceToPlayer = StimuliFragment.StimulusDistance;
     BehaviorFragment.SetStateData(DistanceToPlayer);
-
-    // Log para debugging
-    UE_LOG(LogTemp, Verbose, TEXT("🧠 ChaseState: Zombie persiguiendo - Distancia: %.1f"), DistanceToPlayer);
 }
 
 void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
@@ -186,25 +171,9 @@ void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiBehaviorFragment &Beha
     }
 }
 
-
-
 void UZombiBehaviorProcessor::UpdateHordeBehavior(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime)
 {
-    // Lógica simplificada de horda
-    if (BehaviorFragment.IsInHorde())
-    {
-        // Si está en una horda, actualizar comportamiento grupal
-        if (BehaviorFragment.GetHordeBehavior() == EZombiHordeBehavior::Following)
-        {
-            // Lógica para seguir al líder
-            // TODO: Implementar lógica de seguimiento
-        }
-        else if (BehaviorFragment.GetHordeBehavior() == EZombiHordeBehavior::Swarming)
-        {
-            // Lógica de enjambre
-            // TODO: Implementar lógica de enjambre
-        }
-    }
+    // TODO: Implementar lógica de horda cuando sea necesario
 }
 
 void UZombiBehaviorProcessor::UpdateActionTimers(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
@@ -213,13 +182,8 @@ void UZombiBehaviorProcessor::UpdateActionTimers(FZombiBehaviorFragment &Behavio
     BehaviorFragment.ActionTimer += DeltaTime;
 
     // Limpiar acciones que han expirado
-    if (BehaviorFragment.ActionTimer > 2.0f) // Acciones duran máximo 2 segundos
+    if (BehaviorFragment.ActionTimer > 2.0f)
     {
         BehaviorFragment.ClearAllActions();
     }
-
-    // Actualizar timer de comportamiento (usando StateTimer)
-    float CurrentTimer = BehaviorFragment.GetStateTimer();
-    CurrentTimer += DeltaTime;
-    BehaviorFragment.SetStateTimer(CurrentTimer);
 }

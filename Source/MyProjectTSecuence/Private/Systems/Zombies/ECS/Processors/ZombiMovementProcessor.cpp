@@ -23,7 +23,7 @@ UZombiMovementProcessor::UZombiMovementProcessor()
     static bool bLoggedConstructor = false;
     if (!bLoggedConstructor)
     {
-    
+
         bLoggedConstructor = true;
     }
 }
@@ -74,20 +74,20 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                         CoreFragment.MovementDirection = GenerateRandomDirection();
                         CoreFragment.BehaviorTimer = 0.0f;
 
-                        // Cambiar velocidad aleatoriamente
-                        float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
-                        if (SpeedVariation < 0.3f)
-                        {
-                            CoreFragment.MovementSpeed = 0.0f; // IDLE
-                        }
-                        else if (SpeedVariation < 0.7f)
-                        {
-                            CoreFragment.MovementSpeed = 25.0f; // WALK
-                        }
-                        else
-                        {
-                            CoreFragment.MovementSpeed = 80.0f; // RUN
-                        }
+                                            // Cambiar velocidad aleatoriamente
+                    float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
+                    if (SpeedVariation < 0.3f)
+                    {
+                        CoreFragment.MovementSpeed = 0.0f;
+                    }
+                    else if (SpeedVariation < 0.7f)
+                    {
+                        CoreFragment.MovementSpeed = 25.0f;
+                    }
+                    else
+                    {
+                        CoreFragment.MovementSpeed = 80.0f;
+                    }
                     }
                 }
 
@@ -99,8 +99,8 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                         FRotator TargetRotation = CoreFragment.MovementDirection.Rotation();
                         FRotator CurrentRotation = CoreFragment.Rotation;
 
-                        // Rotación más agresiva si está persiguiendo o acaba de cambiar dirección
-                        float RotationSpeedMultiplier = (BehaviorFragment.IsChasing() || CoreFragment.BehaviorTimer < 0.5f) ? 3.0f : 1.0f;
+                        // Rotación más agresiva si está persiguiendo
+                        float RotationSpeedMultiplier = BehaviorFragment.IsChasing() ? 3.0f : 1.0f;
 
                         // Interpola suavemente la rotación
                         CoreFragment.Rotation = FMath::RInterpTo(
@@ -136,12 +136,6 @@ FVector UZombiMovementProcessor::GenerateRandomDirection() const
     float Radians = FMath::DegreesToRadians(RandomAngle);
 
     return FVector(FMath::Cos(Radians), FMath::Sin(Radians), 0.0f).GetSafeNormal();
-}
-
-// Verifica si el zombi está dentro del radio de movimiento
-bool UZombiMovementProcessor::IsWithinMovementRadius(const FVector &Position, const FVector &Center, float Radius) const
-{
-    return FVector::Dist2D(Position, Center) <= Radius;
 }
 
 // Ajusta la posición para mantener al zombi dentro del área

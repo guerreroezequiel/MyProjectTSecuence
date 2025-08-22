@@ -11,8 +11,9 @@
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**
- * Procesador para sincronizar entidades Mass con instancias visuales TurboSequence
- * Optimizado para usar fragmentos especializados
+ * Procesador optimizado para sincronizar entidades Mass con instancias visuales TurboSequence
+ * OPTIMIZADO: Para 5000+ entidades con State Sync Architecture
+ * Eliminadas transiciones manuales - TurboSequence maneja las transiciones automáticamente
  */
 UCLASS()
 class UZombiTurboSequenceProcessor : public UMassProcessor
@@ -27,18 +28,25 @@ protected:
 	virtual void Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context) override;
 
 private:
-	// Query para sincronizar transformaciones
+	// Query optimizada para State Sync
 	FMassEntityQuery TransformSyncQuery{*this};
 
-	// Query para actualizar Blend Space (futuro)
-	FMassEntityQuery BlendSpaceQuery{*this};
+	// Configuración de rotación (configurable)
+	UPROPERTY(EditAnywhere, Category = "TurboSequence")
+	float RotationOffset = -90.0f;
 
-	// Función para actualizar animaciones basadas en estado del zombi
-	void UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
-									 FZombiTurboSequenceFragment &TurboSequenceFragment,
-									 const FZombiBehaviorFragment &BehaviorFragment,
-									 const FZombiCoreFragment &CoreFragment);
+	// Funciones optimizadas
+	void UpdateAnimation(FZombiTurboSequenceFragment &TurboSequenceFragment,
+						 const FZombiBehaviorFragment &BehaviorFragment,
+						 const FZombiCoreFragment &CoreFragment);
 
-	// Función para cachear animaciones y optimizar búsquedas
-	void CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment);
+	void SyncTransform(FZombiTurboSequenceFragment &TurboSequenceFragment,
+					   const FZombiCoreFragment &CoreFragment);
+
+	// Función de optimización de sombras
+	void UpdateShadowSettings(FZombiTurboSequenceFragment &TurboSequenceFragment,
+							  const FZombiCoreFragment &CoreFragment);
+
+	UAnimSequence *GetAnimationForState(const FZombiBehaviorFragment &BehaviorFragment,
+										const FZombiCoreFragment &CoreFragment);
 };

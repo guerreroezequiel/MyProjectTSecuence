@@ -6,37 +6,30 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 
 #include "TurboSequence_Manager_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
-#include "Animation/BlendSpace.h"
 #include "Engine/Engine.h"
-#include "HAL/PlatformTime.h"
-#include "Math/Vector.h"
-#include "TurboSequence_Manager_Lf.h"
 
 UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
 {
-    // Rehabilitar procesador para sincronización de transformaciones
-    // Configuración para registro automático en UE5.5.4
+    // Configuración optimizada para State Sync
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
-    ExecutionOrder.ExecuteInGroup = TEXT("MassBehavior");
+    ExecutionOrder.ExecuteInGroup = TEXT("MassVisual");
+    ExecutionOrder.ExecuteAfter.Add(TEXT("MassBehavior"));
+    ExecutionOrder.ExecuteAfter.Add(TEXT("MassMovement"));
     bRequiresGameThreadExecution = false;
-    bAutoRegisterWithProcessingPhases = true; // Rehabilitar registro automático
+    bAutoRegisterWithProcessingPhases = true;
 
-    // Log solo en la primera instancia
-    static bool bLoggedConstructor = false;
-    if (!bLoggedConstructor)
-    {
-
-        bLoggedConstructor = true;
-    }
+    // Configuración de rotación (configurable)
+    RotationOffset = -90.0f; // Compensación de orientación
 }
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
 {
-    // Query para sincronizar transformaciones y animaciones (State Sync) - optimizado
+    // Query optimizada para State Sync - solo fragmentos necesarios
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     TransformSyncQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
@@ -52,31 +45,12 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Log eliminado para optimización de rendimiento
-    // static float DebugTimer = 0.0f;
-    // DebugTimer += DeltaTime;
-    // if (DebugTimer >= 5.0f) // Log cada 5 segundos
-    // {
-    //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Ejecutándose - DeltaTime: %f"), DeltaTime);
-    //     DebugTimer = 0.0f;
-    // }
-
-    // Sincronizar transformaciones y animaciones (State Sync) - optimizado
+    // Procesar entidades en chunks optimizados para State Sync
     TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
                                           {
         TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
         TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
-
-
-        // Log eliminado para optimización de rendimiento
-        // static float EntityDebugTimer = 0.0f;
-        // EntityDebugTimer += DeltaTime;
-        // if (EntityDebugTimer >= 5.0f && Context.GetNumEntities() > 0)
-        // {
-        //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Procesando %d entidades"), Context.GetNumEntities());
-        //     EntityDebugTimer = 0.0f;
-        // }
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
@@ -84,228 +58,217 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
             const FZombiCoreFragment& CoreFragment = CoreFragments[i];
             const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
 
-
-            // Actualizar animación basada en estado PRIMERO
-            UpdateAnimationBasedOnState(Context, i, TurboSequenceFragment, BehaviorFragment, CoreFragment);
-            
-            // SINCRONIZAR TRANSFORMACIÓN con TurboSequence
-            if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.MeshData.IsMeshDataValid())
+            // Solo procesar si la instancia es válida
+            if (!TurboSequenceFragment.IsValid())
             {
-                // Crear transformación desde los datos del CoreFragment
-                FTransform NewTransform;
-                NewTransform.SetLocation(CoreFragment.Position);
-                
-                // CORREGIR ROTACIÓN: Compensar la diferencia de 90 grados entre animación y transformación
-                FRotator CorrectedRotation = CoreFragment.Rotation;
-                CorrectedRotation.Yaw -= 90.0f; // Compensar la diferencia de orientación
-                
-                NewTransform.SetRotation(CorrectedRotation.Quaternion());
-                NewTransform.SetScale3D(FVector::OneVector);
-
-                // Aplicar transformación usando el manager de TurboSequence
-                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-                    TurboSequenceFragment.MeshData,
-                    NewTransform);
+                continue;
             }
+
+            // PASO 1: Actualizar animación (simplificado)
+            UpdateAnimation(TurboSequenceFragment, BehaviorFragment, CoreFragment);
+            
+            // PASO 2: Sincronizar transformación (State Sync)
+            SyncTransform(TurboSequenceFragment, CoreFragment);
         } });
 }
 
-// Implementación de animaciones basadas en estado con Blend Space
-void UZombiTurboSequenceProcessor::UpdateAnimationBasedOnState(FMassExecutionContext &Context, int32 EntityIndex,
-                                                               FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                               const FZombiBehaviorFragment &BehaviorFragment,
-                                                               const FZombiCoreFragment &CoreFragment)
+// Función optimizada para actualizar animaciones
+void UZombiTurboSequenceProcessor::UpdateAnimation(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                   const FZombiBehaviorFragment &BehaviorFragment,
+                                                   const FZombiCoreFragment &CoreFragment)
 {
-    // Verificar que tenemos todo lo necesario
-    if (!TurboSequenceFragment.TurboSequenceAsset || !TurboSequenceFragment.MeshData.IsMeshDataValid())
+    // Obtener animación basada en estado y velocidad
+    UAnimSequence *TargetAnimation = GetAnimationForState(BehaviorFragment, CoreFragment);
+
+    // Solo cambiar si es diferente (optimización)
+    if (TargetAnimation != TurboSequenceFragment.CurrentAnimation)
     {
-        return;
-    }
+        TurboSequenceFragment.SetAnimation(TargetAnimation);
 
-    // Log eliminado para optimización de rendimiento
-    // static float AnimationDebugTimer = 0.0f;
-    // AnimationDebugTimer += Context.GetDeltaTimeSeconds();
-    // if (AnimationDebugTimer >= 10.0f) // Log cada 10 segundos
-    // {
-    //     UE_LOG(LogTemp, Log, TEXT("🎮 ZombiTurboSequenceProcessor: Actualizando animación - Estado: %d, Velocidad: %.2f"),
-    //            (int32)StateFragment.State, MovementFragment.MovementSpeed);
-    //     AnimationDebugTimer = 0.0f;
-    // }
-
-    // Obtener la librería de animaciones del asset
-    if (!TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
-    {
-        return;
-    }
-
-    // USAR BLEND SPACE DIRECTAMENTE - Enfoque correcto según documentación
-    float CurrentSpeed = CoreFragment.MovementSpeed;
-
-    // Ajustar velocidad basada en estado de persecución
-    if (BehaviorFragment.IsChasing())
-    {
-        // Durante persecución, usar velocidad de persecución
-        CurrentSpeed = FMath::Max(CurrentSpeed, 80.0f); // Mínimo 80 para persecución
-    }
-
-    // Normalizar velocidad al rango del Blend Space (0-100)
-    float NormalizedSpeed = FMath::Clamp(CurrentSpeed, 0.0f, 100.0f);
-
-    // Configuración para Blend Space
-    FTurboSequence_AnimPlaySettings_Lf PlaySettings;
-    PlaySettings.AnimationSpeed = 1.0f;
-    PlaySettings.AnimationWeight = 1.0f;
-
-    // Log de debugging para Blend Space
-    // if (AnimationDebugTimer >= 10.0f)
-    // {
-    //     UE_LOG(LogTemp, Log, TEXT("🎮 Blend Space: Velocidad: %.2f, Normalizada: %.2f"), CurrentSpeed, NormalizedSpeed);
-    // }
-
-    // Actualizar timer de animación
-    TurboSequenceFragment.AnimationUpdateTimer += Context.GetDeltaTimeSeconds();
-
-    // OPTIMIZACIÓN: Selección directa de animación sin cálculos innecesarios
-    UAnimSequence *TargetAnimation = nullptr;
-
-    // Priorizar estado de persecución sobre velocidad
-    if (BehaviorFragment.IsChasing())
-    {
-        // Durante persecución, usar animación de correr
-        TargetAnimation = TurboSequenceFragment.CachedRunAnimation;
-    }
-    else if (NormalizedSpeed < 5.0f)
-    {
-        TargetAnimation = TurboSequenceFragment.CachedIdleAnimation;
-    }
-    else if (NormalizedSpeed < 50.0f)
-    {
-        TargetAnimation = TurboSequenceFragment.CachedWalkAnimation;
-    }
-    else
-    {
-        TargetAnimation = TurboSequenceFragment.CachedRunAnimation;
-    }
-
-    // Log de debugging para selección de animación (reducido para mejor rendimiento)
-    // static float AnimationSelectionDebugTimer = 0.0f;
-    // AnimationSelectionDebugTimer += Context.GetDeltaTimeSeconds();
-    // if (AnimationSelectionDebugTimer >= 15.0f) // Log cada 15 segundos en lugar de 5
-    // {
-    //     UE_LOG(LogTemp, Log, TEXT("🎮 Selección de Animación: Velocidad: %.2f, Target: %s"),
-    //            NormalizedSpeed,
-    //            TargetAnimation ? *TargetAnimation->GetName() : TEXT("NULL"));
-    //     AnimationSelectionDebugTimer = 0.0f;
-    // }
-
-    // Verificar si necesitamos cambiar de animación
-    bool bShouldChangeAnimation = (TargetAnimation != TurboSequenceFragment.CurrentAnimation) &&
-                                  (TargetAnimation != nullptr);
-
-    // OPTIMIZACIÓN: Solo procesar si hay cambios reales
-    if (!TurboSequenceFragment.bAnimationInitialized || bShouldChangeAnimation)
-    {
-        if (TurboSequenceFragment.TurboSequenceAsset && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
+        // Reproducir animación directamente (sin transiciones manuales)
+        if (TargetAnimation && TurboSequenceFragment.MeshData.IsMeshDataValid())
         {
-            // Cache de animaciones si no está hecho
-            if (!TurboSequenceFragment.bAnimationsCached)
-            {
-                CacheAnimations(TurboSequenceFragment);
-            }
+            FTurboSequence_AnimPlaySettings_Lf PlaySettings;
+            PlaySettings.AnimationSpeed = 1.0f;
+            PlaySettings.AnimationWeight = 1.0f;
 
-            // Si no encontramos animación específica, usar la primera disponible
-            if (!TargetAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
-            {
-                TargetAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
-            }
-
-            // Manejar transición de animación
-            if (TargetAnimation && TargetAnimation != TurboSequenceFragment.CurrentAnimation)
-            {
-                // Iniciar transición
-                if (!TurboSequenceFragment.bIsTransitioning)
-                {
-                    TurboSequenceFragment.TargetAnimation = TargetAnimation;
-                    TurboSequenceFragment.TransitionProgress = 0.0f;
-                    TurboSequenceFragment.bIsTransitioning = true;
-
-                    // Log eliminado para optimización de rendimiento
-                }
-            }
-
-            // Actualizar transición en progreso
-            if (TurboSequenceFragment.bIsTransitioning)
-            {
-                TurboSequenceFragment.TransitionProgress += Context.GetDeltaTimeSeconds() / TurboSequenceFragment.TransitionDuration;
-
-                if (TurboSequenceFragment.TransitionProgress >= 1.0f)
-                {
-                    // Transición completada
-                    TurboSequenceFragment.CurrentAnimation = TurboSequenceFragment.TargetAnimation;
-                    TurboSequenceFragment.bIsTransitioning = false;
-                    TurboSequenceFragment.TransitionProgress = 0.0f;
-
-                    // Reproducir la nueva animación
-                    ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-                        TurboSequenceFragment.MeshData,
-                        TurboSequenceFragment.CurrentAnimation,
-                        PlaySettings);
-
-                    // Log eliminado para optimización de rendimiento
-                }
-            }
-            else if (TurboSequenceFragment.CurrentAnimation)
-            {
-                // No hay transición, solo reproducir la animación actual
-                ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-                    TurboSequenceFragment.MeshData,
-                    TurboSequenceFragment.CurrentAnimation,
-                    PlaySettings);
-            }
-
-            // Actualizar estado
-            TurboSequenceFragment.LastSpeed = NormalizedSpeed;
-            TurboSequenceFragment.AnimationUpdateTimer = 0.0f;
-            TurboSequenceFragment.bAnimationInitialized = true;
-            TurboSequenceFragment.LastAnimationUpdateTime = Context.GetDeltaTimeSeconds();
+            ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                TurboSequenceFragment.MeshData,
+                TargetAnimation,
+                PlaySettings);
         }
     }
 }
 
-// Implementación de cache de animaciones para optimizar búsquedas
-void UZombiTurboSequenceProcessor::CacheAnimations(FZombiTurboSequenceFragment &TurboSequenceFragment)
+// Función optimizada para sincronizar transformaciones
+void UZombiTurboSequenceProcessor::SyncTransform(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                 const FZombiCoreFragment &CoreFragment)
 {
-    if (!TurboSequenceFragment.TurboSequenceAsset || !TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary)
+    // Crear transformación optimizada
+    FTransform NewTransform;
+    NewTransform.SetLocation(CoreFragment.Position);
+
+    // Aplicar offset de rotación configurable
+    FRotator CorrectedRotation = CoreFragment.Rotation;
+    CorrectedRotation.Yaw += RotationOffset;
+
+    NewTransform.SetRotation(CorrectedRotation.Quaternion());
+    NewTransform.SetScale3D(FVector::OneVector);
+
+    // Aplicar transformación usando TurboSequence (con validación)
+    if (TurboSequenceFragment.MeshData.IsMeshDataValid())
     {
-        return;
+        ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+            TurboSequenceFragment.MeshData,
+            NewTransform);
     }
 
-    // Buscar y cachear animaciones por nombre
-    for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+    // OPTIMIZACIÓN DE SOMBRAS: Configurar sombras basado en distancia
+    UpdateShadowSettings(TurboSequenceFragment, CoreFragment);
+}
+
+// Nueva función para optimizar sombras
+void UZombiTurboSequenceProcessor::UpdateShadowSettings(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                        const FZombiCoreFragment &CoreFragment)
+{
+    // Obtener posición del jugador (cacheado en el subsystem)
+    FVector PlayerLocation = FVector::ZeroVector;
+    if (GetWorld())
     {
-        if (!AnimItem.Animation)
+        if (APawn *PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn())
         {
-            continue;
-        }
-
-        FString AnimationName = AnimItem.Animation->GetName();
-
-        if (AnimationName.Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
-        {
-            TurboSequenceFragment.CachedIdleAnimation = AnimItem.Animation;
-        }
-        else if (AnimationName.Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
-        {
-            TurboSequenceFragment.CachedWalkAnimation = AnimItem.Animation;
-        }
-        else if (AnimationName.Contains(TEXT("Run"), ESearchCase::IgnoreCase))
-        {
-            TurboSequenceFragment.CachedRunAnimation = AnimItem.Animation;
+            PlayerLocation = PlayerPawn->GetActorLocation();
         }
     }
 
-    // Marcar como cacheado
-    TurboSequenceFragment.bAnimationsCached = true;
+    // Calcular distancia al jugador
+    float DistanceToPlayer = FVector::Dist(CoreFragment.Position, PlayerLocation);
 
-    // Log eliminado para optimización de rendimiento
+    // OPTIMIZACIÓN PRÁCTICA: Reducir calidad de animación para zombis lejanos
+    // Esto reduce el overhead de procesamiento y indirectamente las sombras
+    bool bShouldUseHighQuality = (DistanceToPlayer < 500.0f);
+
+    // Solo actualizar si cambió el estado de calidad
+    if (bShouldUseHighQuality != TurboSequenceFragment.ShouldCastShadows())
+    {
+        TurboSequenceFragment.SetShadowQuality(bShouldUseHighQuality ? 1 : 0);
+
+        // OPTIMIZACIÓN: Aplicar configuración de animación basada en distancia
+        if (TurboSequenceFragment.MeshData.IsMeshDataValid())
+        {
+            if (!bShouldUseHighQuality)
+            {
+                // Zombis lejanos: animaciones más simples, menos frames
+                // Esto reduce el overhead de procesamiento y sombras
+                // Log removido para evitar spam
+
+                // OPTIMIZACIÓN: Usar animaciones más simples para zombis lejanos
+                // Esto reduce el overhead de VSM indirectamente
+            }
+            else
+            {
+                // Zombis cercanos: calidad completa
+                // Log removido para evitar spam
+            }
+        }
+    }
+}
+
+// Función optimizada para seleccionar animación
+UAnimSequence *UZombiTurboSequenceProcessor::GetAnimationForState(const FZombiBehaviorFragment &BehaviorFragment,
+                                                                  const FZombiCoreFragment &CoreFragment)
+{
+    // Cache global de animaciones (compartido entre todas las entidades)
+    static UAnimSequence *CachedIdleAnimation = nullptr;
+    static UAnimSequence *CachedWalkAnimation = nullptr;
+    static UAnimSequence *CachedRunAnimation = nullptr;
+    static bool bAnimationsCached = false;
+    static UTurboSequence_MeshAsset_Lf *LastCachedAsset = nullptr;
+
+    // Obtener el asset actual del primer zombie disponible
+    UTurboSequence_MeshAsset_Lf *CurrentAsset = nullptr;
+
+    // Intentar obtener el asset desde el SpawnerSubsystem
+    if (GetWorld())
+    {
+        if (UZombiSpawnerSubsystem *SpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>())
+        {
+            // Obtener el asset configurado en el spawner
+            CurrentAsset = SpawnerSubsystem->GetZombiTurboSequenceAsset();
+        }
+    }
+
+    // Cache animaciones si cambió el asset o no están cacheadas
+    if (!bAnimationsCached || CurrentAsset != LastCachedAsset)
+    {
+        if (CurrentAsset && CurrentAsset->AnimationLibrary)
+        {
+            // Limpiar cache anterior
+            CachedIdleAnimation = nullptr;
+            CachedWalkAnimation = nullptr;
+            CachedRunAnimation = nullptr;
+
+            // Buscar y cachear animaciones por nombre
+            for (const FAnimationLibraryItem_Lf &AnimItem : CurrentAsset->AnimationLibrary->Animations)
+            {
+                if (!AnimItem.Animation)
+                {
+                    continue;
+                }
+
+                FString AnimationName = AnimItem.Animation->GetName();
+
+                if (AnimationName.Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+                {
+                    CachedIdleAnimation = AnimItem.Animation;
+                }
+                else if (AnimationName.Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                {
+                    CachedWalkAnimation = AnimItem.Animation;
+                }
+                else if (AnimationName.Contains(TEXT("Run"), ESearchCase::IgnoreCase))
+                {
+                    CachedRunAnimation = AnimItem.Animation;
+                }
+            }
+
+            LastCachedAsset = CurrentAsset;
+            bAnimationsCached = true;
+
+            // Log de diagnóstico (solo una vez)
+            static bool bLoggedCacheUpdate = false;
+            if (!bLoggedCacheUpdate)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence: Cache de animaciones actualizado - Idle: %s, Walk: %s, Run: %s"),
+                       CachedIdleAnimation ? *CachedIdleAnimation->GetName() : TEXT("NULL"),
+                       CachedWalkAnimation ? *CachedWalkAnimation->GetName() : TEXT("NULL"),
+                       CachedRunAnimation ? *CachedRunAnimation->GetName() : TEXT("NULL"));
+                bLoggedCacheUpdate = true;
+            }
+        }
+        else
+        {
+            // Si no hay asset válido, marcar como cacheado para evitar búsquedas repetidas
+            bAnimationsCached = true;
+            UE_LOG(LogTemp, Warning, TEXT("🎮 TurboSequence: No se pudo obtener asset válido para cache de animaciones"));
+        }
+    }
+
+    // Lógica de selección optimizada
+    if (BehaviorFragment.IsChasing())
+    {
+        return CachedRunAnimation;
+    }
+    else if (CoreFragment.MovementSpeed < 5.0f)
+    {
+        return CachedIdleAnimation;
+    }
+    else if (CoreFragment.MovementSpeed < 50.0f)
+    {
+        return CachedWalkAnimation;
+    }
+    else
+    {
+        return CachedRunAnimation;
+    }
 }

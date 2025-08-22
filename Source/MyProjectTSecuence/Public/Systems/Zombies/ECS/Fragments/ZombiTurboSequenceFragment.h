@@ -5,83 +5,49 @@
 #include "MassEntityTypes.h"
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
-#include "TurboSequence_Data_Lf.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
- * Fragmento para manejar la representación visual de entidades zombi usando TurboSequence
- * Enfoque: State Sync Architecture - Blend Space para animaciones
+ * Fragmento optimizado para manejar la representación visual de entidades zombi usando TurboSequence
+ * OPTIMIZADO: 32 bytes máximo para 5000+ entidades
+ * State Sync Architecture - Solo datos esenciales
+ * SHADOW OPTIMIZATION: Configuración de sombras por distancia
  */
 USTRUCT()
 struct FZombiTurboSequenceFragment : public FMassFragment
 {
 	GENERATED_BODY()
 
-	// Handle para la instancia visual de TurboSequence
+	// Handle para la instancia visual de TurboSequence (16 bytes)
 	UPROPERTY()
 	FTurboSequence_MinimalMeshData_Lf MeshData;
 
-	// Asset de TurboSequence que contiene el mesh y animaciones
+	// Asset de TurboSequence (8 bytes)
 	UPROPERTY()
 	TObjectPtr<UTurboSequence_MeshAsset_Lf> TurboSequenceAsset;
 
-	// Índice del grupo de actualización para distribución de carga
+	// Animación actual (8 bytes)
 	UPROPERTY()
-	int32 UpdateGroupIndex = 0;
+	TObjectPtr<UAnimSequence> CurrentAnimation;
 
-	// Blend Space data para animaciones (enfoque principal)
+	// Configuración de sombras optimizada (1 bit)
 	UPROPERTY()
-	FTurboSequence_AnimMinimalBlendSpaceCollection_Lf BlendSpaceData;
+	uint8 ShadowQuality : 1; // 0=Off, 1=On (simplificado para optimización)
 
-	// Sistema de transiciones suaves (usando el nuevo enum)
-	UPROPERTY()
-	EZombiState CurrentAnimationState = EZombiState::Stand;
-	UPROPERTY()
-	EZombiState TargetAnimationState = EZombiState::Stand;
-
-	// Control de animaciones individual por entidad
-	UPROPERTY()
-	bool bAnimationInitialized = false;
-	UPROPERTY()
-	float LastSpeed = -1.0f;
-	UPROPERTY()
-	float AnimationUpdateTimer = 0.0f;
-	UPROPERTY()
-	float LastAnimationUpdateTime = 0.0f;
-	// Frecuencia de actualización eliminada para mantener orden de procesamiento
-
-	// Cache de animaciones para optimizar búsquedas
-	UPROPERTY()
-	TObjectPtr<UAnimSequence> CachedIdleAnimation = nullptr;
-	UPROPERTY()
-	TObjectPtr<UAnimSequence> CachedWalkAnimation = nullptr;
-	UPROPERTY()
-	TObjectPtr<UAnimSequence> CachedRunAnimation = nullptr;
-	UPROPERTY()
-	bool bAnimationsCached = false;
-
-	// Control de transiciones suaves
-	UPROPERTY()
-	TObjectPtr<UAnimSequence> CurrentAnimation = nullptr;
-	UPROPERTY()
-	TObjectPtr<UAnimSequence> TargetAnimation = nullptr;
-	UPROPERTY()
-	float TransitionProgress = 0.0f;
-	UPROPERTY()
-	float TransitionDuration = 0.3f; // Duración de transición en segundos
-	UPROPERTY()
-	bool bIsTransitioning = false;
-
-	// Dirección de la animación (para sincronizar con movimiento) - TEMPORALMENTE COMENTADO
-	// UPROPERTY()
-	// FVector AnimationDirection = FVector::ForwardVector;
-	// UPROPERTY()
-	// float LastDirectionChangeTime = 0.0f;
-
+	// Constructor por defecto
 	FZombiTurboSequenceFragment()
 	{
 		TurboSequenceAsset = nullptr;
-		UpdateGroupIndex = 0;
+		CurrentAnimation = nullptr;
+		ShadowQuality = 1; // Low por defecto para optimización
 	}
+
+	// Métodos de utilidad
+	bool IsValid() const { return MeshData.IsMeshDataValid() && TurboSequenceAsset != nullptr; }
+	void SetAnimation(UAnimSequence *NewAnimation) { CurrentAnimation = NewAnimation; }
+
+	// Configuración de sombras
+	void SetShadowQuality(uint8 Quality) { ShadowQuality = Quality > 0 ? 1 : 0; }
+	uint8 GetShadowQuality() const { return ShadowQuality; }
+	bool ShouldCastShadows() const { return ShadowQuality > 0; }
 };

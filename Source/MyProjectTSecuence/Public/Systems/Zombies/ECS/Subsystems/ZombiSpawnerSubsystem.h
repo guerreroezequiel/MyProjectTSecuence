@@ -36,6 +36,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Zombi Spawner")
 	void SetZombiTurboSequenceAsset(UTurboSequence_MeshAsset_Lf *Asset);
 
+	// Obtiene el asset de TurboSequence configurado
+	UFUNCTION(BlueprintCallable, Category = "Zombi Spawner")
+	UTurboSequence_MeshAsset_Lf *GetZombiTurboSequenceAsset() const { return ZombiTurboSequenceAsset; }
+
 	// Obtiene estadísticas de rendimiento
 	UFUNCTION(BlueprintCallable, Category = "Zombi Spawner")
 	int32 GetActiveZombiCount() const { return ActiveZombiCount; }
@@ -73,8 +77,7 @@ private:
 	// Crea una entidad Mass con todos los fragmentos necesarios
 	FMassEntityHandle CreateZombiMassEntity(const FVector &SpawnLocation);
 
-	// Configura el Blend Space para una entidad
-	void ConfigureBlendSpaceForEntity(FZombiTurboSequenceFragment &TurboSequenceFragment);
+	// Función eliminada - configuración manejada por el procesador optimizado
 
 	// Genera una ubicación de spawn aleatoria
 	FVector GenerateRandomSpawnLocation(const FVector &Center, float Radius) const;
