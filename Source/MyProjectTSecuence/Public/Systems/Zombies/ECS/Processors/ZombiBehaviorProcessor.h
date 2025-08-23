@@ -43,4 +43,5 @@ private:
     // Funciones específicas de estados
     void UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
     void UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
+    void UpdateIdleState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
 };

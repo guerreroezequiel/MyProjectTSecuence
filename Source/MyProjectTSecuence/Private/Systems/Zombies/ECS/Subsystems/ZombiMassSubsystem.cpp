@@ -8,6 +8,7 @@
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiLODFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
 
@@ -87,11 +88,9 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     CoreFragment.DirectionChangeInterval = FMath::RandRange(2.0f, 5.0f);
 
     FZombiBehaviorFragment BehaviorFragment;
-    BehaviorFragment.SetState(EZombiState::WalkAround);
-    BehaviorFragment.SetCondition(EZombiCondition::Healthy);
-    BehaviorFragment.SetHordeBehavior(EZombiHordeBehavior::Individual);
-    BehaviorFragment.ChaseDistance = 1000.0f;
-    BehaviorFragment.ChaseSpeed = 200.0f;
+    BehaviorFragment.SetState(EZombiState::Idle);
+    // Nota: Los métodos SetCondition y SetHordeBehavior fueron removidos en la simplificación
+    // Solo mantenemos el estado básico para el enfoque híbrido
 
     FZombiTurboSequenceFragment TurboSequenceFragment;
     TurboSequenceFragment.TurboSequenceAsset = TurboSequenceAsset;
@@ -119,6 +118,12 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     StimuliFragmentInstance.InitializeAs<FZombiStimuliFragment>();
     StimuliFragmentInstance.GetMutable<FZombiStimuliFragment>() = FZombiStimuliFragment();
     FragmentList.Add(StimuliFragmentInstance);
+
+    // Instancia el fragmento de LOD (nuevo para optimización híbrida)
+    FInstancedStruct LODFragmentInstance;
+    LODFragmentInstance.InitializeAs<FZombiLODFragment>();
+    LODFragmentInstance.GetMutable<FZombiLODFragment>() = FZombiLODFragment();
+    FragmentList.Add(LODFragmentInstance);
 
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);

@@ -6,53 +6,46 @@
 #include "ZombiTags.generated.h"
 
 // Tags especializados para filtrado inteligente de entidades
-// OPTIMIZADO para queries eficientes y paralelización
+// OPTIMIZADO para queries eficientes y enfoque híbrido (Estados + Tags)
 
-// Tag para entidades activas (no muertas)
+// Tag para entidades activas (no muertas) - Query base
 USTRUCT()
 struct FActiveTag : public FMassTag
 {
     GENERATED_BODY()
 };
 
-// Tag para entidades en movimiento
-USTRUCT()
-struct FMovingTag : public FMassTag
-{
-    GENERATED_BODY()
-};
-
-// Tag para entidades muertas
+// Tag para entidades muertas (no procesar) - Query base
 USTRUCT()
 struct FDeadTag : public FMassTag
 {
     GENERATED_BODY()
 };
 
-// Tag para entidades visibles (en frustum de cámara)
-USTRUCT()
-struct FVisibleTag : public FMassTag
-{
-    GENERATED_BODY()
-};
-
-// Tag para entidades que necesitan actualización de animación
-USTRUCT()
-struct FNeedsAnimationUpdateTag : public FMassTag
-{
-    GENERATED_BODY()
-};
-
-// Tag para entidades que necesitan sincronización visual
-USTRUCT()
-struct FNeedsVisualSyncTag : public FMassTag
-{
-    GENERATED_BODY()
-};
-
-// Tag para entidades que están persiguiendo al jugador
+// Tag para entidades persiguiendo al jugador - Query específica
 USTRUCT()
 struct FChasingTag : public FMassTag
+{
+    GENERATED_BODY()
+};
+
+// Tag para entidades atacando - Query específica
+USTRUCT()
+struct FAttackingTag : public FMassTag
+{
+    GENERATED_BODY()
+};
+
+// Tag para entidades visibles en frustum de cámara - Culling
+USTRUCT()
+struct FInFrustumTag : public FMassTag
+{
+    GENERATED_BODY()
+};
+
+// Tag para entidades de alta prioridad (60 FPS) - LOD
+USTRUCT()
+struct FHighPriorityTag : public FMassTag
 {
     GENERATED_BODY()
 };

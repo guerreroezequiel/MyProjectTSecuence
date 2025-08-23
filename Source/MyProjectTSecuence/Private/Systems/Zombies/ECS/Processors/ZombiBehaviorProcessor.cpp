@@ -32,13 +32,18 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
 
 void UZombiBehaviorProcessor::ConfigureQueries()
 {
-    // Query optimizada para comportamiento - solo fragmentos necesarios
+    // Query optimizada para comportamiento - Enfoque híbrido
+    // Solo entidades activas y no muertas
     BehaviorQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-
     BehaviorQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadOnly);
+
+    // Tags base para enfoque híbrido
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Registrar query
+    BehaviorQuery.RegisterWithProcessor(*this);
 }
 
 void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -110,10 +115,10 @@ void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &B
         return;
     }
 
-    // Estado por defecto: caminar aleatoriamente
-    if (CurrentState != EZombiState::WalkAround)
+    // Estado por defecto: idle (esperando)
+    if (CurrentState != EZombiState::Idle)
     {
-        BehaviorFragment.SetState(EZombiState::WalkAround);
+        BehaviorFragment.SetState(EZombiState::Idle);
     }
 }
 
@@ -137,6 +142,11 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &Behavio
     case EZombiState::WalkAround:
         // Lógica de caminar aleatoriamente
         UpdateWalkAroundState(BehaviorFragment, DeltaTime);
+        break;
+
+    case EZombiState::Idle:
+        // Lógica de idle (esperando)
+        UpdateIdleState(BehaviorFragment, DeltaTime);
         break;
 
     default:
@@ -168,6 +178,19 @@ void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiBehaviorFragment &Beha
     {
         BehaviorFragment.SetStateTimer(0.0f);
         // La dirección se maneja en el MovementProcessor
+    }
+}
+
+void UZombiBehaviorProcessor::UpdateIdleState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
+{
+    // Lógica de idle (esperando)
+    float Timer = BehaviorFragment.GetStateTimer();
+
+    // Después de 2 segundos en idle, cambiar a WalkAround
+    if (Timer > 2.0f)
+    {
+        BehaviorFragment.SetState(EZombiState::WalkAround);
+        BehaviorFragment.SetStateTimer(0.0f);
     }
 }
 

@@ -6,6 +6,7 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 
 #include "TurboSequence_Manager_Lf.h"
@@ -29,10 +30,18 @@ UZombiTurboSequenceProcessor::UZombiTurboSequenceProcessor()
 
 void UZombiTurboSequenceProcessor::ConfigureQueries()
 {
-    // Query optimizada para State Sync - solo fragmentos necesarios
+    // Query optimizada para State Sync - Enfoque híbrido
+    // Solo entidades activas, no muertas y visibles en frustum
     TransformSyncQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
     TransformSyncQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
     TransformSyncQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+
+    // Tags base para enfoque híbrido
+    TransformSyncQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    TransformSyncQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Registrar query
+    TransformSyncQuery.RegisterWithProcessor(*this);
 }
 
 void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)

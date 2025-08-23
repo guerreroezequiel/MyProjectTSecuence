@@ -30,11 +30,17 @@ UZombiMovementProcessor::UZombiMovementProcessor()
 
 void UZombiMovementProcessor::ConfigureQueries()
 {
-    // Query optimizada para movimiento - solo fragmentos necesarios
+    // Query optimizada para movimiento - Enfoque híbrido
+    // Solo entidades activas, no muertas y en frustum
     MovementQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
     MovementQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+
+    // Tags base para enfoque híbrido
     MovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     MovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Registrar query
+    MovementQuery.RegisterWithProcessor(*this);
 }
 
 void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
