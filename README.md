@@ -5,6 +5,16 @@ Sistema de zombis usando **Mass Entity System** + **TurboSequence** con arquitec
 
 ## 🏗️ Arquitectura
 
+### **Enfoque Híbrido: Estados + Tags**
+```
+Estados (Comportamiento) ←→ Sincronización ←→ Tags (Optimización)
+```
+
+**¿Por qué Híbrido?**
+- **Estados**: Claridad y mantenibilidad para lógica de comportamiento
+- **Tags**: Rendimiento máximo para queries y procesamiento
+- **Sincronización**: Garantiza consistencia entre ambos sistemas
+
 ### **State Sync Pattern**
 ```
 Lógica (Mass Entity) ←→ Sincronización ←→ Visual (TurboSequence)
@@ -14,15 +24,25 @@ Lógica (Mass Entity) ←→ Sincronización ←→ Visual (TurboSequence)
 
 #### **Fragmentos (Datos)**
 - `FZombiCoreFragment`: Posición, rotación, velocidad
-- `FZombiBehaviorFragment`: Estados, AI, timers
+- `FZombiBehaviorFragment`: Estados (Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead)
 - `FZombiStimuliFragment`: Estímulos y respuestas
 - `FZombiTurboSequenceFragment`: Referencias visuales
+- `FZombiLODFragment`: Optimización y LOD (nuevo)
+
+#### **Tags (Optimización)**
+- `FActiveTag`: Zombis vivos y activos
+- `FDeadTag`: Zombis muertos (no procesar)
+- `FChasingTag`: Zombis persiguiendo
+- `FAttackingTag`: Zombis atacando
+- `FInFrustumTag`: Zombis visibles en cámara
+- `FHighPriorityTag`: Zombis que necesitan 60 FPS
 
 #### **Procesadores (Lógica)**
-- `UZombiBehaviorProcessor`: Estados y AI
-- `UZombiMovementProcessor`: Movimiento y rotación
+- `UZombiBehaviorProcessor`: Estados y AI (modificado para usar tags)
+- `UZombiMovementProcessor`: Movimiento y rotación (optimizado con LOD)
 - `UZombiStimulusProcessor`: Procesamiento de estímulos
-- `UZombiTurboSequenceProcessor`: Sincronización visual
+- `UZombiTurboSequenceProcessor`: Sincronización visual (optimizado con culling)
+- `UZombiLODProcessor`: LOD inteligente y sincronización estados-tags (nuevo)
 
 #### **Subsystems (Gestión)**
 - `UZombiMassSubsystem`: Gestión de entidades Mass
@@ -67,12 +87,16 @@ GetActiveZombiCount();       // Contar activos
 - **Fragmentos Especializados**: Datos por procesador
 - **Batch Processing**: Spawning en lotes
 - **Concurrent Operations**: Thread-safe
-- **Query Optimization**: Filtrado
+- **Query Optimization**: Filtrado con tags
+- **LOD Inteligente**: Frecuencia de update por prioridad
+- **Frustum Culling**: Solo renderizar zombis visibles
+- **Sincronización Estados-Tags**: Consistencia automática
 
 ### **Escalabilidad**
-- **Diseñado para**: Cientos de entidades
-- **Arquitectura**: State Sync
-- **Rendimiento**: Procesamiento optimizado
+- **Diseñado para**: Miles de entidades
+- **Arquitectura**: State Sync + Enfoque Híbrido
+- **Rendimiento**: Procesamiento optimizado con LOD
+- **Objetivo**: 5000-10000 zombis a 30-60 FPS
 
 ## 🔧 Configuración Técnica
 
@@ -88,6 +112,10 @@ GetActiveZombiCount();       // Contar activos
 ### **Tags de Filtrado**
 - `FActiveTag`: Entidades activas
 - `FDeadTag`: Entidades muertas (excluidas)
+- `FChasingTag`: Zombis persiguiendo
+- `FAttackingTag`: Zombis atacando
+- `FInFrustumTag`: Zombis visibles en cámara
+- `FHighPriorityTag`: Zombis que necesitan 60 FPS
 
 ## 📁 Estructura de Archivos
 
@@ -107,7 +135,7 @@ Source/MyProjectTSecuence/
 
 ```cpp
 enum EZombiState {
-    Idle, WalkAround, Chase
+    Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead
 }
 ```
 
@@ -120,9 +148,55 @@ enum EZombiState {
 - **✅ Optimización**: Fragmentos y procesadores especializados
 - **✅ Control Blueprint**: Interfaz desde editor
 
+## 🎯 Enfoque Híbrido - Estados + Tags
+
+### **¿Por qué esta Arquitectura?**
+
+#### **Problema Tradicional:**
+- **Solo Estados**: Queries menos eficientes, filtrado manual
+- **Solo Tags**: Estados complejos, debugging difícil, inconsistencias
+
+#### **Solución Híbrida:**
+- **Estados**: Claridad y mantenibilidad para lógica de comportamiento
+- **Tags**: Rendimiento máximo para queries y procesamiento
+- **Sincronización**: Garantiza consistencia entre ambos sistemas
+
+### **Beneficios del Enfoque Híbrido:**
+
+#### **Rendimiento:**
+- **Queries Nativas**: Tags permiten filtrado directo en chunks
+- **LOD Inteligente**: Prioridad por estado + distancia + estímulos
+- **Culling Eficiente**: Solo procesar zombis visibles
+- **Batch Processing**: Mejor cache locality
+
+#### **Mantenibilidad:**
+- **Estado Claro**: BehaviorFragment tiene estado único y obvio
+- **Debugging Fácil**: Estado actual es inmediatamente visible
+- **Lógica Centralizada**: Transiciones en un lugar
+- **Consistencia**: No hay estados contradictorios
+
+#### **Escalabilidad:**
+- **Extensibilidad**: Fácil agregar nuevos tags sin cambiar lógica
+- **Flexibilidad**: Combinaciones de tags cuando sea necesario
+- **Optimización Incremental**: Agregar optimizaciones sin romper código
+
+### **Implementación:**
+```cpp
+// Estados para comportamiento claro
+enum class EZombiState : uint8 { Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead };
+
+// Tags para optimización de queries
+FActiveTag, FDeadTag, FChasingTag, FAttackingTag, FInFrustumTag, FHighPriorityTag
+
+// Sincronización automática
+void SetZombieState(EZombiState NewState) {
+    // Cambiar estado + sincronizar tags automáticamente
+}
+```
+
 ## 🔮 Próximos Pasos
 Ver `HAZME.md` para roadmap detallado de desarrollo.
 
 ---
 
-**Sistema funcional para cientos de entidades con arquitectura State Sync.** 
+**Sistema optimizado para miles de entidades con arquitectura State Sync + Enfoque Híbrido.** 
