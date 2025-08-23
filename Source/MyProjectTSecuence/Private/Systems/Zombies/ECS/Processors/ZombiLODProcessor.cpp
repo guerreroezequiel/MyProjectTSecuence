@@ -47,7 +47,7 @@ void UZombiLODProcessor::Execute(FMassEntityManager &EntityManager, FMassExecuti
     }
 
     // Procesar entidades en chunks para optimización
-    LODQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager](FMassExecutionContext &Context)
+    LODQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                 {
         // Obtener arrays de fragmentos
         const TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
@@ -76,9 +76,9 @@ void UZombiLODProcessor::Execute(FMassEntityManager &EntityManager, FMassExecuti
             // 4. Aplicar frustum culling
             ApplyFrustumCulling(LODFragment, CoreFragment.Position);
             
-            // 5. Sincronizar tags con estado
-            FMassEntityHandle Entity = Context.GetEntity(EntityIndex);
-            SynchronizeTagsWithState(EntityManager, Entity, BehaviorFragment);
+            // 5. Sincronizar tags con estado (TEMPORALMENTE DESHABILITADO)
+            // FMassEntityHandle Entity = Context.GetEntity(EntityIndex);
+            // SynchronizeTagsWithState(EntityManager, Entity, BehaviorFragment);
             
             // 6. Actualizar tiempo de último update
             LODFragment.SetLastUpdateTime(CurrentTime);

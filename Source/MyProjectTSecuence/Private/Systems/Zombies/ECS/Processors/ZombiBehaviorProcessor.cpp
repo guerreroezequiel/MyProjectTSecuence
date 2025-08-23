@@ -5,8 +5,6 @@
 #include "MassExecutionContext.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-
-#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
@@ -36,7 +34,6 @@ void UZombiBehaviorProcessor::ConfigureQueries()
     // Solo entidades activas y no muertas
     BehaviorQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    BehaviorQuery.AddRequirement<FZombiStimuliFragment>(EMassFragmentAccess::ReadOnly);
 
     // Tags base para enfoque híbrido
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
@@ -54,35 +51,45 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
         return;
     }
 
+    // Obtener referencia al jugador (cached para performance)
+    if (!PlayerPawn)
+    {
+        PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+    }
+
+    if (!PlayerPawn)
+    {
+        return; // No hay jugador, no procesar
+    }
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Procesa entidades activas para decisiones de IA
-    BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+    BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
                                      {
         TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-
-        TArrayView<const FZombiStimuliFragment> StimuliFragments = Context.GetFragmentView<FZombiStimuliFragment>();
-        const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
             const FZombiCoreFragment& CoreFragment = CoreFragments[i];
 
-            const FZombiStimuliFragment& StimuliFragment = StimuliFragments[i];
-
             // Solo procesar si está vivo
             if (!BehaviorFragment.IsDead())
             {
+                // Calcular distancia al jugador (simplificado)
+                float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
+                BehaviorFragment.SetStateData(DistanceToPlayer);
+
                 // Actualizar timers de comportamiento
                 UpdateActionTimers(BehaviorFragment, DeltaTime);
 
-                // Evaluar transiciones de estado (DOP-compatible)
-                EvaluateStateTransitions(BehaviorFragment, CoreFragment, StimuliFragment);
+                // Evaluar transiciones de estado (simplificado)
+                EvaluateStateTransitions(BehaviorFragment, DistanceToPlayer);
 
                 // Actualizar estado actual
-                UpdateCurrentState(BehaviorFragment, CoreFragment, StimuliFragment, DeltaTime);
+                UpdateCurrentState(BehaviorFragment, DistanceToPlayer, DeltaTime);
 
                 // Actualizar comportamiento de horda
                 UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
@@ -90,41 +97,51 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
         } });
 }
 
-void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment)
+void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer)
 {
-    // Lógica de transición de estados basada en condiciones
+    // Lógica de transición de estados simplificada
     EZombiState CurrentState = BehaviorFragment.GetState();
 
-    // NUEVO: Verificar estímulos del jugador (DOP-compatible)
-    if (StimuliFragment.HasPlayerStimulus() && StimuliFragment.HasAnyStimulus())
+    // Lógica de Seek y Chase basada en distancia
+    if (DistanceToPlayer < 50.0f)
     {
-        // Si tiene estímulo del jugador, cambiar a estado de persecución
+        // Muy cerca del jugador - Attack (futuro)
+        if (CurrentState != EZombiState::Attack)
+        {
+            BehaviorFragment.SetState(EZombiState::Chase); // Por ahora Chase, después Attack
+        }
+    }
+    else if (DistanceToPlayer < 200.0f)
+    {
+        // Cerca del jugador - Chase
         if (CurrentState != EZombiState::Chase)
         {
             BehaviorFragment.SetState(EZombiState::Chase);
-            // Guardar datos del estímulo en StateData
-            BehaviorFragment.SetStateData(StimuliFragment.StimulusDistance);
         }
-        return;
     }
-
-    // Verificar si está persiguiendo (lógica simplificada)
-    if (BehaviorFragment.IsChasing())
+    else if (DistanceToPlayer < 800.0f)
     {
-        // Mantener estado de persecución
-        return;
+        // Jugador visible - Seek
+        if (CurrentState != EZombiState::Seek)
+        {
+            BehaviorFragment.SetState(EZombiState::Seek);
+        }
     }
-
-    // Estado por defecto: idle (esperando)
-    if (CurrentState != EZombiState::Idle)
+    else
     {
-        BehaviorFragment.SetState(EZombiState::Idle);
+        // Jugador muy lejos - comportamiento normal
+        if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
+        {
+            // Perdió al jugador, volver a WalkAround
+            BehaviorFragment.SetState(EZombiState::WalkAround);
+            BehaviorFragment.SetStateTimer(0.0f);
+        }
     }
 }
 
-void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime)
+void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime)
 {
-    // Actualizar timer del estado actual (DOP-compatible)
+    // Actualizar timer del estado actual
     float CurrentTimer = BehaviorFragment.GetStateTimer();
     CurrentTimer += DeltaTime;
     BehaviorFragment.SetStateTimer(CurrentTimer);
@@ -136,7 +153,12 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &Behavio
     {
     case EZombiState::Chase:
         // Lógica de persecución
-        UpdateChaseState(BehaviorFragment, StimuliFragment, DeltaTime);
+        UpdateChaseState(BehaviorFragment, DistanceToPlayer, DeltaTime);
+        break;
+
+    case EZombiState::Seek:
+        // Lógica de búsqueda
+        UpdateSeekState(BehaviorFragment, DistanceToPlayer, DeltaTime);
         break;
 
     case EZombiState::WalkAround:
@@ -154,18 +176,32 @@ void UZombiBehaviorProcessor::UpdateCurrentState(FZombiBehaviorFragment &Behavio
     }
 }
 
-void UZombiBehaviorProcessor::UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime)
+void UZombiBehaviorProcessor::UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime)
 {
-    // Verificar si debe dejar de perseguir
-    if (!StimuliFragment.HasPlayerStimulus() || StimuliFragment.IsStimulusExpired())
+    // Verificar si debe dejar de perseguir (jugador muy lejos)
+    if (DistanceToPlayer > 800.0f)
     {
         BehaviorFragment.SetState(EZombiState::WalkAround);
+        BehaviorFragment.SetStateTimer(0.0f);
         return;
     }
 
-    // Actualizar datos de persecución
-    float DistanceToPlayer = StimuliFragment.StimulusDistance;
-    BehaviorFragment.SetStateData(DistanceToPlayer);
+    // Mantener persecución - el MovementProcessor se encargará del movimiento hacia el jugador
+    // Los datos de distancia ya están guardados en StateData
+}
+
+void UZombiBehaviorProcessor::UpdateSeekState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime)
+{
+    // Verificar si debe dejar de buscar (jugador muy lejos)
+    if (DistanceToPlayer > 800.0f)
+    {
+        BehaviorFragment.SetState(EZombiState::WalkAround);
+        BehaviorFragment.SetStateTimer(0.0f);
+        return;
+    }
+
+    // Mantener búsqueda - el MovementProcessor se encargará del movimiento hacia el jugador
+    // Los datos de distancia ya están guardados en StateData
 }
 
 void UZombiBehaviorProcessor::UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
@@ -209,4 +245,19 @@ void UZombiBehaviorProcessor::UpdateActionTimers(FZombiBehaviorFragment &Behavio
     {
         BehaviorFragment.ClearAllActions();
     }
+}
+
+float UZombiBehaviorProcessor::CalculateDistanceToPlayer(const FVector &ZombieLocation)
+{
+    if (!PlayerPawn)
+    {
+        return 9999.0f; // Distancia muy grande si no hay jugador
+    }
+
+    // Calcular distancia 2D (isométrico)
+    FVector PlayerLocation = PlayerPawn->GetActorLocation();
+    FVector DistanceVector = ZombieLocation - PlayerLocation;
+    DistanceVector.Z = 0.0f; // Ignorar altura para isométrico
+
+    return DistanceVector.Size();
 }

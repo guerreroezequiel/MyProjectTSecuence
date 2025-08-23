@@ -51,14 +51,24 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
         return;
     }
 
+    // Obtener referencia al jugador (cached para performance)
+    if (!PlayerPawn)
+    {
+        PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+    }
+
+    if (!PlayerPawn)
+    {
+        return; // No hay jugador, no procesar
+    }
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     // Procesa entidades activas para movimiento
-    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
                                      {
         TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
         TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
-        const float DeltaTime = Context.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
@@ -68,33 +78,18 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
             // Solo procesar movimiento si no está muerto
             if (!BehaviorFragment.IsDead())
             {
-                // Procesar movimiento aleatorio solo si no está persiguiendo
-                if (!BehaviorFragment.IsChasing())
+                EZombiState CurrentState = BehaviorFragment.GetState();
+
+                // Procesar movimiento según estado
+                if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
                 {
-                    // Actualizar timer de cambio de dirección
-                    CoreFragment.BehaviorTimer += DeltaTime;
-
-                    // Cambiar dirección aleatoriamente
-                    if (CoreFragment.BehaviorTimer >= CoreFragment.DirectionChangeInterval)
-                    {
-                        CoreFragment.MovementDirection = GenerateRandomDirection();
-                        CoreFragment.BehaviorTimer = 0.0f;
-
-                                            // Cambiar velocidad aleatoriamente
-                    float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
-                    if (SpeedVariation < 0.3f)
-                    {
-                        CoreFragment.MovementSpeed = 0.0f;
-                    }
-                    else if (SpeedVariation < 0.7f)
-                    {
-                        CoreFragment.MovementSpeed = 25.0f;
-                    }
-                    else
-                    {
-                        CoreFragment.MovementSpeed = 80.0f;
-                    }
-                    }
+                    // Movimiento hacia el jugador
+                    ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
+                }
+                else
+                {
+                    // Movimiento aleatorio normal
+                    ProcessRandomMovement(CoreFragment, DeltaTime);
                 }
 
                 // Procesar rotación hacia la dirección de movimiento
@@ -106,7 +101,7 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                         FRotator CurrentRotation = CoreFragment.Rotation;
 
                         // Rotación más agresiva si está persiguiendo
-                        float RotationSpeedMultiplier = BehaviorFragment.IsChasing() ? 3.0f : 1.0f;
+                        float RotationSpeedMultiplier = (CurrentState == EZombiState::Chase) ? 3.0f : 1.0f;
 
                         // Interpola suavemente la rotación
                         CoreFragment.Rotation = FMath::RInterpTo(
@@ -126,7 +121,7 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
                 }
 
                 // Aplicar restricciones de área solo si no está persiguiendo
-                if (!BehaviorFragment.IsChasing())
+                if (CurrentState != EZombiState::Chase && CurrentState != EZombiState::Seek)
                 {
                     CoreFragment.Position = ClampToMovementArea(CoreFragment.Position, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
                 }
@@ -157,4 +152,54 @@ FVector UZombiMovementProcessor::ClampToMovementArea(const FVector &Position, co
     }
 
     return Position;
+}
+
+void UZombiMovementProcessor::ProcessPlayerChaseMovement(FZombiCoreFragment &CoreFragment, float DeltaTime)
+{
+    if (!PlayerPawn)
+    {
+        return;
+    }
+
+    // Calcular dirección hacia el jugador
+    FVector PlayerLocation = PlayerPawn->GetActorLocation();
+    FVector DirectionToPlayer = (PlayerLocation - CoreFragment.Position).GetSafeNormal();
+    DirectionToPlayer.Z = 0.0f; // Ignorar altura para isométrico
+
+    if (!DirectionToPlayer.IsNearlyZero())
+    {
+        // Actualizar dirección de movimiento hacia el jugador
+        CoreFragment.MovementDirection = DirectionToPlayer;
+
+        // Velocidad alta para persecución
+        CoreFragment.MovementSpeed = 120.0f;
+    }
+}
+
+void UZombiMovementProcessor::ProcessRandomMovement(FZombiCoreFragment &CoreFragment, float DeltaTime)
+{
+    // Actualizar timer de cambio de dirección
+    CoreFragment.BehaviorTimer += DeltaTime;
+
+    // Cambiar dirección aleatoriamente
+    if (CoreFragment.BehaviorTimer >= CoreFragment.DirectionChangeInterval)
+    {
+        CoreFragment.MovementDirection = GenerateRandomDirection();
+        CoreFragment.BehaviorTimer = 0.0f;
+
+        // Cambiar velocidad aleatoriamente
+        float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
+        if (SpeedVariation < 0.3f)
+        {
+            CoreFragment.MovementSpeed = 0.0f;
+        }
+        else if (SpeedVariation < 0.7f)
+        {
+            CoreFragment.MovementSpeed = 25.0f;
+        }
+        else
+        {
+            CoreFragment.MovementSpeed = 80.0f;
+        }
+    }
 }

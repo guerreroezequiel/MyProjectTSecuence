@@ -6,8 +6,6 @@
 #include "MassEntityTypes.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
-
-#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "ZombiBehaviorProcessor.generated.h"
@@ -32,16 +30,24 @@ private:
     // Query para entidades activas que necesitan decisiones de IA
     FMassEntityQuery BehaviorQuery{*this};
 
+    // Referencia al jugador para cálculos de distancia
+    UPROPERTY()
+    APawn *PlayerPawn;
+
     // Funciones auxiliares de IA - COMPATIBLE CON DOP
     void UpdateHordeBehavior(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, float DeltaTime);
     void UpdateActionTimers(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
 
-    // Funciones de estados DOP-compatibles
-    void EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment);
-    void UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, const FZombiCoreFragment &CoreFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
+    // Funciones de estados simplificadas
+    void EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer);
+    void UpdateCurrentState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime);
 
     // Funciones específicas de estados
-    void UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, const FZombiStimuliFragment &StimuliFragment, float DeltaTime);
+    void UpdateChaseState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime);
+    void UpdateSeekState(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer, float DeltaTime);
     void UpdateWalkAroundState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
     void UpdateIdleState(FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
+
+    // Función para calcular distancia al jugador
+    float CalculateDistanceToPlayer(const FVector &ZombieLocation);
 };

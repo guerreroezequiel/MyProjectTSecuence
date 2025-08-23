@@ -30,7 +30,15 @@ private:
 	// Query para entidades activas que necesitan movimiento
 	FMassEntityQuery MovementQuery{*this};
 
+	// Referencia al jugador para cálculos de movimiento
+	UPROPERTY()
+	APawn *PlayerPawn;
+
 	// Funciones auxiliares
 	FVector GenerateRandomDirection() const;
 	FVector ClampToMovementArea(const FVector &Position, const FVector &Center, float Radius) const;
+
+	// Funciones de movimiento específicas
+	void ProcessPlayerChaseMovement(FZombiCoreFragment &CoreFragment, float DeltaTime);
+	void ProcessRandomMovement(FZombiCoreFragment &CoreFragment, float DeltaTime);
 };

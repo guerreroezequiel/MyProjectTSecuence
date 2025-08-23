@@ -7,14 +7,11 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Fragments/ZombiStimuliFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiLODFragment.h"
 #include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
 #include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
 
 #include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiStimulusProcessor.h"
 // ZombiUpdateProcessor eliminado - migrado a sistema especializado
 // ZombiChaseProcessor eliminado - migrado a sistema especializado
 #include "MassExecutionContext.h"
@@ -112,12 +109,6 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     TurboSequenceFragmentInstance.InitializeAs<FZombiTurboSequenceFragment>();
     TurboSequenceFragmentInstance.GetMutable<FZombiTurboSequenceFragment>() = TurboSequenceFragment;
     FragmentList.Add(TurboSequenceFragmentInstance);
-
-    // Instancia el fragmento de estímulos
-    FInstancedStruct StimuliFragmentInstance;
-    StimuliFragmentInstance.InitializeAs<FZombiStimuliFragment>();
-    StimuliFragmentInstance.GetMutable<FZombiStimuliFragment>() = FZombiStimuliFragment();
-    FragmentList.Add(StimuliFragmentInstance);
 
     // Instancia el fragmento de LOD (nuevo para optimización híbrida)
     FInstancedStruct LODFragmentInstance;

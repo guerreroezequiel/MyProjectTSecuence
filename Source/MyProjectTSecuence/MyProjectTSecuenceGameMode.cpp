@@ -6,8 +6,6 @@
 #include "Engine/Engine.h"
 #include "MassEntitySubsystem.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
-#include "Systems/StimulusSubsystem/StimulusSubsystem.h"
-#include "Systems/StimulusSubsystem/PlayerSignalSubsystem.h"
 
 AMyProjectTSecuenceGameMode::AMyProjectTSecuenceGameMode()
 {
@@ -45,29 +43,5 @@ void AMyProjectTSecuenceGameMode::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener ZombiSpawnerSubsystem"));
-	}
-
-	// Obtiene el StimulusSubsystem
-	StimulusSubsystem = GetWorld()->GetSubsystem<UStimulusSubsystem>();
-
-	if (StimulusSubsystem)
-	{
-		UE_LOG(LogTemp, Log, TEXT("StimulusSubsystem inicializado correctamente"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener StimulusSubsystem"));
-	}
-
-	// Obtiene el PlayerSignalSubsystem
-	PlayerSignalSubsystem = GetWorld()->GetSubsystem<UPlayerSignalSubsystem>();
-
-	if (PlayerSignalSubsystem)
-	{
-		UE_LOG(LogTemp, Log, TEXT("PlayerSignalSubsystem inicializado correctamente"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No se pudo obtener PlayerSignalSubsystem"));
 	}
 }
