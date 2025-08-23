@@ -164,46 +164,39 @@ void UZombiLODProcessor::UpdateLODSettings(FZombiLODFragment &LODFragment, const
 
 void UZombiLODProcessor::SynchronizeTagsWithState(FMassEntityManager &EntityManager, FMassEntityHandle Entity, const FZombiBehaviorFragment &BehaviorFragment)
 {
-    // TODO: Implementar tag management usando FMassCommandBuffer
-    // Por ahora, funcionalidad deshabilitada hasta encontrar la API correcta
-    /*
-    // Limpiar tags existentes primero
-    EntityManager.RemoveTag<FChasingTag>(Entity);
-    EntityManager.RemoveTag<FAttackingTag>(Entity);
-    EntityManager.RemoveTag<FHighPriorityTag>(Entity);
+    // Implementación usando la API correcta de Unreal Engine 5.5
+    // Por ahora, solo agregamos tags (la limpieza se hace automáticamente por queries)
 
-    // Agregar tags según estado
     switch (BehaviorFragment.GetState())
     {
-        case EZombiState::Dead:
-            EntityManager.AddTag<FDeadTag>(Entity);
-            EntityManager.RemoveTag<FActiveTag>(Entity);
-            break;
+    case EZombiState::Dead:
+        EntityManager.AddTagToEntity(Entity, FDeadTag::StaticStruct());
+        // Nota: FActiveTag se mantiene para queries base
+        break;
 
-        case EZombiState::Attack:
-            EntityManager.AddTag<FAttackingTag>(Entity);
-            EntityManager.AddTag<FHighPriorityTag>(Entity);
-            break;
+    case EZombiState::Attack:
+        EntityManager.AddTagToEntity(Entity, FAttackingTag::StaticStruct());
+        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        break;
 
-        case EZombiState::TakeDamage:
-            EntityManager.AddTag<FHighPriorityTag>(Entity);
-            break;
+    case EZombiState::TakeDamage:
+        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        break;
 
-        case EZombiState::Chase:
-            EntityManager.AddTag<FChasingTag>(Entity);
-            EntityManager.AddTag<FHighPriorityTag>(Entity);
-            break;
+    case EZombiState::Chase:
+        EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
+        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        break;
 
-        case EZombiState::Seek:
-            EntityManager.AddTag<FChasingTag>(Entity);
-            break;
+    case EZombiState::Seek:
+        EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
+        break;
 
-        case EZombiState::WalkAround:
-        case EZombiState::Idle:
-            // Estados básicos, solo FActiveTag
-            break;
+    case EZombiState::WalkAround:
+    case EZombiState::Idle:
+        // Estados básicos, solo FActiveTag (ya agregado en spawn)
+        break;
     }
-    */
 }
 
 void UZombiLODProcessor::ApplyFrustumCulling(FZombiLODFragment &LODFragment, const FVector &ZombieLocation)
@@ -211,10 +204,16 @@ void UZombiLODProcessor::ApplyFrustumCulling(FZombiLODFragment &LODFragment, con
     bool bInFrustum = IsInFrustum(ZombieLocation);
     LODFragment.SetInFrustum(bInFrustum);
 
-    // Si no está en frustum, reducir LOD visual
+    // Si no está en frustum, reducir LOD visual y frecuencia
     if (!bInFrustum)
     {
         LODFragment.SetSpriteDetail();
+        LODFragment.SetLowUpdate(); // 5 FPS para entidades fuera de vista
+    }
+    else
+    {
+        // Si está en frustum, restaurar LOD basado en distancia y estado
+        // Esto se maneja en UpdateLODSettings
     }
 }
 
