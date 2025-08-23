@@ -74,9 +74,23 @@
 
 ## 🔧 Implementación Técnica - Enfoque Híbrido
 
-### **Arquitectura Híbrida: Estados + Tags**
+### **Arquitectura Optimizada: Tags para Lógica + Estados para TurboSequence**
 
-#### **Estados para Comportamiento (BehaviorFragment):**
+#### **Tags para Lógica y Optimización:**
+```cpp
+// Tags para comportamiento y optimización
+FActiveTag        // Entidades activas (base para queries)
+FDeadTag          // Entidades muertas (excluir de procesamiento)
+FChasingTag       // Persiguiendo al jugador
+FAttackingTag     // Atacando al jugador
+FSeekingTag       // Buscando al jugador
+FWalkingTag       // Caminando aleatoriamente
+FIdleTag          // Esperando en idle
+FInFrustumTag     // Visible en cámara (frustum culling)
+FHighPriorityTag  // Necesita 60 FPS (LOD crítico)
+```
+
+#### **Estados Solo para TurboSequence:**
 ```cpp
 enum class EZombiState : uint8
 {
@@ -89,24 +103,12 @@ enum class EZombiState : uint8
     Dead
 };
 
-struct FZombiBehaviorFragment : public FMassFragment
+// Solo en TurboSequenceFragment para animaciones
+struct FZombiTurboSequenceFragment : public FMassFragment
 {
-    EZombiState CurrentState;    // Estado principal del zombie
-    float StateTimer;            // Tiempo en estado actual
-    float ActionTimer;           // Timer para acciones específicas
-    // ... otros datos de comportamiento
+    EZombiState VisualState;    // Estado solo para animaciones
+    // ... otros datos visuales
 };
-```
-
-#### **Tags para Optimización:**
-```cpp
-// Tags para queries eficientes y LOD
-FActiveTag        // Zombis vivos y activos
-FDeadTag          // Zombis muertos (no procesar)
-FChasingTag       // Zombis persiguiendo (para queries específicas)
-FAttackingTag     // Zombis atacando (para queries específicas)
-FInFrustumTag     // Zombis visibles en cámara
-FHighPriorityTag  // Zombis que necesitan 60 FPS
 ```
 
 #### **Fragmento LOD para Optimización:**
@@ -195,34 +197,22 @@ PriorityScore = (StateWeight * StatePriority) +
 - Sin estímulos: 0
 ```
 
-### **Sincronización Estados-Tags**
+### **Sincronización Tags → Estados Visuales**
 ```cpp
-// Método centralizado para cambios de estado
-void SetZombieState(FMassEntityHandle Entity, EZombiState NewState)
-{
-    // 1. Cambiar estado en BehaviorFragment
-    BehaviorFragment.CurrentState = NewState;
-    
-    // 2. Sincronizar tags automáticamente
-    switch (NewState)
-    {
-        case EZombiState::Dead:
-            EntityManager.AddTag<FDeadTag>(Entity);
-            EntityManager.RemoveTag<FActiveTag>(Entity);
-            break;
-            
-        case EZombiState::Chase:
-            EntityManager.AddTag<FChasingTag>(Entity);
-            EntityManager.AddTag<FHighPriorityTag>(Entity);
-            break;
-            
-        case EZombiState::Attack:
-            EntityManager.AddTag<FAttackingTag>(Entity);
-            EntityManager.AddTag<FHighPriorityTag>(Entity);
-            break;
-            
-        // ... otros estados
-    }
+// Flujo de sincronización optimizado
+// 1. BehaviorProcessor: Cambia tags según lógica
+if (DistanceToPlayer < 200.0f) {
+    EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
+}
+
+// 2. TurboSequenceProcessor: Sincroniza tags → estado visual
+EZombiState VisualState = DetermineVisualStateFromTags();
+TurboSequenceFragment.VisualState = VisualState;
+
+// 3. TurboSequence: Usa estado visual para animaciones
+switch (TurboSequenceFragment.VisualState) {
+    case EZombiState::Chase: PlayAnimation("MM_Run_Fwd"); break;
+    case EZombiState::Idle: PlayAnimation("MM_Idle"); break;
 }
 ```
 
@@ -241,16 +231,15 @@ void SetZombieState(FMassEntityHandle Entity, EZombiState NewState)
 ActiveQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
 ActiveQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 
-// Query para zombis persiguiendo
+// Queries específicas por comportamiento
 ChasingQuery.AddTagRequirement<FChasingTag>(EMassFragmentPresence::All);
-
-// Query para zombis atacando
 AttackingQuery.AddTagRequirement<FAttackingTag>(EMassFragmentPresence::All);
+SeekingQuery.AddTagRequirement<FSeekingTag>(EMassFragmentPresence::All);
+WalkingQuery.AddTagRequirement<FWalkingTag>(EMassFragmentPresence::All);
+IdleQuery.AddTagRequirement<FIdleTag>(EMassFragmentPresence::All);
 
-// Query para zombis visibles
+// Queries para optimización
 VisibleQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All);
-
-// Query para zombis de alta prioridad
 HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All);
 ```
 
@@ -380,14 +369,20 @@ HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All
 
 ### **✅ Completado (Fase 3):**
 - **Frustum culling**: Implementado con LOD inteligente
-- **Tag management**: API correcta usando AddTagToEntity
 - **LOD inteligente**: Prioridad combinada (estado + distancia + estímulos)
 - **Integración completa**: LODProcessor conectado con todos los procesadores
+- **Crash resuelto**: Eliminada modificación de entidades durante iteración
 
-### **📋 Próximas Tareas (Fase 4):**
-1. **Sistema de daño básico** - Estados TakeDamage/Attack
-2. **Estados de muerte/respawn** - Con FDeadTag
-3. **Testing de sincronización** - Estados-tags
+### **✅ Completado (Fase 4 - Parcial):**
+- **Sistema de estímulos eliminado**: Simplificado completamente
+- **Seek y Chase implementados**: Comportamiento funcional sin crashes
+- **Movimiento hacia jugador**: Velocidad alta (120 u/s) para persecución
+- **Transiciones de estado**: Idle → Seek → Chase basadas en distancia
+
+### **📋 Próximas Tareas (Fase 4 - Restante):**
+1. **Sincronización de tags segura** - Implementar fuera de iteración
+2. **Sistema de daño básico** - Estados TakeDamage/Attack
+3. **Estados de muerte/respawn** - Con FDeadTag
 4. **Optimización final** - Entity pooling
 
 ### **🎯 Beneficios Obtenidos:**
@@ -395,6 +390,8 @@ HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All
 - **Mejor rendimiento**: Queries optimizadas con tags
 - **Escalabilidad**: LOD inteligente preparado
 - **Mantenibilidad**: Arquitectura híbrida clara y documentada
+- **Sistema estable**: Sin crashes, comportamiento funcional
+- **Comportamiento realista**: Seek y Chase implementados correctamente
 
 ---
 

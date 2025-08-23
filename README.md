@@ -5,15 +5,15 @@ Sistema de zombis usando **Mass Entity System** + **TurboSequence** con arquitec
 
 ## 🏗️ Arquitectura
 
-### **Enfoque Híbrido: Estados + Tags**
+### **Arquitectura Optimizada: Tags para Lógica + Estados para TurboSequence**
 ```
-Estados (Comportamiento) ←→ Sincronización ←→ Tags (Optimización)
+Tags (Lógica y Optimización) ←→ Sincronización ←→ Estados (TurboSequence)
 ```
 
-**¿Por qué Híbrido?**
-- **Estados**: Claridad y mantenibilidad para lógica de comportamiento
+**¿Por qué esta Arquitectura?**
 - **Tags**: Rendimiento máximo para queries y procesamiento
-- **Sincronización**: Garantiza consistencia entre ambos sistemas
+- **Estados**: Claridad para animaciones en TurboSequence
+- **Sincronización**: Tags → Estados Visuales → TurboSequence
 
 ### **State Sync Pattern**
 ```
@@ -24,25 +24,26 @@ Lógica (Mass Entity) ←→ Sincronización ←→ Visual (TurboSequence)
 
 #### **Fragmentos (Datos)**
 - `FZombiCoreFragment`: Posición, rotación, velocidad
-- `FZombiBehaviorFragment`: Estados (Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead)
-- `FZombiStimuliFragment`: Estímulos y respuestas
-- `FZombiTurboSequenceFragment`: Referencias visuales
-- `FZombiLODFragment`: Optimización y LOD (nuevo)
+- `FZombiBehaviorFragment`: Timers y datos de comportamiento
+- `FZombiTurboSequenceFragment`: Referencias visuales + Estados para animaciones
+- `FZombiLODFragment`: Optimización y LOD
 
-#### **Tags (Optimización)**
-- `FActiveTag`: Zombis vivos y activos
-- `FDeadTag`: Zombis muertos (no procesar)
-- `FChasingTag`: Zombis persiguiendo
-- `FAttackingTag`: Zombis atacando
-- `FInFrustumTag`: Zombis visibles en cámara
-- `FHighPriorityTag`: Zombis que necesitan 60 FPS
+#### **Tags (Lógica y Optimización)**
+- `FActiveTag`: Entidades activas (base para queries)
+- `FDeadTag`: Entidades muertas (excluir de procesamiento)
+- `FChasingTag`: Persiguiendo al jugador
+- `FAttackingTag`: Atacando al jugador
+- `FSeekingTag`: Buscando al jugador
+- `FWalkingTag`: Caminando aleatoriamente
+- `FIdleTag`: Esperando en idle
+- `FInFrustumTag`: Visible en cámara (frustum culling)
+- `FHighPriorityTag`: Necesita 60 FPS (LOD crítico)
 
 #### **Procesadores (Lógica)**
-- `UZombiBehaviorProcessor`: Estados y AI (modificado para usar tags)
+- `UZombiBehaviorProcessor`: Lógica de comportamiento y gestión de tags
 - `UZombiMovementProcessor`: Movimiento y rotación (optimizado con LOD)
-- `UZombiStimulusProcessor`: Procesamiento de estímulos
-- `UZombiTurboSequenceProcessor`: Sincronización visual (optimizado con culling)
-- `UZombiLODProcessor`: LOD inteligente y sincronización estados-tags (nuevo)
+- `UZombiTurboSequenceProcessor`: Sincronización visual + Tags → Estados Visuales
+- `UZombiLODProcessor`: LOD inteligente y frustum culling
 
 #### **Subsystems (Gestión)**
 - `UZombiMassSubsystem`: Gestión de entidades Mass
@@ -58,7 +59,7 @@ ZombiTestController → SpawnerSubsystem → MassSubsystem → TurboSequence
 
 ### **2. Por Frame**
 ```
-Stimulus → Behavior → Movement → TurboSequence (State Sync)
+Behavior (Tags) → Movement → TurboSequence (Tags → Estados Visuales)
 ```
 
 ### **3. Sincronización Visual**
@@ -143,12 +144,15 @@ enum EZombiState {
 
 - **✅ Spawning**: Lotes de zombis
 - **✅ Movimiento**: AI básica con rotación
+- **✅ Seek y Chase**: Comportamiento de persecución funcional
 - **✅ Sincronización Visual**: Transformaciones básicas
 - **✅ Animaciones**: Estados por entidad
 - **✅ Optimización**: Fragmentos y procesadores especializados
+- **✅ LOD Inteligente**: Frecuencia de update por prioridad
+- **✅ Frustum Culling**: Solo renderizar zombis visibles
 - **✅ Control Blueprint**: Interfaz desde editor
 
-## 🎯 Enfoque Híbrido - Estados + Tags
+## 🎯 Arquitectura Optimizada - Tags para Lógica + Estados para TurboSequence
 
 ### **¿Por qué esta Arquitectura?**
 
@@ -156,12 +160,12 @@ enum EZombiState {
 - **Solo Estados**: Queries menos eficientes, filtrado manual
 - **Solo Tags**: Estados complejos, debugging difícil, inconsistencias
 
-#### **Solución Híbrida:**
-- **Estados**: Claridad y mantenibilidad para lógica de comportamiento
+#### **Solución Optimizada:**
 - **Tags**: Rendimiento máximo para queries y procesamiento
-- **Sincronización**: Garantiza consistencia entre ambos sistemas
+- **Estados**: Claridad para animaciones en TurboSequence
+- **Sincronización**: Tags → Estados Visuales → TurboSequence
 
-### **Beneficios del Enfoque Híbrido:**
+### **Beneficios de la Arquitectura Optimizada:**
 
 #### **Rendimiento:**
 - **Queries Nativas**: Tags permiten filtrado directo en chunks
@@ -170,10 +174,10 @@ enum EZombiState {
 - **Batch Processing**: Mejor cache locality
 
 #### **Mantenibilidad:**
-- **Estado Claro**: BehaviorFragment tiene estado único y obvio
-- **Debugging Fácil**: Estado actual es inmediatamente visible
-- **Lógica Centralizada**: Transiciones en un lugar
-- **Consistencia**: No hay estados contradictorios
+- **Tags Claros**: Comportamiento definido por tags específicos
+- **Estados Visuales**: Solo para animaciones en TurboSequence
+- **Lógica Centralizada**: Transiciones de tags en BehaviorProcessor
+- **Consistencia**: Tags → Estados Visuales sincronizados
 
 #### **Escalabilidad:**
 - **Extensibilidad**: Fácil agregar nuevos tags sin cambiar lógica
@@ -182,15 +186,15 @@ enum EZombiState {
 
 ### **Implementación:**
 ```cpp
-// Estados para comportamiento claro
+// Tags para comportamiento y optimización
+FActiveTag, FDeadTag, FChasingTag, FAttackingTag, FSeekingTag, FWalkingTag, FIdleTag, FInFrustumTag, FHighPriorityTag
+
+// Estados solo para TurboSequence
 enum class EZombiState : uint8 { Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead };
 
-// Tags para optimización de queries
-FActiveTag, FDeadTag, FChasingTag, FAttackingTag, FInFrustumTag, FHighPriorityTag
-
 // Sincronización automática
-void SetZombieState(EZombiState NewState) {
-    // Cambiar estado + sincronizar tags automáticamente
+void SyncTagsToVisualState() {
+    // Tags → Estados Visuales → TurboSequence
 }
 ```
 
@@ -199,4 +203,4 @@ Ver `HAZME.md` para roadmap detallado de desarrollo.
 
 ---
 
-**Sistema optimizado para miles de entidades con arquitectura State Sync + Enfoque Híbrido.** 
+**Sistema optimizado para miles de entidades con arquitectura State Sync + Tags para Lógica + Estados para TurboSequence.** 
