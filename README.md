@@ -57,7 +57,7 @@ ZombiTestController → SpawnerSubsystem → MassSubsystem → TurboSequence
 
 ### **2. Por Frame**
 ```
-Behavior (Estados) → LOD (Estado → Tags de Frecuencia) → Movement → TurboSequence
+LOD (Estado → Tags de Frecuencia) → Behavior (Estados) → Movement → TurboSequence
 ```
 
 ### **3. Sincronización Visual**
@@ -107,6 +107,30 @@ GetActiveZombiCount();       // Contar activos
 ### **Fases de Procesamiento**
 - **PrePhysics**: Lógica (movimiento, AI, LOD)
 - **PostPhysics**: Visual (TurboSequence sync)
+
+### **Orden de Ejecución de Procesadores**
+
+#### **Fase PrePhysics:**
+1. **LODProcessor** (Grupo: MassLOD)
+   - **Prioridad:** PRIMERO - `ExecuteBefore MassBehavior`
+   - **Función:** Sincroniza Estado → Tags de Frecuencia
+   - **Patrón:** Command (comandos diferidos)
+
+2. **BehaviorProcessor** (Grupo: MassBehavior)
+   - **Prioridad:** DESPUÉS de LOD
+   - **Función:** IA y decisiones de comportamiento
+   - **Queries:** Por frecuencia (60FPS → 30FPS → 15FPS → 5FPS)
+
+3. **MovementProcessor** (Grupo: MassBehavior)
+   - **Prioridad:** DESPUÉS de Behavior
+   - **Función:** Movimiento y rotación
+   - **Queries:** Por frecuencia (60FPS → 30FPS → 15FPS → 5FPS)
+
+#### **Fase PostPhysics:**
+4. **TurboSequenceProcessor** (Grupo: MassVisual)
+   - **Prioridad:** DESPUÉS de MassBehavior
+   - **Función:** State Sync (Mass Entity → TurboSequence)
+   - **Dependencias:** `ExecuteAfter MassBehavior`
 
 ### **Tags de Filtrado por Frecuencia**
 - `FActiveTag`: Entidades activas

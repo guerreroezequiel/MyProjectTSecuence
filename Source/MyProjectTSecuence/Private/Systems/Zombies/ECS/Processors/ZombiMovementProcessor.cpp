@@ -30,17 +30,46 @@ UZombiMovementProcessor::UZombiMovementProcessor()
 
 void UZombiMovementProcessor::ConfigureQueries()
 {
-    // Query optimizada para movimiento - Enfoque híbrido
-    // Solo entidades activas, no muertas y en frustum
+    // Query base para entidades activas
     MovementQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
     MovementQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
-
-    // Tags base para enfoque híbrido
     MovementQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     MovementQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-
-    // Registrar query
     MovementQuery.RegisterWithProcessor(*this);
+
+    // Queries por frecuencia de actualización (orden de prioridad)
+
+    // Update60FPSQuery - TakeDamage, Attack (Crítico)
+    Update60FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
+    Update60FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    Update60FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    Update60FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+    Update60FPSQuery.AddTagRequirement<FUpdate60FPS>(EMassFragmentPresence::All);
+    Update60FPSQuery.RegisterWithProcessor(*this);
+
+    // Update30FPSQuery - Chase (Alta prioridad)
+    Update30FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
+    Update30FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    Update30FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    Update30FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+    Update30FPSQuery.AddTagRequirement<FUpdate30FPS>(EMassFragmentPresence::All);
+    Update30FPSQuery.RegisterWithProcessor(*this);
+
+    // Update15FPSQuery - Seek, WalkAround (Normal)
+    Update15FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
+    Update15FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    Update15FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    Update15FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+    Update15FPSQuery.AddTagRequirement<FUpdate15FPS>(EMassFragmentPresence::All);
+    Update15FPSQuery.RegisterWithProcessor(*this);
+
+    // Update5FPSQuery - Idle, Dead (Mínima)
+    Update5FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
+    Update5FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    Update5FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    Update5FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+    Update5FPSQuery.AddTagRequirement<FUpdate5FPS>(EMassFragmentPresence::All);
+    Update5FPSQuery.RegisterWithProcessor(*this);
 }
 
 void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
@@ -64,9 +93,11 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Procesa entidades activas para movimiento
-    MovementQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
-                                     {
+    // Procesar entidades por orden de prioridad usando queries por frecuencia
+
+    // 1. Update60FPSQuery - TakeDamage, Attack (Crítico)
+    Update60FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                        {
         TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
         TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
 
@@ -75,57 +106,101 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
             FZombiCoreFragment& CoreFragment = CoreFragments[i];
             const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
 
-            // Solo procesar movimiento si no está muerto
-            if (!BehaviorFragment.IsDead())
+            EZombiState CurrentState = BehaviorFragment.GetState();
+
+            // Procesar movimiento según estado
+            if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
             {
-                EZombiState CurrentState = BehaviorFragment.GetState();
-
-                // Procesar movimiento según estado
-                if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
-                {
-                    // Movimiento hacia el jugador
-                    ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
-                }
-                else
-                {
-                    // Movimiento aleatorio normal
-                    ProcessRandomMovement(CoreFragment, DeltaTime);
-                }
-
-                // Procesar rotación hacia la dirección de movimiento
-                if (!CoreFragment.MovementDirection.IsNearlyZero())
-                {
-                    if (CoreFragment.MovementSpeed > 1.0f)
-                    {
-                        FRotator TargetRotation = CoreFragment.MovementDirection.Rotation();
-                        FRotator CurrentRotation = CoreFragment.Rotation;
-
-                        // Rotación más agresiva si está persiguiendo
-                        float RotationSpeedMultiplier = (CurrentState == EZombiState::Chase) ? 3.0f : 1.0f;
-
-                        // Interpola suavemente la rotación
-                        CoreFragment.Rotation = FMath::RInterpTo(
-                            CurrentRotation,
-                            TargetRotation,
-                            DeltaTime,
-                            (CoreFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f
-                        );
-                    }
-                }
-
-                // Procesar movimiento hacia adelante
-                if (CoreFragment.MovementSpeed > 0.0f)
-                {
-                    FVector ForwardDirection = CoreFragment.Rotation.Vector();
-                    CoreFragment.Position += ForwardDirection * CoreFragment.MovementSpeed * DeltaTime;
-                }
-
-                // Aplicar restricciones de área solo si no está persiguiendo
-                if (CurrentState != EZombiState::Chase && CurrentState != EZombiState::Seek)
-                {
-                    CoreFragment.Position = ClampToMovementArea(CoreFragment.Position, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
-                }
+                ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
             }
+            else
+            {
+                ProcessRandomMovement(CoreFragment, DeltaTime);
+            }
+
+            // Procesar rotación y movimiento
+            ProcessRotationAndMovement(CoreFragment, BehaviorFragment, DeltaTime);
+        } });
+
+    // 2. Update30FPSQuery - Chase (Alta prioridad)
+    Update30FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                        {
+        TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
+        TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
+
+        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+        {
+            FZombiCoreFragment& CoreFragment = CoreFragments[i];
+            const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
+
+            EZombiState CurrentState = BehaviorFragment.GetState();
+
+            // Procesar movimiento según estado
+            if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
+            {
+                ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
+            }
+            else
+            {
+                ProcessRandomMovement(CoreFragment, DeltaTime);
+            }
+
+            // Procesar rotación y movimiento
+            ProcessRotationAndMovement(CoreFragment, BehaviorFragment, DeltaTime);
+        } });
+
+    // 3. Update15FPSQuery - Seek, WalkAround (Normal)
+    Update15FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                        {
+        TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
+        TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
+
+        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+        {
+            FZombiCoreFragment& CoreFragment = CoreFragments[i];
+            const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
+
+            EZombiState CurrentState = BehaviorFragment.GetState();
+
+            // Procesar movimiento según estado
+            if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
+            {
+                ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
+            }
+            else
+            {
+                ProcessRandomMovement(CoreFragment, DeltaTime);
+            }
+
+            // Procesar rotación y movimiento
+            ProcessRotationAndMovement(CoreFragment, BehaviorFragment, DeltaTime);
+        } });
+
+    // 4. Update5FPSQuery - Idle, Dead (Mínima)
+    Update5FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                       {
+        TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
+        TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
+
+        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+        {
+            FZombiCoreFragment& CoreFragment = CoreFragments[i];
+            const FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
+
+            EZombiState CurrentState = BehaviorFragment.GetState();
+
+            // Procesar movimiento según estado
+            if (CurrentState == EZombiState::Chase || CurrentState == EZombiState::Seek)
+            {
+                ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
+            }
+            else
+            {
+                ProcessRandomMovement(CoreFragment, DeltaTime);
+            }
+
+            // Procesar rotación y movimiento
+            ProcessRotationAndMovement(CoreFragment, BehaviorFragment, DeltaTime);
         } });
 }
 
@@ -201,5 +276,43 @@ void UZombiMovementProcessor::ProcessRandomMovement(FZombiCoreFragment &CoreFrag
         {
             CoreFragment.MovementSpeed = 80.0f;
         }
+    }
+}
+
+void UZombiMovementProcessor::ProcessRotationAndMovement(FZombiCoreFragment &CoreFragment, const FZombiBehaviorFragment &BehaviorFragment, float DeltaTime)
+{
+    EZombiState CurrentState = BehaviorFragment.GetState();
+
+    // Procesar rotación hacia la dirección de movimiento
+    if (!CoreFragment.MovementDirection.IsNearlyZero())
+    {
+        if (CoreFragment.MovementSpeed > 1.0f)
+        {
+            FRotator TargetRotation = CoreFragment.MovementDirection.Rotation();
+            FRotator CurrentRotation = CoreFragment.Rotation;
+
+            // Rotación más agresiva si está persiguiendo
+            float RotationSpeedMultiplier = (CurrentState == EZombiState::Chase) ? 3.0f : 1.0f;
+
+            // Interpola suavemente la rotación
+            CoreFragment.Rotation = FMath::RInterpTo(
+                CurrentRotation,
+                TargetRotation,
+                DeltaTime,
+                (CoreFragment.RotationSpeed * RotationSpeedMultiplier) / 180.0f);
+        }
+    }
+
+    // Procesar movimiento hacia adelante
+    if (CoreFragment.MovementSpeed > 0.0f)
+    {
+        FVector ForwardDirection = CoreFragment.Rotation.Vector();
+        CoreFragment.Position += ForwardDirection * CoreFragment.MovementSpeed * DeltaTime;
+    }
+
+    // Aplicar restricciones de área solo si no está persiguiendo
+    if (CurrentState != EZombiState::Chase && CurrentState != EZombiState::Seek)
+    {
+        CoreFragment.Position = ClampToMovementArea(CoreFragment.Position, CoreFragment.MovementCenter, CoreFragment.MovementRadius);
     }
 }

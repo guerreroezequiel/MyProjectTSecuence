@@ -13,6 +13,7 @@
 /**
  * Procesador especializado SOLO para movimiento y rotación
  * Optimizado para cache locality - accede solo a fragmentos de movimiento
+ * Procesa por orden de prioridad usando queries por frecuencia
  */
 UCLASS()
 class UZombiMovementProcessor : public UMassProcessor
@@ -27,8 +28,14 @@ protected:
 	virtual void Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context) override;
 
 private:
-	// Query para entidades activas que necesitan movimiento
+	// Query base para entidades activas
 	FMassEntityQuery MovementQuery{*this};
+
+	// Queries por frecuencia de actualización (orden de prioridad)
+	FMassEntityQuery Update60FPSQuery{*this}; // TakeDamage, Attack - Crítico
+	FMassEntityQuery Update30FPSQuery{*this}; // Chase - Alta prioridad
+	FMassEntityQuery Update15FPSQuery{*this}; // Seek, WalkAround - Normal
+	FMassEntityQuery Update5FPSQuery{*this};  // Idle, Dead - Mínima
 
 	// Referencia al jugador para cálculos de movimiento
 	UPROPERTY()
@@ -41,4 +48,5 @@ private:
 	// Funciones de movimiento específicas
 	void ProcessPlayerChaseMovement(FZombiCoreFragment &CoreFragment, float DeltaTime);
 	void ProcessRandomMovement(FZombiCoreFragment &CoreFragment, float DeltaTime);
+	void ProcessRotationAndMovement(FZombiCoreFragment &CoreFragment, const FZombiBehaviorFragment &BehaviorFragment, float DeltaTime);
 };

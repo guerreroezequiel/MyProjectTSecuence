@@ -13,6 +13,7 @@
 /**
  * Procesador especializado SOLO para IA y decisiones de comportamiento
  * Optimizado para cache locality - accede solo a fragmentos de comportamiento
+ * Procesa por orden de prioridad usando queries por frecuencia
  */
 UCLASS()
 class UZombiBehaviorProcessor : public UMassProcessor
@@ -27,8 +28,14 @@ protected:
     virtual void Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context) override;
 
 private:
-    // Query para entidades activas que necesitan decisiones de IA
+    // Query base para entidades activas
     FMassEntityQuery BehaviorQuery{*this};
+
+    // Queries por frecuencia de actualización (orden de prioridad)
+    FMassEntityQuery Update60FPSQuery{*this}; // TakeDamage, Attack - Crítico
+    FMassEntityQuery Update30FPSQuery{*this}; // Chase - Alta prioridad
+    FMassEntityQuery Update15FPSQuery{*this}; // Seek, WalkAround - Normal
+    FMassEntityQuery Update5FPSQuery{*this};  // Idle, Dead - Mínima
 
     // Referencia al jugador para cálculos de distancia
     UPROPERTY()

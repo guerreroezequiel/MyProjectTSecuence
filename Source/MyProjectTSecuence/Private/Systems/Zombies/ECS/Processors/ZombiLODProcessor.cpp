@@ -13,6 +13,10 @@ UZombiLODProcessor::UZombiLODProcessor()
     // Configurar procesador para ejecutarse cada frame
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    ExecutionOrder.ExecuteInGroup = TEXT("MassLOD");        // Grupo propio
+    ExecutionOrder.ExecuteBefore.Add(TEXT("MassBehavior")); // ANTES que Behavior
+    bRequiresGameThreadExecution = false;
+    bAutoRegisterWithProcessingPhases = true;
 }
 
 void UZombiLODProcessor::ConfigureQueries()
@@ -47,7 +51,7 @@ void UZombiLODProcessor::Execute(FMassEntityManager &EntityManager, FMassExecuti
     }
 
     // Procesar entidades en chunks para optimización
-    LODQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
+    LODQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager](FMassExecutionContext &Context)
                                 {
         // Obtener arrays de fragmentos
         const TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
@@ -66,23 +70,21 @@ void UZombiLODProcessor::Execute(FMassEntityManager &EntityManager, FMassExecuti
             CalculateDistanceToPlayer(CoreFragment.Position, DistanceToPlayer);
             LODFragment.SetDistanceToPlayer(DistanceToPlayer);
             
-            // 2. Calcular intensidad de estímulos
-            float StimulusIntensity = CalculateStimulusIntensity(BehaviorFragment);
-            LODFragment.SetStimulusIntensity(StimulusIntensity);
-            
-            // 3. Actualizar configuración de LOD
+            // 2. Actualizar configuración de LOD
             UpdateLODSettings(LODFragment, BehaviorFragment, DistanceToPlayer);
             
-            // 4. Aplicar frustum culling
-            ApplyFrustumCulling(LODFragment, CoreFragment.Position);
+            // 3. Obtener entidad para sincronización
+            FMassEntityHandle Entity = Context.GetEntity(EntityIndex);
             
-            // 5. Sincronizar tags con estado (TEMPORALMENTE DESHABILITADO)
-            // FMassEntityHandle Entity = Context.GetEntity(EntityIndex);
-            // SynchronizeTagsWithState(EntityManager, Entity, BehaviorFragment);
+            // 4. Sincronizar estado → tags de frecuencia
+            SynchronizeStateToFrequency(EntityManager, Entity, BehaviorFragment);
             
-            // 6. Actualizar tiempo de último update
-            LODFragment.SetLastUpdateTime(CurrentTime);
+            // 5. Aplicar frustum culling
+            ApplyFrustumCulling(EntityManager, Entity, LODFragment, CoreFragment.Position);
         } });
+
+    // Ejecutar todos los comandos diferidos DESPUÉS de la iteración
+    ExecuteDeferredCommands(EntityManager);
 }
 
 void UZombiLODProcessor::CalculateDistanceToPlayer(const FVector &ZombieLocation, float &OutDistance)
@@ -128,92 +130,81 @@ void UZombiLODProcessor::UpdateLODSettings(FZombiLODFragment &LODFragment, const
         break;
     }
 
-    // 2. Determinar UpdateFrequency basado en prioridad y distancia
-    bool bIsHighPriority = LODFragment.IsHighPriority();
-    bool bIsMediumPriority = LODFragment.IsMediumPriority();
-
-    if (bIsHighPriority || Distance < CriticalDistance)
+    // 2. Determinar LOD visual basado en distancia
+    if (Distance < CriticalDistance)
     {
-        // CRÍTICO: Attack, TakeDamage, o muy cercanos
-        LODFragment.SetCriticalUpdate();
         LODFragment.SetFullDetail();
     }
-    else if (bIsMediumPriority || Distance < HighDistance)
+    else if (Distance < HighDistance)
     {
-        // ALTO: Chase, Seek, o medios con estímulos
-        LODFragment.SetHighUpdate();
         LODFragment.SetReducedDetail();
     }
     else if (Distance < NormalDistance)
     {
-        // NORMAL: WalkAround, o lejanos con estímulos
-        LODFragment.SetNormalUpdate();
         LODFragment.SetSimpleDetail();
     }
     else
     {
-        // BAJO: Idle lejanos sin estímulos
-        LODFragment.SetLowUpdate();
         LODFragment.SetSpriteDetail();
     }
-
-    // 3. Marcar para update si debe procesarse este frame
-    bool bShouldProcess = LODFragment.ShouldProcessThisFrame(CurrentTime);
-    LODFragment.SetNeedsUpdate(bShouldProcess);
 }
 
-void UZombiLODProcessor::SynchronizeTagsWithState(FMassEntityManager &EntityManager, FMassEntityHandle Entity, const FZombiBehaviorFragment &BehaviorFragment)
+void UZombiLODProcessor::SynchronizeStateToFrequency(FMassEntityManager &EntityManager, FMassEntityHandle Entity, const FZombiBehaviorFragment &BehaviorFragment)
 {
-    // Implementación usando la API correcta de Unreal Engine 5.5
-    // Por ahora, solo agregamos tags (la limpieza se hace automáticamente por queries)
+    // Limpiar todos los tags de frecuencia usando comandos diferidos
+    AddDeferredTagCommand(Entity, FUpdate60FPS::StaticStruct(), false);
+    AddDeferredTagCommand(Entity, FUpdate30FPS::StaticStruct(), false);
+    AddDeferredTagCommand(Entity, FUpdate15FPS::StaticStruct(), false);
+    AddDeferredTagCommand(Entity, FUpdate5FPS::StaticStruct(), false);
 
+    // Agregar tag según estado usando comandos diferidos
     switch (BehaviorFragment.GetState())
     {
     case EZombiState::Dead:
-        EntityManager.AddTagToEntity(Entity, FDeadTag::StaticStruct());
-        // Nota: FActiveTag se mantiene para queries base
+        AddDeferredTagCommand(Entity, FDeadTag::StaticStruct(), true);
+        AddDeferredTagCommand(Entity, FUpdate5FPS::StaticStruct(), true);
         break;
 
     case EZombiState::Attack:
-        EntityManager.AddTagToEntity(Entity, FAttackingTag::StaticStruct());
-        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        AddDeferredTagCommand(Entity, FUpdate60FPS::StaticStruct(), true);
         break;
 
     case EZombiState::TakeDamage:
-        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        AddDeferredTagCommand(Entity, FUpdate60FPS::StaticStruct(), true);
         break;
 
     case EZombiState::Chase:
-        EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
-        EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
+        AddDeferredTagCommand(Entity, FUpdate30FPS::StaticStruct(), true);
         break;
 
     case EZombiState::Seek:
-        EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
+        AddDeferredTagCommand(Entity, FUpdate15FPS::StaticStruct(), true);
         break;
 
     case EZombiState::WalkAround:
+        AddDeferredTagCommand(Entity, FUpdate15FPS::StaticStruct(), true);
+        break;
+
     case EZombiState::Idle:
-        // Estados básicos, solo FActiveTag (ya agregado en spawn)
+        AddDeferredTagCommand(Entity, FUpdate5FPS::StaticStruct(), true);
         break;
     }
 }
 
-void UZombiLODProcessor::ApplyFrustumCulling(FZombiLODFragment &LODFragment, const FVector &ZombieLocation)
+void UZombiLODProcessor::ApplyFrustumCulling(FMassEntityManager &EntityManager, FMassEntityHandle Entity, FZombiLODFragment &LODFragment, const FVector &ZombieLocation)
 {
     bool bInFrustum = IsInFrustum(ZombieLocation);
-    LODFragment.SetInFrustum(bInFrustum);
 
-    // Si no está en frustum, reducir LOD visual y frecuencia
-    if (!bInFrustum)
+    // Aplicar FInFrustumTag usando comandos diferidos
+    if (bInFrustum)
     {
-        LODFragment.SetSpriteDetail();
-        LODFragment.SetLowUpdate(); // 5 FPS para entidades fuera de vista
+        AddDeferredTagCommand(Entity, FInFrustumTag::StaticStruct(), true);
     }
     else
     {
-        // Si está en frustum, restaurar LOD basado en distancia y estado
-        // Esto se maneja en UpdateLODSettings
+        AddDeferredTagCommand(Entity, FInFrustumTag::StaticStruct(), false);
+        // Si no está en frustum, reducir LOD visual
+        LODFragment.SetSpriteDetail();
     }
 }
 
@@ -244,41 +235,27 @@ bool UZombiLODProcessor::IsInFrustum(const FVector &Location) const
     return Distance <= MaxViewDistance;
 }
 
-float UZombiLODProcessor::CalculateStimulusIntensity(const FZombiBehaviorFragment &BehaviorFragment) const
+void UZombiLODProcessor::AddDeferredTagCommand(FMassEntityHandle Entity, const UScriptStruct *TagType, bool bAddTag)
 {
-    // Calcular intensidad de estímulos basada en estado y datos
-    float Intensity = 0.0f;
+    // Agregar comando al array de comandos diferidos
+    DeferredCommands.Emplace(Entity, TagType, bAddTag);
+}
 
-    switch (BehaviorFragment.GetState())
+void UZombiLODProcessor::ExecuteDeferredCommands(FMassEntityManager &EntityManager)
+{
+    // Ejecutar todos los comandos diferidos
+    for (const FDeferredTagCommand &Command : DeferredCommands)
     {
-    case EZombiState::Attack:
-        Intensity = 100.0f; // Máxima intensidad
-        break;
-    case EZombiState::TakeDamage:
-        Intensity = 95.0f; // Alta intensidad
-        break;
-    case EZombiState::Chase:
-        Intensity = 80.0f; // Intensidad alta
-        break;
-    case EZombiState::Seek:
-        Intensity = 60.0f; // Intensidad media
-        break;
-    case EZombiState::WalkAround:
-        Intensity = 30.0f; // Intensidad baja
-        break;
-    case EZombiState::Idle:
-        Intensity = 10.0f; // Intensidad mínima
-        break;
-    case EZombiState::Dead:
-        Intensity = 0.0f; // Sin intensidad
-        break;
+        if (Command.bAddTag)
+        {
+            EntityManager.AddTagToEntity(Command.Entity, Command.TagType);
+        }
+        else
+        {
+            EntityManager.RemoveTagFromEntity(Command.Entity, Command.TagType);
+        }
     }
 
-    // Ajustar por datos específicos del estado
-    if (BehaviorFragment.HasAnyAction())
-    {
-        Intensity += 20.0f; // Bonus por acciones
-    }
-
-    return FMath::Clamp(Intensity, 0.0f, 100.0f);
+    // Limpiar array de comandos
+    DeferredCommands.Reset();
 }
