@@ -3,14 +3,15 @@
 ## 📊 Estado Actual del Sistema
 
 ### **✅ Lo que ya funciona:**
-- **4 procesadores estables**: Stimulus, Behavior, Movement, TurboSequence
+- **4 procesadores estables**: Behavior, Movement, TurboSequence, LOD
 - **State Sync**: Separación lógica/visual con TurboSequence
 - **Batch processing**: Procesamiento en chunks optimizado
 - **Fragmentos especializados**: Solo datos necesarios por procesador
-- **Sistema de estímulos básico**: Detección de jugador funcional
+- **Sistema de comportamiento básico**: Seek y Chase funcionales
+- **Arquitectura limpia**: Tags por frecuencia + Estados para TurboSequence
 
 ### **❌ Limitaciones actuales:**
-- **Sin LOD**: Todas las entidades se procesan cada frame
+- **Sin LOD dinámico**: No implementado tags por frecuencia
 - **Sin culling**: Todas las entidades se renderizan
 - **Sin pooling**: Alloc/dealloc constante
 - **Sin optimización espacial**: Queries O(N) para estímulos
@@ -25,7 +26,7 @@
 
 ### **Fase 2: Escalabilidad (2-3 semanas)**
 - **5000 zombis**: 30 FPS estable
-- **Sistema de LOD**: Diferentes frecuencias de update
+- **Sistema de LOD**: Tags por frecuencia implementados
 - **Culling básico**: Solo renderizar zombis visibles
 
 ### **Fase 3: Funcionalidad (2-3 semanas)**
@@ -35,13 +36,13 @@
 
 ## 🚀 Prioridad Crítica - Optimizaciones de Rendimiento
 
-### **1. Update Frequency Control (ALTA)**
+### **1. Tags por Frecuencia (ALTA)**
 ```cpp
-// LOD inteligente por estado + distancia
-- CRÍTICO (60 FPS): Zombis Attack, TakeDamage, o muy cercanos (< 200u)
-- ALTO (30 FPS): Zombis Chase, Seek, o medios (200-500u) con estímulos
-- NORMAL (15 FPS): Zombis WalkAround, o lejanos (500-800u) con estímulos
-- BAJO (5 FPS): Zombis Idle lejanos (> 800u) sin estímulos
+// LOD dinámico por estado
+- CRÍTICO (60 FPS): Zombis TakeDamage, Attack (FUpdate60FPS)
+- ALTO (30 FPS): Zombis Chase (FUpdate30FPS)
+- NORMAL (15 FPS): Zombis Seek, WalkAround (FUpdate15FPS)
+- BAJO (5 FPS): Zombis Idle, Dead (FUpdate5FPS)
 ```
 **Impacto esperado**: Reducir procesamiento de CPU en ~70% manteniendo reactividad
 
@@ -72,23 +73,20 @@
 ```
 **Impacto esperado**: Reducir overhead de estímulos en ~90%
 
-## 🔧 Implementación Técnica - Enfoque Híbrido
+## 🔧 Implementación Técnica - Tags por Frecuencia
 
-### **Arquitectura Optimizada: Tags para Lógica + Estados para TurboSequence**
+### **Arquitectura Optimizada: Tags por Frecuencia + Estados para TurboSequence**
 
-#### **Tags para Lógica y Optimización:**
+#### **Tags por Frecuencia (LOD Dinámico):**
 ```cpp
-// Tags para comportamiento y optimización
-FActiveTag        // Entidades activas (base para queries)
-FDeadTag          // Entidades muertas (excluir de procesamiento)
-FChasingTag       // Persiguiendo al jugador
-FAttackingTag     // Atacando al jugador
-FSeekingTag       // Buscando al jugador
-FWalkingTag       // Caminando aleatoriamente
-FIdleTag          // Esperando en idle
-FTakeDamageTag    // Estado de daño activo (super prioritario)
-FInFrustumTag     // Visible en cámara (frustum culling)
-FHighPriorityTag  // Necesita 60 FPS (LOD crítico)
+// Tags para LOD y optimización
+FActiveTag          // Entidades activas (base para queries)
+FDeadTag            // Entidades muertas (excluir de procesamiento)
+FInFrustumTag       // Visible en cámara (frustum culling)
+FUpdate60FPS        // Frecuencia crítica (TakeDamage, Attack)
+FUpdate30FPS        // Frecuencia alta (Chase)
+FUpdate15FPS        // Frecuencia normal (Seek, WalkAround)
+FUpdate5FPS         // Frecuencia mínima (Idle, Dead)
 ```
 
 #### **Estados Solo para TurboSequence:**
@@ -104,69 +102,62 @@ enum class EZombiState : uint8
     Dead
 };
 
-// Solo en TurboSequenceFragment para animaciones
-struct FZombiTurboSequenceFragment : public FMassFragment
+// Solo en BehaviorFragment para animaciones
+struct FZombiBehaviorFragment : public FMassFragment
 {
-    EZombiState VisualState;    // Estado solo para animaciones
-    // ... otros datos visuales
+    EZombiState CurrentState;    // Estado solo para animaciones
+    // ... otros datos de comportamiento
 };
 ```
 
-#### **Fragmento LOD para Optimización:**
+#### **Fragmento LOD Simplificado (Datos Estables):**
 ```cpp
 struct FZombiLODFragment : public FMassFragment
 {
-    uint8 UpdateFrequency : 2;  // 0=60fps, 1=30fps, 2=15fps, 3=5fps
     uint8 VisualLOD : 2;        // 0=Full, 1=Reduced, 2=Simple, 3=Sprite
-    uint8 bInFrustum : 1;       // Visible en cámara
-    uint8 bNeedsUpdate : 1;     // Debe procesarse este frame
     uint8 PriorityLevel : 3;    // 0=Idle, 1=WalkAround, 2=Seek, 3=Chase, 4=TakeDamage, 5=Attack, 6=Dead
-    float DistanceToPlayer;     // Distancia al jugador
-    float LastUpdateTime;       // Último tiempo de update
-    float StimulusIntensity;    // Intensidad del estímulo (daño, etc.)
+    uint8 Padding : 3;          // Alineación
+    
+    float DistanceToPlayer;     // Distancia al jugador (necesario para cálculos)
 };
 ```
 
 ### **Procesadores Optimizados:**
 
-#### **UZombiLODProcessor (Nuevo):**
+#### **UZombiLODProcessor (Modificado):**
 ```cpp
-// Procesador que maneja LOD inteligente y sincronización
+// Procesador que maneja sincronización Estado → Tags de Frecuencia
 - Calcular distancia al jugador
 - Evaluar estado actual del BehaviorFragment
-- Determinar intensidad de estímulos
-- Calcular prioridad combinada: Estado + Distancia + Estímulos
-- Sincronizar tags con estado actual
+- Sincronizar estado → tags de frecuencia
 - Aplicar frustum culling
-- Marcar entidades para procesamiento según prioridad
+- Marcar entidades para procesamiento según frecuencia
 ```
 
 #### **UZombiBehaviorProcessor (Modificado):**
 ```cpp
 // Procesador que maneja lógica de comportamiento por orden de prioridad
-- QueryTakeDamage: Procesar primero (super crítico, 60 FPS)
-- QueryAttack: Procesar segundo (alta prioridad, 60 FPS)
-- QueryChase: Procesar tercero (media-alta, 30 FPS)
-- QuerySeek: Procesar cuarto (media, 15 FPS)
-- QueryWalk: Procesar quinto (baja, 15 FPS)
-- QueryIdle: Procesar último (mínima, 5 FPS)
+- QueryUpdate60FPS: Procesar primero (super crítico, TakeDamage, Attack)
+- QueryUpdate30FPS: Procesar segundo (alta prioridad, Chase)
+- QueryUpdate15FPS: Procesar tercero (normal, Seek, WalkAround)
+- QueryUpdate5FPS: Procesar último (mínima, Idle, Dead)
 - TakeDamage interrumpe cualquier estado (limpiar todos los tags)
-- Sincronizar tags automáticamente al cambiar estado
+- Sincronizar estado automáticamente
 ```
 
 #### **UZombiMovementProcessor (Modificado):**
 ```cpp
 // Procesador optimizado para movimiento
 - ActiveVisibleQuery: Solo entidades activas y visibles (FActiveTag + FInFrustumTag)
-- Procesar según frecuencia de update (LOD)
-- Aplicar movimiento basado en tags de comportamiento
+- Procesar según frecuencia de update (tags de frecuencia)
+- Aplicar movimiento basado en estado del BehaviorFragment
 - Optimizar cálculos por prioridad
 ```
 
 #### **UZombiTurboSequenceProcessor (Modificado):**
 ```cpp
 // Procesador optimizado para render
-- TakeDamageQuery: Siempre renderizar, máxima calidad (ignorar frustum)
+- Update60FPSQuery: Siempre renderizar, máxima calidad (ignorar frustum)
 - VisibleQuery: Solo entidades visibles (FInFrustumTag)
 - Aplicar LOD visual según distancia
 - Sincronizar transformaciones eficientemente
@@ -184,64 +175,64 @@ struct FZombiLODFragment : public FMassFragment
 // 6. Idle: 10 (mínima prioridad - esperando)
 // 7. Dead: 0 (no procesar - entidad inactiva)
 
-// Frecuencias de Update por Prioridad
-- TakeDamage: 60 FPS (super crítico)
-- Attack: 60 FPS (alta prioridad)
-- Chase: 30 FPS (media-alta)
-- Seek: 15 FPS (media)
-- WalkAround: 15 FPS (baja)
-- Idle: 5 FPS (mínima)
+// Frecuencias de Update por Estado
+- TakeDamage: 60 FPS (FUpdate60FPS)
+- Attack: 60 FPS (FUpdate60FPS)
+- Chase: 30 FPS (FUpdate30FPS)
+- Seek: 15 FPS (FUpdate15FPS)
+- WalkAround: 15 FPS (FUpdate15FPS)
+- Idle: 5 FPS (FUpdate5FPS)
+- Dead: 5 FPS (FUpdate5FPS)
 
 // Regla de Interrupción
 - TakeDamage interrumpe cualquier estado
-- Limpia todos los tags de comportamiento
-- Fuerza FHighPriorityTag para 60 FPS
+- Limpia todos los tags de frecuencia
+- Fuerza FUpdate60FPS para 60 FPS
 ```
 
-### **Sincronización Tags → Estados Visuales**
+### **Sincronización Estado → Tags de Frecuencia**
 ```cpp
 // Flujo de sincronización optimizado
-// 1. BehaviorProcessor: Cambia tags según lógica
+// 1. BehaviorProcessor: Cambia estado según lógica
 if (DistanceToPlayer < 200.0f) {
-    EntityManager.AddTagToEntity(Entity, FChasingTag::StaticStruct());
+    BehaviorFragment.CurrentState = EZombiState::Chase;
 }
 
-// 2. TakeDamage: Super prioritario - interrumpe cualquier estado
-if (ShouldTakeDamage()) {
-    // Limpiar TODOS los tags de comportamiento
-    EntityManager.RemoveTagFromEntity(Entity, FAttackingTag::StaticStruct());
-    EntityManager.RemoveTagFromEntity(Entity, FChasingTag::StaticStruct());
-    EntityManager.RemoveTagFromEntity(Entity, FSeekingTag::StaticStruct());
-    EntityManager.RemoveTagFromEntity(Entity, FWalkingTag::StaticStruct());
-    EntityManager.RemoveTagFromEntity(Entity, FIdleTag::StaticStruct());
-    
-    // Agregar TakeDamage + HighPriority
-    EntityManager.AddTagToEntity(Entity, FTakeDamageTag::StaticStruct());
-    EntityManager.AddTagToEntity(Entity, FHighPriorityTag::StaticStruct());
-    return; // NO evaluar otros estados
+// 2. LODProcessor: Sincroniza estado → tags de frecuencia
+switch (BehaviorFragment.CurrentState)
+{
+case EZombiState::TakeDamage:
+case EZombiState::Attack:
+    EntityManager.AddTagToEntity(Entity, FUpdate60FPS::StaticStruct());
+    break;
+case EZombiState::Chase:
+    EntityManager.AddTagToEntity(Entity, FUpdate30FPS::StaticStruct());
+    break;
+case EZombiState::Seek:
+case EZombiState::WalkAround:
+    EntityManager.AddTagToEntity(Entity, FUpdate15FPS::StaticStruct());
+    break;
+case EZombiState::Idle:
+case EZombiState::Dead:
+    EntityManager.AddTagToEntity(Entity, FUpdate5FPS::StaticStruct());
+    break;
 }
 
-// 3. TurboSequenceProcessor: Sincroniza tags → estado visual
-EZombiState VisualState = DetermineVisualStateFromTags();
-TurboSequenceFragment.VisualState = VisualState;
-
-// 4. TurboSequence: Usa estado visual para animaciones
-switch (TurboSequenceFragment.VisualState) {
-    case EZombiState::TakeDamage: PlayAnimation("MM_Fall_Loop"); break; // Prioridad máxima
+// 3. TurboSequenceProcessor: Lee estado para animaciones
+switch (BehaviorFragment.CurrentState) {
+    case EZombiState::TakeDamage: PlayAnimation("MM_Fall_Loop"); break;
     case EZombiState::Chase: PlayAnimation("MM_Run_Fwd"); break;
     case EZombiState::Idle: PlayAnimation("MM_Idle"); break;
 }
 ```
 
-### **Optimización de Queries por Orden de Prioridad**
+### **Optimización de Queries por Frecuencia**
 ```cpp
-// Jerarquía de queries por prioridad de procesamiento
-- QueryTakeDamage: Zombis TakeDamage (60 FPS - super crítico, interrumpe todo)
-- QueryAttack: Zombis Attack (60 FPS - alta prioridad)
-- QueryChase: Zombis Chase (30 FPS - media-alta)
-- QuerySeek: Zombis Seek (15 FPS - media)
-- QueryWalk: Zombis WalkAround (15 FPS - baja)
-- QueryIdle: Zombis Idle (5 FPS - mínima)
+// Jerarquía de queries por frecuencia de procesamiento
+- QueryUpdate60FPS: Zombis críticos (60 FPS - TakeDamage, Attack)
+- QueryUpdate30FPS: Zombis alta prioridad (30 FPS - Chase)
+- QueryUpdate15FPS: Zombis normal (15 FPS - Seek, WalkAround)
+- QueryUpdate5FPS: Zombis mínima prioridad (5 FPS - Idle, Dead)
 ```
 
 ### **Queries Específicas por Tags**
@@ -250,28 +241,14 @@ switch (TurboSequenceFragment.VisualState) {
 ActiveQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
 ActiveQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
 
-// Queries por orden de prioridad (BehaviorProcessor)
-TakeDamageQuery.AddTagRequirement<FTakeDamageTag>(EMassFragmentPresence::All); // Super crítico
-TakeDamageQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All); // 60 FPS
-
-AttackQuery.AddTagRequirement<FAttackingTag>(EMassFragmentPresence::All); // Alta prioridad
-AttackQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All); // 60 FPS
-
-ChaseQuery.AddTagRequirement<FChasingTag>(EMassFragmentPresence::All); // Media-alta
-ChaseQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All); // Solo visibles
-
-SeekQuery.AddTagRequirement<FSeekingTag>(EMassFragmentPresence::All); // Media
-SeekQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All); // Solo visibles
-
-WalkQuery.AddTagRequirement<FWalkingTag>(EMassFragmentPresence::All); // Baja
-WalkQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All); // Solo visibles
-
-IdleQuery.AddTagRequirement<FIdleTag>(EMassFragmentPresence::All); // Mínima
-IdleQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All); // Solo visibles
+// Queries por frecuencia (BehaviorProcessor)
+Update60FPSQuery.AddTagRequirement<FUpdate60FPS>(EMassFragmentPresence::All); // Super crítico
+Update30FPSQuery.AddTagRequirement<FUpdate30FPS>(EMassFragmentPresence::All); // Alta prioridad
+Update15FPSQuery.AddTagRequirement<FUpdate15FPS>(EMassFragmentPresence::All); // Normal
+Update5FPSQuery.AddTagRequirement<FUpdate5FPS>(EMassFragmentPresence::All);   // Mínima
 
 // Queries para optimización
 VisibleQuery.AddTagRequirement<FInFrustumTag>(EMassFragmentPresence::All);
-HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All);
 ```
 
 ## 📈 Proyección de Rendimiento
@@ -319,31 +296,31 @@ HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All
 - Rutas optimizadas para grupos
 ```
 
-## 🔄 Plan de Implementación - Enfoque Híbrido
+## 🔄 Plan de Implementación - Tags por Frecuencia
 
 ### **Fase 1: Limpiar y Actualizar Fragmentos ✅ COMPLETADA**
 1. **✅ Simplificar FZombiBehaviorFragment** - Eliminada complejidad innecesaria
 2. **✅ Actualizar estados** - Agregados Seek, TakeDamage, Attack, Idle
-3. **✅ Limpiar tags innecesarios** - Eliminados FMovingTag, FNeedsAnimationUpdateTag, FNeedsVisualSyncTag
-4. **✅ Agregar tags faltantes** - Agregados FAttackingTag, FInFrustumTag, FHighPriorityTag
+3. **✅ Limpiar tags innecesarios** - Eliminados tags de comportamiento
+4. **✅ Simplificar FZombiLODFragment** - Solo datos estables
 
-### **Fase 2: Implementar LOD ✅ COMPLETADA**
-1. **✅ Crear FZombiLODFragment** - LOD inteligente implementado
-2. **✅ Crear UZombiLODProcessor** - Lógica de prioridad combinada
-3. **✅ Implementar sincronización estados-tags** - Método centralizado SetZombieState
-4. **✅ Actualizar queries** - Optimizadas con nuevos tags
+### **Fase 2: Implementar Tags por Frecuencia (EN PROGRESO)**
+1. **🔄 Crear tags por frecuencia** - FUpdate60FPS, FUpdate30FPS, FUpdate15FPS, FUpdate5FPS
+2. **🔄 Modificar UZombiLODProcessor** - Sincronización Estado → Tags de Frecuencia
+3. **🔄 Implementar queries por frecuencia** - Orden de prioridad en BehaviorProcessor
+4. **🔄 Actualizar todos los procesadores** - Usar queries por frecuencia
 
-### **Fase 3: Optimizar Procesadores ✅ COMPLETADA**
-1. **✅ Modificar BehaviorProcessor** - Queries con tags implementadas
-2. **✅ Optimizar MovementProcessor** - Queries optimizadas
-3. **✅ Mejorar TurboSequenceProcessor** - Queries optimizadas
-4. **✅ Implementar frustum culling** - Con FInFrustumTag y LOD inteligente
-
-### **Fase 4: Funcionalidad y Testing (1 semana)**
+### **Fase 3: Optimizar Procesadores (PENDIENTE)**
 1. **Sistema de daño básico** - Estados TakeDamage/Attack con prioridad máxima
-2. **Estados de muerte/respawn** - Con FDeadTag
-3. **Testing de sincronización** - Estados-tags
+2. **Lógica de interrupción TakeDamage** - Limpiar tags y forzar FUpdate60FPS
+3. **Estados de muerte/respawn** - Con FDeadTag
 4. **Optimización final** - Entity pooling
+
+### **Fase 4: Funcionalidad y Testing (PENDIENTE)**
+1. **Testing de sincronización** - Estado → Tags de Frecuencia
+2. **Optimización de rendimiento** - Medir impacto de LOD dinámico
+3. **Comportamiento de horda** - Lógica grupal básica
+4. **Pathfinding simple** - Navegación básica
 
 ## 📊 Métricas de Éxito
 
@@ -390,44 +367,35 @@ HighPriorityQuery.AddTagRequirement<FHighPriorityTag>(EMassFragmentPresence::All
 
 ## 📊 Progreso Actual - Estado del Sistema
 
-### **✅ Completado (Fases 1-2):**
-- **Arquitectura híbrida**: Estados + Tags implementados
-- **Fragmentos optimizados**: BehaviorFragment simplificado, LODFragment creado
-- **Tags limpios**: Eliminados innecesarios, agregados nuevos
-- **LOD inteligente**: UZombiLODProcessor con prioridad combinada
-- **Sincronización automática**: Estados y tags siempre sincronizados
-- **Queries optimizadas**: Todos los procesadores actualizados
+### **✅ Completado (Fase 1):**
+- **Arquitectura limpia**: Tags por frecuencia + Estados implementados
+- **Fragmentos optimizados**: BehaviorFragment simplificado, LODFragment simplificado
+- **Tags limpios**: Eliminados tags de comportamiento, preparados para tags por frecuencia
+- **Sistema estable**: Sin crashes, comportamiento funcional
+- **Comportamiento realista**: Seek y Chase implementados correctamente
 
-### **✅ Completado (Fase 3):**
-- **Frustum culling**: Implementado con LOD inteligente
-- **LOD inteligente**: Prioridad combinada (estado + distancia + estímulos)
-- **Integración completa**: LODProcessor conectado con todos los procesadores
-- **Crash resuelto**: Eliminada modificación de entidades durante iteración
+### **🔄 En Progreso (Fase 2):**
+- **Tags por frecuencia**: FUpdate60FPS, FUpdate30FPS, FUpdate15FPS, FUpdate5FPS
+- **Sincronización Estado → Tags**: LODProcessor modificado
+- **Queries por frecuencia**: BehaviorProcessor optimizado
+- **Integración completa**: Todos los procesadores actualizados
 
-### **✅ Completado (Fase 4 - Parcial):**
-- **Sistema de estímulos eliminado**: Simplificado completamente
-- **Seek y Chase implementados**: Comportamiento funcional sin crashes
-- **Movimiento hacia jugador**: Velocidad alta (120 u/s) para persecución
-- **Transiciones de estado**: Idle → Seek → Chase basadas en distancia
-
-### **📋 Próximas Tareas (Fase 4 - Restante):**
-1. **Implementar jerarquía de queries** - Orden de prioridad en BehaviorProcessor
-2. **Sistema de daño básico** - Estados TakeDamage/Attack con prioridad máxima
-3. **Lógica de interrupción TakeDamage** - Limpiar tags y forzar prioridad
-4. **Estados de muerte/respawn** - Con FDeadTag
-5. **Optimización final** - Entity pooling
+### **📋 Próximas Tareas (Fases 3-4):**
+1. **Sistema de daño básico** - Estados TakeDamage/Attack con FUpdate60FPS
+2. **Lógica de interrupción TakeDamage** - Limpiar tags y forzar frecuencia crítica
+3. **Estados de muerte/respawn** - Con FDeadTag
+4. **Optimización final** - Entity pooling
+5. **Testing de rendimiento** - Medir impacto de LOD dinámico
 
 ### **🎯 Beneficios Obtenidos:**
 - **Código más limpio**: Fragmentos simplificados y organizados
-- **Mejor rendimiento**: Queries optimizadas con tags
-- **Escalabilidad**: LOD inteligente preparado
-- **Mantenibilidad**: Arquitectura híbrida clara y documentada
+- **Arquitectura clara**: Tags por frecuencia + Estados para TurboSequence
+- **Escalabilidad**: LOD dinámico preparado
+- **Mantenibilidad**: Separación clara entre LOD y comportamiento
 - **Sistema estable**: Sin crashes, comportamiento funcional
 - **Comportamiento realista**: Seek y Chase implementados correctamente
-- **TakeDamage prioritario**: Sistema preparado para prioridad máxima en daño
-- **Jerarquía de queries**: Orden de procesamiento optimizado por prioridad
-- **Interrupción inteligente**: TakeDamage interrumpe cualquier estado
+- **Preparado para optimización**: Tags por frecuencia listos para implementar
 
 ---
 
-**🎯 Objetivo: Sistema de zombis masivos optimizado para juego isométrico, con enfoque en rendimiento y simplicidad.**
+**🎯 Objetivo: Sistema de zombis masivos optimizado para juego isométrico, con enfoque en rendimiento y simplicidad usando Tags por Frecuencia.**

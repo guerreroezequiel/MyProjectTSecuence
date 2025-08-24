@@ -1,19 +1,19 @@
 # Sistema ECS Zombis - Unreal Engine 5.5.4
 
 ## 📋 Descripción
-Sistema de zombis usando **Mass Entity System** + **TurboSequence** con arquitectura **State Sync**. Diseñado para manejar cientos de entidades con buen rendimiento.
+Sistema de zombis usando **Mass Entity System** + **TurboSequence** con arquitectura **State Sync**. Diseñado para manejar miles de entidades con optimización LOD por frecuencia.
 
 ## 🏗️ Arquitectura
 
-### **Arquitectura Optimizada: Tags para Lógica + Estados para TurboSequence**
+### **Arquitectura Optimizada: Tags por Frecuencia + Estados para TurboSequence**
 ```
-Tags (Lógica y Optimización) ←→ Sincronización ←→ Estados (TurboSequence)
+Tags (LOD y Optimización) ←→ Sincronización ←→ Estados (TurboSequence)
 ```
 
 **¿Por qué esta Arquitectura?**
-- **Tags**: Rendimiento máximo para queries y procesamiento
+- **Tags por Frecuencia**: LOD dinámico y optimización de rendimiento
 - **Estados**: Claridad para animaciones en TurboSequence
-- **Sincronización**: Tags → Estados Visuales → TurboSequence
+- **Sincronización**: Estado → Tags de Frecuencia → TurboSequence
 
 ### **State Sync Pattern**
 ```
@@ -24,26 +24,24 @@ Lógica (Mass Entity) ←→ Sincronización ←→ Visual (TurboSequence)
 
 #### **Fragmentos (Datos)**
 - `FZombiCoreFragment`: Posición, rotación, velocidad
-- `FZombiBehaviorFragment`: Timers y datos de comportamiento
+- `FZombiBehaviorFragment`: Estados y datos de comportamiento
 - `FZombiTurboSequenceFragment`: Referencias visuales + Estados para animaciones
-- `FZombiLODFragment`: Optimización y LOD
+- `FZombiLODFragment`: Optimización y LOD (datos estables)
 
-#### **Tags (Lógica y Optimización)**
+#### **Tags (LOD y Optimización)**
 - `FActiveTag`: Entidades activas (base para queries)
 - `FDeadTag`: Entidades muertas (excluir de procesamiento)
-- `FChasingTag`: Persiguiendo al jugador
-- `FAttackingTag`: Atacando al jugador
-- `FSeekingTag`: Buscando al jugador
-- `FWalkingTag`: Caminando aleatoriamente
-- `FIdleTag`: Esperando en idle
 - `FInFrustumTag`: Visible en cámara (frustum culling)
-- `FHighPriorityTag`: Necesita 60 FPS (LOD crítico)
+- `FUpdate60FPS`: Frecuencia crítica (TakeDamage, Attack)
+- `FUpdate30FPS`: Frecuencia alta (Chase)
+- `FUpdate15FPS`: Frecuencia normal (Seek, WalkAround)
+- `FUpdate5FPS`: Frecuencia mínima (Idle, Dead)
 
 #### **Procesadores (Lógica)**
-- `UZombiBehaviorProcessor`: Lógica de comportamiento y gestión de tags
+- `UZombiBehaviorProcessor`: Lógica de comportamiento y gestión de estados
 - `UZombiMovementProcessor`: Movimiento y rotación (optimizado con LOD)
-- `UZombiTurboSequenceProcessor`: Sincronización visual + Tags → Estados Visuales
-- `UZombiLODProcessor`: LOD inteligente y frustum culling
+- `UZombiTurboSequenceProcessor`: Sincronización visual + Estados → Animaciones
+- `UZombiLODProcessor`: LOD inteligente y sincronización Estado → Tags de Frecuencia
 
 #### **Subsystems (Gestión)**
 - `UZombiMassSubsystem`: Gestión de entidades Mass
@@ -59,12 +57,12 @@ ZombiTestController → SpawnerSubsystem → MassSubsystem → TurboSequence
 
 ### **2. Por Frame**
 ```
-Behavior (Tags) → Movement → TurboSequence (Tags → Estados Visuales)
+Behavior (Estados) → LOD (Estado → Tags de Frecuencia) → Movement → TurboSequence
 ```
 
 ### **3. Sincronización Visual**
 ```
-Estado Lógico → Transformación → TurboSequence → Renderizado
+Estado Lógico → Tags de Frecuencia → TurboSequence → Renderizado
 ```
 
 ## 🎮 Uso
@@ -88,15 +86,15 @@ GetActiveZombiCount();       // Contar activos
 - **Fragmentos Especializados**: Datos por procesador
 - **Batch Processing**: Spawning en lotes
 - **Concurrent Operations**: Thread-safe
-- **Query Optimization**: Filtrado con tags
-- **LOD Inteligente**: Frecuencia de update por prioridad
+- **Query Optimization**: Filtrado con tags por frecuencia
+- **LOD Inteligente**: Frecuencia de update por estado
 - **Frustum Culling**: Solo renderizar zombis visibles
-- **Sincronización Estados-Tags**: Consistencia automática
+- **Sincronización Estado-Tags**: Consistencia automática
 
 ### **Escalabilidad**
 - **Diseñado para**: Miles de entidades
-- **Arquitectura**: State Sync + Enfoque Híbrido
-- **Rendimiento**: Procesamiento optimizado con LOD
+- **Arquitectura**: State Sync + Tags por Frecuencia
+- **Rendimiento**: Procesamiento optimizado con LOD dinámico
 - **Objetivo**: 5000-10000 zombis a 30-60 FPS
 
 ## 🔧 Configuración Técnica
@@ -107,16 +105,17 @@ GetActiveZombiCount();       // Contar activos
 - `EnhancedInput` (UE5 nativo)
 
 ### **Fases de Procesamiento**
-- **PrePhysics**: Lógica (movimiento, AI, estímulos)
+- **PrePhysics**: Lógica (movimiento, AI, LOD)
 - **PostPhysics**: Visual (TurboSequence sync)
 
-### **Tags de Filtrado**
+### **Tags de Filtrado por Frecuencia**
 - `FActiveTag`: Entidades activas
 - `FDeadTag`: Entidades muertas (excluidas)
-- `FChasingTag`: Zombis persiguiendo
-- `FAttackingTag`: Zombis atacando
 - `FInFrustumTag`: Zombis visibles en cámara
-- `FHighPriorityTag`: Zombis que necesitan 60 FPS
+- `FUpdate60FPS`: Zombis críticos (60 FPS)
+- `FUpdate30FPS`: Zombis alta prioridad (30 FPS)
+- `FUpdate15FPS`: Zombis normal (15 FPS)
+- `FUpdate5FPS`: Zombis mínima prioridad (5 FPS)
 
 ## 📁 Estructura de Archivos
 
@@ -127,7 +126,7 @@ Source/MyProjectTSecuence/
 │   ├── Processors/          # Lógica
 │   ├── Subsystems/          # Gestión
 │   ├── Controllers/         # Control
-│   └── Tags/               # Filtrado
+│   └── Tags/               # LOD y Optimización
 └── Private/Systems/Zombies/ECS/
     └── [Implementaciones .cpp]
 ```
@@ -148,53 +147,57 @@ enum EZombiState {
 - **✅ Sincronización Visual**: Transformaciones básicas
 - **✅ Animaciones**: Estados por entidad
 - **✅ Optimización**: Fragmentos y procesadores especializados
-- **✅ LOD Inteligente**: Frecuencia de update por prioridad
+- **✅ LOD Inteligente**: Frecuencia de update por estado
 - **✅ Frustum Culling**: Solo renderizar zombis visibles
 - **✅ Control Blueprint**: Interfaz desde editor
 
-## 🎯 Arquitectura Optimizada - Tags para Lógica + Estados para TurboSequence
+## 🎯 Arquitectura Optimizada - Tags por Frecuencia + Estados para TurboSequence
 
 ### **¿Por qué esta Arquitectura?**
 
 #### **Problema Tradicional:**
 - **Solo Estados**: Queries menos eficientes, filtrado manual
 - **Solo Tags**: Estados complejos, debugging difícil, inconsistencias
+- **LOD Complejo**: Fragmentos con datos que cambian frecuentemente
 
 #### **Solución Optimizada:**
-- **Tags**: Rendimiento máximo para queries y procesamiento
+- **Tags por Frecuencia**: LOD dinámico y optimización de rendimiento
 - **Estados**: Claridad para animaciones en TurboSequence
-- **Sincronización**: Tags → Estados Visuales → TurboSequence
+- **Sincronización**: Estado → Tags de Frecuencia → TurboSequence
 
 ### **Beneficios de la Arquitectura Optimizada:**
 
 #### **Rendimiento:**
-- **Queries Nativas**: Tags permiten filtrado directo en chunks
-- **LOD Inteligente**: Prioridad por estado + distancia + estímulos
+- **Queries por Frecuencia**: Tags permiten filtrado directo por LOD
+- **LOD Dinámico**: Frecuencia basada en estado actual
 - **Culling Eficiente**: Solo procesar zombis visibles
 - **Batch Processing**: Mejor cache locality
 
 #### **Mantenibilidad:**
-- **Tags Claros**: Comportamiento definido por tags específicos
+- **Tags Claros**: FUpdate60FPS es más claro que FHighPriorityTag
 - **Estados Visuales**: Solo para animaciones en TurboSequence
-- **Lógica Centralizada**: Transiciones de tags en BehaviorProcessor
-- **Consistencia**: Tags → Estados Visuales sincronizados
+- **Lógica Centralizada**: Transiciones de estado en BehaviorProcessor
+- **Consistencia**: Estado → Tags de Frecuencia sincronizados
 
 #### **Escalabilidad:**
-- **Extensibilidad**: Fácil agregar nuevos tags sin cambiar lógica
-- **Flexibilidad**: Combinaciones de tags cuando sea necesario
+- **Extensibilidad**: Fácil agregar nuevas frecuencias
+- **Flexibilidad**: Cambiar mapeo estado → frecuencia sin cambiar código
 - **Optimización Incremental**: Agregar optimizaciones sin romper código
 
 ### **Implementación:**
 ```cpp
-// Tags para comportamiento y optimización
-FActiveTag, FDeadTag, FChasingTag, FAttackingTag, FSeekingTag, FWalkingTag, FIdleTag, FInFrustumTag, FHighPriorityTag
+// Tags por frecuencia de actualización
+FUpdate60FPS        // TakeDamage, Attack - Crítico
+FUpdate30FPS        // Chase - Alta prioridad
+FUpdate15FPS        // Seek, WalkAround - Normal
+FUpdate5FPS         // Idle, Dead - Mínima
 
 // Estados solo para TurboSequence
 enum class EZombiState : uint8 { Idle, WalkAround, Seek, Chase, TakeDamage, Attack, Dead };
 
 // Sincronización automática
-void SyncTagsToVisualState() {
-    // Tags → Estados Visuales → TurboSequence
+void SyncStateToFrequency() {
+    // Estado → Tags de Frecuencia → TurboSequence
 }
 ```
 
@@ -203,4 +206,4 @@ Ver `HAZME.md` para roadmap detallado de desarrollo.
 
 ---
 
-**Sistema optimizado para miles de entidades con arquitectura State Sync + Tags para Lógica + Estados para TurboSequence.** 
+**Sistema optimizado para miles de entidades con arquitectura State Sync + Tags por Frecuencia + Estados para TurboSequence.** 
