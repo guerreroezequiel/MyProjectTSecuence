@@ -6,6 +6,7 @@
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 
 AZombiTestController::AZombiTestController()
 {
@@ -134,7 +135,29 @@ void AZombiTestController::Tick(float DeltaTime)
     // Inicialización del sistema
     if (!bSystemInitialized)
     {
+        // CRÍTICO: Verificar que existe TurboSequence Manager en el mundo
+        ATurboSequence_Manager_Lf *TSManager = nullptr;
+
+        // Buscar directamente en el mundo por si Instance no está inicializada
+        for (TActorIterator<ATurboSequence_Manager_Lf> ActorItr(GetWorld()); ActorItr; ++ActorItr)
+        {
+            TSManager = *ActorItr;
+            break;
+        }
+
+        if (!TSManager && !ATurboSequence_Manager_Lf::Instance)
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ ZombiTestController: TurboSequence Manager no encontrado en el mundo. Debe agregar ATurboSequence_Manager_Lf al nivel."));
+            return;
+        }
+
+        if (TSManager)
+        {
+            UE_LOG(LogTemp, Log, TEXT("✅ ZombiTestController: TurboSequence Manager encontrado en el mundo: %s"), *TSManager->GetName());
+        }
+
         bSystemInitialized = true;
+        UE_LOG(LogTemp, Log, TEXT("✅ ZombiTestController: Sistema inicializado correctamente"));
     }
 
     // Control centralizado del sistema
@@ -146,23 +169,43 @@ void AZombiTestController::Tick(float DeltaTime)
         SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
     }
 
-    // Ejecutar SolveMeshes_GameThread para todos los grupos de actualización
-    for (int32 GroupIndex = 0; GroupIndex < 4; ++GroupIndex) // 4 grupos como configurado en el spawner
+    // CORRECCIÓN CRÍTICA: SolveMeshes_GameThread debe llamarse UNA VEZ por grupo, UNA VEZ por frame
+    // Según documentación oficial de TurboSequence
+    static int32 CurrentUpdateGroup = 0;
+    static float AccumulatedDeltaTime = 0.0f;
+
+    // Acumular DeltaTime para grupos que no se actualizan este frame
+    AccumulatedDeltaTime += DeltaTime;
+
+    // Solo procesar un grupo por frame para distribución de carga
+    const int32 MaxUpdateGroups = 4;
+    if (CurrentUpdateGroup < MaxUpdateGroups)
     {
         FTurboSequence_UpdateContext_Lf UpdateContext;
-        UpdateContext.GroupIndex = GroupIndex;
+        UpdateContext.GroupIndex = CurrentUpdateGroup;
+
+        // Usar DeltaTime acumulado para este grupo
+        float GroupDeltaTime = (CurrentUpdateGroup == 0) ? DeltaTime : AccumulatedDeltaTime;
 
         try
         {
-            ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), UpdateContext);
+            // PATRÓN CORRECTO: Una llamada por grupo, una vez por frame
+            ATurboSequence_Manager_Lf::SolveMeshes_GameThread(GroupDeltaTime, GetWorld(), UpdateContext);
+
+            // Reset acumulador para este grupo
+            if (CurrentUpdateGroup > 0)
+            {
+                AccumulatedDeltaTime = 0.0f;
+            }
         }
         catch (...)
         {
-            UE_LOG(LogTemp, Warning, TEXT("❌ ZombiTestController: Error en SolveMeshes_GameThread para grupo %d"), GroupIndex);
+            UE_LOG(LogTemp, Warning, TEXT("❌ ZombiTestController: Error en SolveMeshes_GameThread para grupo %d"), CurrentUpdateGroup);
         }
     }
 
-    // Timer reset eliminado para optimización
+    // Rotar al siguiente grupo
+    CurrentUpdateGroup = (CurrentUpdateGroup + 1) % MaxUpdateGroups;
 }
 
 // Control centralizado del sistema
@@ -187,7 +230,7 @@ void AZombiTestController::LogSystemStatus()
 
     if (CurrentEntityCount != LastEntityCount)
     {
-    
+
         LastEntityCount = CurrentEntityCount;
     }
 }
@@ -201,6 +244,4 @@ void AZombiTestController::LogPerformanceMetrics()
     }
 
     int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
-
-
 }

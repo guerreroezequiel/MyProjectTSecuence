@@ -183,41 +183,47 @@ void UZombiTurboSequenceProcessor::UpdateShadowSettings(FZombiTurboSequenceFragm
     }
 }
 
-// Función optimizada para seleccionar animación
+// Función optimizada para seleccionar animación siguiendo mejores prácticas de TurboSequence
 UAnimSequence *UZombiTurboSequenceProcessor::GetAnimationForState(const FZombiBehaviorFragment &BehaviorFragment,
                                                                   const FZombiCoreFragment &CoreFragment)
 {
-    // Cache global de animaciones (compartido entre todas las entidades)
-    static UAnimSequence *CachedIdleAnimation = nullptr;
-    static UAnimSequence *CachedWalkAnimation = nullptr;
-    static UAnimSequence *CachedRunAnimation = nullptr;
-    static bool bAnimationsCached = false;
-    static UTurboSequence_MeshAsset_Lf *LastCachedAsset = nullptr;
+    // OPTIMIZACIÓN CRÍTICA: Cache global de animaciones según patrón oficial
+    // El cache debe ser estático y persistir entre frames para máximo rendimiento
+    struct FAnimationCache
+    {
+        UAnimSequence *IdleAnimation = nullptr;
+        UAnimSequence *WalkAnimation = nullptr;
+        UAnimSequence *RunAnimation = nullptr;
+        UAnimSequence *ChaseAnimation = nullptr; // Agregado para persecución específica
+        UTurboSequence_MeshAsset_Lf *CachedAsset = nullptr;
+        bool bIsValid = false;
+    };
 
-    // Obtener el asset actual del primer zombie disponible
+    static FAnimationCache AnimCache;
+
+    // Obtener asset actual desde SpawnerSubsystem (patrón robusto)
     UTurboSequence_MeshAsset_Lf *CurrentAsset = nullptr;
-
-    // Intentar obtener el asset desde el SpawnerSubsystem
     if (GetWorld())
     {
         if (UZombiSpawnerSubsystem *SpawnerSubsystem = GetWorld()->GetSubsystem<UZombiSpawnerSubsystem>())
         {
-            // Obtener el asset configurado en el spawner
             CurrentAsset = SpawnerSubsystem->GetZombiTurboSequenceAsset();
         }
     }
 
-    // Cache animaciones si cambió el asset o no están cacheadas
-    if (!bAnimationsCached || CurrentAsset != LastCachedAsset)
+    // Reconstruir cache solo si es necesario (optimización)
+    if (!AnimCache.bIsValid || CurrentAsset != AnimCache.CachedAsset)
     {
-        if (CurrentAsset && CurrentAsset->AnimationLibrary)
-        {
-            // Limpiar cache anterior
-            CachedIdleAnimation = nullptr;
-            CachedWalkAnimation = nullptr;
-            CachedRunAnimation = nullptr;
+        // Limpiar cache anterior
+        AnimCache.IdleAnimation = nullptr;
+        AnimCache.WalkAnimation = nullptr;
+        AnimCache.RunAnimation = nullptr;
+        AnimCache.ChaseAnimation = nullptr;
+        AnimCache.bIsValid = false;
 
-            // Buscar y cachear animaciones por nombre
+        if (CurrentAsset && CurrentAsset->AnimationLibrary && CurrentAsset->AnimationLibrary->Animations.Num() > 0)
+        {
+            // PATRÓN OPTIMIZADO: Buscar animaciones con prioridades específicas
             for (const FAnimationLibraryItem_Lf &AnimItem : CurrentAsset->AnimationLibrary->Animations)
             {
                 if (!AnimItem.Animation)
@@ -225,59 +231,110 @@ UAnimSequence *UZombiTurboSequenceProcessor::GetAnimationForState(const FZombiBe
                     continue;
                 }
 
-                FString AnimationName = AnimItem.Animation->GetName();
+                const FString AnimationName = AnimItem.Animation->GetName();
 
-                if (AnimationName.Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+                // Buscar por orden de prioridad
+                if (AnimationName.Contains(TEXT("Idle"), ESearchCase::IgnoreCase) && !AnimCache.IdleAnimation)
                 {
-                    CachedIdleAnimation = AnimItem.Animation;
+                    AnimCache.IdleAnimation = AnimItem.Animation;
                 }
-                else if (AnimationName.Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                else if (AnimationName.Contains(TEXT("Walk"), ESearchCase::IgnoreCase) && !AnimCache.WalkAnimation)
                 {
-                    CachedWalkAnimation = AnimItem.Animation;
+                    AnimCache.WalkAnimation = AnimItem.Animation;
                 }
-                else if (AnimationName.Contains(TEXT("Run"), ESearchCase::IgnoreCase))
+                else if (AnimationName.Contains(TEXT("Run"), ESearchCase::IgnoreCase) && !AnimCache.RunAnimation)
                 {
-                    CachedRunAnimation = AnimItem.Animation;
+                    AnimCache.RunAnimation = AnimItem.Animation;
+                }
+                else if (AnimationName.Contains(TEXT("Chase"), ESearchCase::IgnoreCase) && !AnimCache.ChaseAnimation)
+                {
+                    AnimCache.ChaseAnimation = AnimItem.Animation;
                 }
             }
 
-            LastCachedAsset = CurrentAsset;
-            bAnimationsCached = true;
-
-            // Log de diagnóstico (solo una vez)
-            static bool bLoggedCacheUpdate = false;
-            if (!bLoggedCacheUpdate)
+            // FALLBACKS ROBUSTOS: Si faltan animaciones específicas, usar las disponibles
+            if (!AnimCache.IdleAnimation && AnimCache.WalkAnimation)
             {
-                UE_LOG(LogTemp, Log, TEXT("🎮 TurboSequence: Cache de animaciones actualizado - Idle: %s, Walk: %s, Run: %s"),
-                       CachedIdleAnimation ? *CachedIdleAnimation->GetName() : TEXT("NULL"),
-                       CachedWalkAnimation ? *CachedWalkAnimation->GetName() : TEXT("NULL"),
-                       CachedRunAnimation ? *CachedRunAnimation->GetName() : TEXT("NULL"));
-                bLoggedCacheUpdate = true;
+                AnimCache.IdleAnimation = AnimCache.WalkAnimation; // Walk puede servir como Idle
+            }
+            if (!AnimCache.ChaseAnimation && AnimCache.RunAnimation)
+            {
+                AnimCache.ChaseAnimation = AnimCache.RunAnimation; // Run puede servir como Chase
+            }
+            if (!AnimCache.RunAnimation && AnimCache.WalkAnimation)
+            {
+                AnimCache.RunAnimation = AnimCache.WalkAnimation; // Walk como fallback
+            }
+
+            // Si aún no hay animaciones, usar la primera disponible como fallback universal
+            if (!AnimCache.IdleAnimation && !AnimCache.WalkAnimation && !AnimCache.RunAnimation)
+            {
+                UAnimSequence *FallbackAnimation = CurrentAsset->AnimationLibrary->Animations[0].Animation;
+                AnimCache.IdleAnimation = FallbackAnimation;
+                AnimCache.WalkAnimation = FallbackAnimation;
+                AnimCache.RunAnimation = FallbackAnimation;
+                AnimCache.ChaseAnimation = FallbackAnimation;
+            }
+
+            AnimCache.CachedAsset = CurrentAsset;
+            AnimCache.bIsValid = true;
+
+            // Log de diagnóstico (solo al inicializar cache)
+            static bool bLoggedCacheInit = false;
+            if (!bLoggedCacheInit)
+            {
+                UE_LOG(LogTemp, Log, TEXT("✅ TurboSequence: Cache de animaciones inicializado - Idle: %s, Walk: %s, Run: %s, Chase: %s"),
+                       AnimCache.IdleAnimation ? *AnimCache.IdleAnimation->GetName() : TEXT("NULL"),
+                       AnimCache.WalkAnimation ? *AnimCache.WalkAnimation->GetName() : TEXT("NULL"),
+                       AnimCache.RunAnimation ? *AnimCache.RunAnimation->GetName() : TEXT("NULL"),
+                       AnimCache.ChaseAnimation ? *AnimCache.ChaseAnimation->GetName() : TEXT("NULL"));
+                bLoggedCacheInit = true;
             }
         }
         else
         {
-            // Si no hay asset válido, marcar como cacheado para evitar búsquedas repetidas
-            bAnimationsCached = true;
-            UE_LOG(LogTemp, Warning, TEXT("🎮 TurboSequence: No se pudo obtener asset válido para cache de animaciones"));
+            UE_LOG(LogTemp, Warning, TEXT("❌ TurboSequence: Asset no válido o sin animaciones"));
         }
     }
 
-    // Lógica de selección optimizada
-    if (BehaviorFragment.IsChasing())
+    // LÓGICA DE SELECCIÓN OPTIMIZADA basada en estado y velocidad
+    // Priorizar estados específicos sobre velocidad para mejor IA
+    switch (BehaviorFragment.GetState())
     {
-        return CachedRunAnimation;
-    }
-    else if (CoreFragment.MovementSpeed < 5.0f)
-    {
-        return CachedIdleAnimation;
-    }
-    else if (CoreFragment.MovementSpeed < 50.0f)
-    {
-        return CachedWalkAnimation;
-    }
-    else
-    {
-        return CachedRunAnimation;
+    case EZombiState::Idle:
+        return AnimCache.IdleAnimation;
+
+    case EZombiState::Chase:
+        return AnimCache.ChaseAnimation ? AnimCache.ChaseAnimation : AnimCache.RunAnimation;
+
+    case EZombiState::Seek:
+        // Para seek, usar velocidad como criterio
+        return (CoreFragment.MovementSpeed > 60.0f) ? AnimCache.RunAnimation : AnimCache.WalkAnimation;
+
+    case EZombiState::WalkAround:
+        return AnimCache.WalkAnimation;
+
+    case EZombiState::TakeDamage:
+    case EZombiState::Attack:
+        // Estados especiales podrían tener sus propias animaciones en el futuro
+        return AnimCache.IdleAnimation; // Por ahora usar idle
+
+    case EZombiState::Dead:
+        return nullptr; // No animar si está muerto
+
+    default:
+        // Fallback basado en velocidad
+        if (CoreFragment.MovementSpeed < 5.0f)
+        {
+            return AnimCache.IdleAnimation;
+        }
+        else if (CoreFragment.MovementSpeed < 50.0f)
+        {
+            return AnimCache.WalkAnimation;
+        }
+        else
+        {
+            return AnimCache.RunAnimation;
+        }
     }
 }

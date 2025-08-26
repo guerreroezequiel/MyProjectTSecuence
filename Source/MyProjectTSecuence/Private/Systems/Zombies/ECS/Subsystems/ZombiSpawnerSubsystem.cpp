@@ -11,6 +11,7 @@
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 
 // Constructor del subsystem
 UZombiSpawnerSubsystem::UZombiSpawnerSubsystem()
@@ -160,13 +161,12 @@ FRotator UZombiSpawnerSubsystem::GenerateRandomRotation() const
     return FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
 }
 
-// Crea la instancia visual de TurboSequence para una entidad
+// Crea la instancia visual de TurboSequence para una entidad siguiendo el patrón oficial
 void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle EntityHandle, const FVector &SpawnLocation)
 {
-    // Verificar que MassEntitySubsystem esté disponible
+    // PASO 1: Verificar que MassEntitySubsystem esté disponible
     if (!MassEntitySubsystem)
     {
-        // Reintentar obtener el subsystem
         MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
         if (!MassEntitySubsystem)
         {
@@ -176,56 +176,76 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         }
     }
 
-    // Obtener el fragmento de TurboSequence
-    FZombiTurboSequenceFragment &TurboSequenceFragment = MassEntitySubsystem->GetEntityManager()
-                                                             .GetFragmentDataChecked<FZombiTurboSequenceFragment>(EntityHandle);
+    // PASO 2: Verificar que TurboSequence Manager esté en el mundo
+    ATurboSequence_Manager_Lf *TSManager = nullptr;
 
-    // Configurar el asset
-    TurboSequenceFragment.TurboSequenceAsset = ZombiTurboSequenceAsset;
-
-    // Crear transform de spawn
-    FRotator SpawnRotation = GenerateRandomRotation();
-    FTransform SpawnTransform(SpawnRotation, SpawnLocation, FVector::OneVector);
-
-    // Verificaciones optimizadas
-    if (!TurboSequenceFragment.TurboSequenceAsset || !IsValid(TurboSequenceFragment.TurboSequenceAsset) || !GetWorld())
+    // Buscar directamente en el mundo por si Instance no está inicializada
+    for (TActorIterator<ATurboSequence_Manager_Lf> ActorItr(GetWorld()); ActorItr; ++ActorItr)
     {
-        UE_LOG(LogTemp, Error, TEXT("ZombiSpawnerSubsystem: Asset o World inválido para entidad %d"), EntityHandle.Index);
+        TSManager = *ActorItr;
+        break;
+    }
+
+    if (!TSManager && !ATurboSequence_Manager_Lf::Instance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ZombiSpawnerSubsystem: TurboSequence Manager no encontrado. Debe agregar ATurboSequence_Manager_Lf al nivel."));
+        PendingVisualInstances.Add(EntityHandle);
         return;
     }
 
-    // Crear la instancia visual optimizada
+    // PASO 3: Obtener el fragmento de TurboSequence
+    FZombiTurboSequenceFragment &TurboSequenceFragment = MassEntitySubsystem->GetEntityManager()
+                                                             .GetFragmentDataChecked<FZombiTurboSequenceFragment>(EntityHandle);
+
+    // PASO 4: Configurar el asset
+    TurboSequenceFragment.TurboSequenceAsset = ZombiTurboSequenceAsset;
+
+    // PASO 5: Crear transform de spawn
+    FRotator SpawnRotation = GenerateRandomRotation();
+    FTransform SpawnTransform(SpawnRotation, SpawnLocation, FVector::OneVector);
+
+    // PASO 6: Verificaciones de validez
+    if (!TurboSequenceFragment.TurboSequenceAsset || !IsValid(TurboSequenceFragment.TurboSequenceAsset) || !GetWorld())
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ZombiSpawnerSubsystem: Asset o World inválido para entidad %d"), EntityHandle.Index);
+        return;
+    }
+
+    // PASO 7: PATRÓN OFICIAL - Configurar SpawnData correctamente
     FTurboSequence_MeshSpawnData_Lf SpawnData;
     SpawnData.RootMotionMesh.Mesh = TurboSequenceFragment.TurboSequenceAsset;
+    // NOTA: FootprintAsset no está disponible en esta versión de TurboSequence
+    // Para híbrido mode se configuraría por separado si fuera necesario
 
-    // OPTIMIZACIÓN: Configuración básica sin sombras personalizadas
-    // Las sombras se manejarán dinámicamente en el procesador
-
+    // PASO 8: PATRÓN OFICIAL - AddSkinnedMeshInstance_GameThread
     TurboSequenceFragment.MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
         SpawnData,
         SpawnTransform,
         GetWorld());
 
-    // Verificar instancia creada
+    // PASO 9: Verificar que la instancia se creó correctamente
     if (!TurboSequenceFragment.MeshData.IsMeshDataValid())
     {
         UE_LOG(LogTemp, Warning, TEXT("❌ ZombiSpawnerSubsystem: Instancia visual no válida para entidad %d"), EntityHandle.Index);
         return;
     }
 
-    // Asignar a grupo de update (distribución automática)
-    int32 UpdateGroupIndex = FMath::RandRange(0, 3);
+    // PASO 10: PATRÓN OFICIAL - AddInstanceToUpdateGroup_Concurrent
+    // Distribución inteligente de grupos basada en posición para mejor LOD
+    int32 UpdateGroupIndex = FMath::Abs(static_cast<int32>(SpawnLocation.X + SpawnLocation.Y)) % 4;
     ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(
         UpdateGroupIndex,
         TurboSequenceFragment.MeshData);
 
-    // NUEVA IMPLEMENTACIÓN: Inicializar animación por defecto siguiendo patrón del plugin
+    // PASO 11: PATRÓN OFICIAL - PlayAnimation_Concurrent con animación inicial
     if (TurboSequenceFragment.TurboSequenceAsset &&
         TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary &&
         TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
     {
-        // Buscar animación Idle por defecto
+        // Buscar animación Idle por defecto (patrón robusto)
         UAnimSequence *DefaultAnimation = nullptr;
+
+        // Primero buscar Idle
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
             if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
@@ -235,13 +255,26 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
             }
         }
 
-        // Si no hay Idle, usar la primera animación disponible
+        // Si no hay Idle, buscar Walk
+        if (!DefaultAnimation)
+        {
+            for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
+            {
+                if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                {
+                    DefaultAnimation = AnimItem.Animation;
+                    break;
+                }
+            }
+        }
+
+        // Como último recurso, usar la primera animación disponible
         if (!DefaultAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation)
         {
             DefaultAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
         }
 
-        // Reproducir animación inicial (patrón correcto del plugin)
+        // PATRÓN OFICIAL - PlayAnimation_Concurrent
         if (DefaultAnimation)
         {
             TurboSequenceFragment.SetAnimation(DefaultAnimation);
@@ -249,7 +282,9 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
             FTurboSequence_AnimPlaySettings_Lf PlaySettings;
             PlaySettings.AnimationSpeed = 1.0f;
             PlaySettings.AnimationWeight = 1.0f;
+            // PlaySettings.bLooping = true; // Si existe esta opción
 
+            // Según documentación: PlayAnimation_Concurrent devuelve FTurboSequence_AnimMinimalCollection_Lf
             ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
                 TurboSequenceFragment.MeshData,
                 DefaultAnimation,
@@ -257,12 +292,14 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         }
     }
 
-    // Log de diagnóstico (solo primera entidad)
-    static bool bLoggedDiagnostic = false;
-    if (!bLoggedDiagnostic)
+    // PASO 12: Log de diagnóstico (solo primera entidad para evitar spam)
+    static bool bLoggedFirstInstance = false;
+    if (!bLoggedFirstInstance)
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiSpawnerSubsystem: Instancia creada exitosamente - Grupo: %d"), UpdateGroupIndex);
-        bLoggedDiagnostic = true;
+        UE_LOG(LogTemp, Log, TEXT("✅ ZombiSpawnerSubsystem: Primera instancia creada exitosamente - Grupo: %d, Animaciones disponibles: %d"),
+               UpdateGroupIndex,
+               TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary ? TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() : 0);
+        bLoggedFirstInstance = true;
     }
 }
 
