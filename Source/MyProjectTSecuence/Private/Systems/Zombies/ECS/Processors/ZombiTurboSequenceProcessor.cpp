@@ -52,10 +52,11 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
         return;
     }
 
-    const float DeltaTime = Context.GetDeltaTimeSeconds();
+    // PATRÓN OFICIAL: ECS solo actualiza lógica, NO visual
+    // Según documentación: "ECS is totally fine, you can update all instances in an ECS Loop"
+    // PERO: NO llamar funciones visuales de TurboSequence aquí
 
-    // Procesar entidades en chunks optimizados para State Sync
-    TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+    TransformSyncQuery.ForEachEntityChunk(EntityManager, Context, [this](FMassExecutionContext &Context)
                                           {
         TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
@@ -73,45 +74,41 @@ void UZombiTurboSequenceProcessor::Execute(FMassEntityManager &EntityManager, FM
                 continue;
             }
 
-            // PASO 1: Actualizar animación (simplificado)
-            UpdateAnimation(TurboSequenceFragment, BehaviorFragment, CoreFragment);
+            // ✅ PATRÓN OFICIAL: Solo actualizar datos lógicos
+            PrepareAnimationLogic(TurboSequenceFragment, BehaviorFragment, CoreFragment);
             
-            // PASO 2: Sincronizar transformación (State Sync)
-            SyncTransform(TurboSequenceFragment, CoreFragment);
+            // ✅ PATRÓN OFICIAL: Preparar datos de transformación (sin aplicar)
+            PrepareTransformLogic(TurboSequenceFragment, CoreFragment);
         } });
 }
 
-// Función optimizada para actualizar animaciones
-void UZombiTurboSequenceProcessor::UpdateAnimation(FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                   const FZombiBehaviorFragment &BehaviorFragment,
-                                                   const FZombiCoreFragment &CoreFragment)
+// ✅ PATRÓN OFICIAL: Solo preparar lógica de animación, NO aplicar
+void UZombiTurboSequenceProcessor::PrepareAnimationLogic(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                         const FZombiBehaviorFragment &BehaviorFragment,
+                                                         const FZombiCoreFragment &CoreFragment)
 {
     // Obtener animación basada en estado y velocidad
     UAnimSequence *TargetAnimation = GetAnimationForState(BehaviorFragment, CoreFragment);
 
-    // Solo cambiar si es diferente (optimización)
+    // Solo preparar datos lógicos - NO llamar funciones TurboSequence
     if (TargetAnimation != TurboSequenceFragment.CurrentAnimation)
     {
+        // ✅ PERMITIDO: Actualizar datos lógicos en el fragment
         TurboSequenceFragment.SetAnimation(TargetAnimation);
+        TurboSequenceFragment.bNeedsAnimationUpdate = true;
 
-        // Reproducir animación directamente (sin transiciones manuales)
-        if (TargetAnimation && TurboSequenceFragment.MeshData.IsMeshDataValid())
-        {
-            FTurboSequence_AnimPlaySettings_Lf PlaySettings;
-            PlaySettings.AnimationSpeed = 1.0f;
-            PlaySettings.AnimationWeight = 1.0f;
+        // Preparar configuración de animación
+        TurboSequenceFragment.PendingAnimationSettings.AnimationSpeed = 1.0f;
+        TurboSequenceFragment.PendingAnimationSettings.AnimationWeight = 1.0f;
 
-            ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-                TurboSequenceFragment.MeshData,
-                TargetAnimation,
-                PlaySettings);
-        }
+        // ❌ REMOVIDO: NO llamar ATurboSequence_Manager_Lf::PlayAnimation_Concurrent aquí
+        // El controlador principal lo hará después del "big loop"
     }
 }
 
-// Función optimizada para sincronizar transformaciones
-void UZombiTurboSequenceProcessor::SyncTransform(FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                 const FZombiCoreFragment &CoreFragment)
+// ✅ PATRÓN OFICIAL: Solo preparar datos de transformación, NO aplicar
+void UZombiTurboSequenceProcessor::PrepareTransformLogic(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                         const FZombiCoreFragment &CoreFragment)
 {
     // Crear transformación optimizada
     FTransform NewTransform;
@@ -124,21 +121,20 @@ void UZombiTurboSequenceProcessor::SyncTransform(FZombiTurboSequenceFragment &Tu
     NewTransform.SetRotation(CorrectedRotation.Quaternion());
     NewTransform.SetScale3D(FVector::OneVector);
 
-    // Aplicar transformación usando TurboSequence (con validación)
-    if (TurboSequenceFragment.MeshData.IsMeshDataValid())
-    {
-        ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-            TurboSequenceFragment.MeshData,
-            NewTransform);
-    }
+    // ✅ PERMITIDO: Solo almacenar datos para procesamiento posterior
+    TurboSequenceFragment.PendingTransform = NewTransform;
+    TurboSequenceFragment.bNeedsTransformUpdate = true;
 
-    // OPTIMIZACIÓN DE SOMBRAS: Configurar sombras basado en distancia
-    UpdateShadowSettings(TurboSequenceFragment, CoreFragment);
+    // ❌ REMOVIDO: NO llamar ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent aquí
+    // El controlador principal lo hará después del "big loop"
+
+    // Preparar datos de optimización de sombras
+    PrepareDistanceOptimization(TurboSequenceFragment, CoreFragment);
 }
 
-// Nueva función para optimizar sombras
-void UZombiTurboSequenceProcessor::UpdateShadowSettings(FZombiTurboSequenceFragment &TurboSequenceFragment,
-                                                        const FZombiCoreFragment &CoreFragment)
+// ✅ PATRÓN OFICIAL: Solo preparar optimización por distancia
+void UZombiTurboSequenceProcessor::PrepareDistanceOptimization(FZombiTurboSequenceFragment &TurboSequenceFragment,
+                                                               const FZombiCoreFragment &CoreFragment)
 {
     // Obtener posición del jugador (cacheado en el subsystem)
     FVector PlayerLocation = FVector::ZeroVector;

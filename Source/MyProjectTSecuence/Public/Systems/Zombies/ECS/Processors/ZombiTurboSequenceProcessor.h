@@ -11,9 +11,9 @@
 #include "ZombiTurboSequenceProcessor.generated.h"
 
 /**
- * Procesador optimizado para sincronizar entidades Mass con instancias visuales TurboSequence
- * OPTIMIZADO: Para 5000+ entidades con State Sync Architecture
- * Eliminadas transiciones manuales - TurboSequence maneja las transiciones automáticamente
+ * ✅ PATRÓN OFICIAL: Procesador ECS que solo maneja lógica de comportamiento
+ * Según documentación TurboSequence: "ECS is totally fine, you can update all instances in an ECS Loop"
+ * PERO: NO llama funciones visuales - solo prepara datos para el controlador principal
  */
 UCLASS()
 class UZombiTurboSequenceProcessor : public UMassProcessor
@@ -35,17 +35,17 @@ private:
 	UPROPERTY(EditAnywhere, Category = "TurboSequence")
 	float RotationOffset = -90.0f;
 
-	// Funciones optimizadas
-	void UpdateAnimation(FZombiTurboSequenceFragment &TurboSequenceFragment,
-						 const FZombiBehaviorFragment &BehaviorFragment,
-						 const FZombiCoreFragment &CoreFragment);
+	// ✅ PATRÓN OFICIAL: Solo funciones de lógica, NO visuales
+	void PrepareAnimationLogic(FZombiTurboSequenceFragment &TurboSequenceFragment,
+							   const FZombiBehaviorFragment &BehaviorFragment,
+							   const FZombiCoreFragment &CoreFragment);
 
-	void SyncTransform(FZombiTurboSequenceFragment &TurboSequenceFragment,
-					   const FZombiCoreFragment &CoreFragment);
+	void PrepareTransformLogic(FZombiTurboSequenceFragment &TurboSequenceFragment,
+							   const FZombiCoreFragment &CoreFragment);
 
-	// Función de optimización de sombras
-	void UpdateShadowSettings(FZombiTurboSequenceFragment &TurboSequenceFragment,
-							  const FZombiCoreFragment &CoreFragment);
+	// Función de preparación de optimización por distancia
+	void PrepareDistanceOptimization(FZombiTurboSequenceFragment &TurboSequenceFragment,
+									 const FZombiCoreFragment &CoreFragment);
 
 	UAnimSequence *GetAnimationForState(const FZombiBehaviorFragment &BehaviorFragment,
 										const FZombiCoreFragment &CoreFragment);

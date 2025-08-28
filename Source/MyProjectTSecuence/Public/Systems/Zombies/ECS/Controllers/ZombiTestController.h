@@ -93,4 +93,14 @@ private:
 	void UpdateSystemControl(float DeltaTime);
 	void LogSystemStatus();
 	void LogPerformanceMetrics();
+
+	// ✅ PATRÓN OFICIAL: Procesar actualizaciones pendientes después del ECS loop
+	void ProcessAllTurboSequenceOperations(float DeltaTime);
+
+	// ❌ DESHABILITADA: Gestión de grupos ahora integrada en ProcessAllTurboSequenceOperations()
+	// void UpdateAllEntityGroups();
+
+	// Función auxiliar para gestión de grupos por distancia (legacy)
+	void UpdateEntityGroupByDistance(struct FZombiTurboSequenceFragment &TurboFragment,
+									 const struct FZombiCoreFragment &CoreFragment);
 };

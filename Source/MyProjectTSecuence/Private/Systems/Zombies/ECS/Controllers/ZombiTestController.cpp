@@ -3,10 +3,14 @@
 #include "Systems/Zombies/ECS/Controllers/ZombiTestController.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiMassSubsystem.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "MassEntitySubsystem.h"
+#include "MassExecutionContext.h"
 
 AZombiTestController::AZombiTestController()
 {
@@ -169,43 +173,47 @@ void AZombiTestController::Tick(float DeltaTime)
         SpawnerSubsystem->ProcessPendingVisualInstances(DeltaTime);
     }
 
-    // CORRECCIÓN CRÍTICA: SolveMeshes_GameThread debe llamarse UNA VEZ por grupo, UNA VEZ por frame
-    // Según documentación oficial de TurboSequence
-    static int32 CurrentUpdateGroup = 0;
-    static float AccumulatedDeltaTime = 0.0f;
+    // ✅ PATRÓN OFICIAL: Procesar entidades después del "big ECS loop"
+    // Según documentación: "you update all instance at once, in a big loop which can be multithreaded
+    // and after this loop ends you need to solve the animations per update group"
+    // ✅ CORRECCIÓN: Combinar ambas operaciones en UNA SOLA iteración para evitar condiciones de carrera
+    ProcessAllTurboSequenceOperations(DeltaTime);
 
-    // Acumular DeltaTime para grupos que no se actualizan este frame
-    AccumulatedDeltaTime += DeltaTime;
-
-    // Solo procesar un grupo por frame para distribución de carga
+    // ✅ PATRÓN OFICIAL: Update Groups según TurboSequence_Demo_Lf.cpp
+    static int32 CurrentBackgroundGroup = 1; // Empezar en 1, no en 0
+    static TArray<float> AccumulatedDeltaTimes;
     const int32 MaxUpdateGroups = 4;
-    if (CurrentUpdateGroup < MaxUpdateGroups)
+
+    // Inicializar array de DeltaTimes acumulados
+    AccumulatedDeltaTimes.SetNum(MaxUpdateGroups + 1);
+
+    // Acumular DeltaTime para TODOS los grupos
+    for (float &Delta : AccumulatedDeltaTimes)
     {
-        FTurboSequence_UpdateContext_Lf UpdateContext;
-        UpdateContext.GroupIndex = CurrentUpdateGroup;
-
-        // Usar DeltaTime acumulado para este grupo
-        float GroupDeltaTime = (CurrentUpdateGroup == 0) ? DeltaTime : AccumulatedDeltaTime;
-
-        try
-        {
-            // PATRÓN CORRECTO: Una llamada por grupo, una vez por frame
-            ATurboSequence_Manager_Lf::SolveMeshes_GameThread(GroupDeltaTime, GetWorld(), UpdateContext);
-
-            // Reset acumulador para este grupo
-            if (CurrentUpdateGroup > 0)
-            {
-                AccumulatedDeltaTime = 0.0f;
-            }
-        }
-        catch (...)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("❌ ZombiTestController: Error en SolveMeshes_GameThread para grupo %d"), CurrentUpdateGroup);
-        }
+        Delta += DeltaTime;
     }
 
-    // Rotar al siguiente grupo
-    CurrentUpdateGroup = (CurrentUpdateGroup + 1) % MaxUpdateGroups;
+    // PASO 1: Grupo background rotativo (patrón oficial)
+    if (CurrentBackgroundGroup <= MaxUpdateGroups)
+    {
+        FTurboSequence_UpdateContext_Lf UpdateContext;
+        UpdateContext.GroupIndex = CurrentBackgroundGroup;
+
+        // CRÍTICO: UNA llamada por grupo con DeltaTime acumulado
+        ATurboSequence_Manager_Lf::SolveMeshes_GameThread(
+            AccumulatedDeltaTimes[CurrentBackgroundGroup], GetWorld(), UpdateContext);
+
+        AccumulatedDeltaTimes[CurrentBackgroundGroup] = 0.0f; // Reset después de procesar
+    }
+
+    // Rotar al siguiente grupo background (patrón oficial: excluye grupo 0)
+    CurrentBackgroundGroup = (CurrentBackgroundGroup % MaxUpdateGroups) + 1;
+
+    // PASO 2: Grupo 0 de alta calidad - SIEMPRE cada frame (patrón oficial)
+    FTurboSequence_UpdateContext_Lf HighQualityContext;
+    HighQualityContext.GroupIndex = 0;
+    ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), HighQualityContext);
+    AccumulatedDeltaTimes[0] = 0.0f; // Reset grupo 0
 }
 
 // Control centralizado del sistema
@@ -244,4 +252,261 @@ void AZombiTestController::LogPerformanceMetrics()
     }
 
     int32 CurrentEntityCount = SpawnerSubsystem->GetActiveZombiCount();
+}
+
+// ✅ PATRÓN OFICIAL UNIFICADO: Procesar TODAS las operaciones TurboSequence en UNA iteración
+// Combina: actualizaciones pendientes + gestión de grupos para evitar condiciones de carrera
+void AZombiTestController::ProcessAllTurboSequenceOperations(float DeltaTime)
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+
+    // Obtener el EntitySubsystem para iterar sobre las entidades
+    if (UMassEntitySubsystem *EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(GetWorld()))
+    {
+        FMassEntityManager &EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        // Crear query para obtener fragments que necesitan actualización
+        FMassEntityQuery Query;
+        Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
+        Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+
+        // Crear contexto de ejecución
+        FMassExecutionContext ExecutionContext(EntityManager);
+
+        // PASO 1: RECOPILAR TODAS las operaciones (animación + grupos) sin ejecutar
+        struct FTurboSequenceOperation
+        {
+            FTurboSequence_MinimalMeshData_Lf MeshData;
+            UAnimSequence *Animation = nullptr;
+            FTurboSequence_AnimPlaySettings_Lf AnimSettings;
+            FTransform Transform;
+            bool bNeedsAnimation = false;
+            bool bNeedsTransform = false;
+            // Gestión de grupos
+            int32 CurrentGroup = -1;
+            int32 TargetGroup = -1;
+            bool bNeedsGroupChange = false;
+        };
+
+        TArray<FTurboSequenceOperation> PendingOperations;
+
+        // Obtener posición del jugador para cálculos de distancia
+        FVector PlayerLocation = FVector::ZeroVector;
+        if (APawn *PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+        {
+            PlayerLocation = PlayerPawn->GetActorLocation();
+        }
+
+        // Recopilar operaciones SIN ejecutar TurboSequence NI modificar fragmentos
+        Query.ForEachEntityChunk(EntityManager, ExecutionContext, [&PendingOperations, PlayerLocation](FMassExecutionContext &Context)
+                                 {
+            TArrayView<const FZombiTurboSequenceFragment> TurboFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
+            TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
+            
+            for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+            {
+                const FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
+                const FZombiCoreFragment& CoreFragment = CoreFragments[i];
+                
+                if (!TurboFragment.IsValid())
+                {
+                    continue;
+                }
+                
+                // RECOPILAR todas las operaciones (animación + grupos)
+                FTurboSequenceOperation Op;
+                Op.MeshData = TurboFragment.MeshData;
+                bool bHasOperations = false;
+                
+                // 1. Operaciones de animación
+                if (TurboFragment.bNeedsAnimationUpdate && TurboFragment.CurrentAnimation)
+                {
+                    Op.Animation = TurboFragment.CurrentAnimation;
+                    Op.AnimSettings = TurboFragment.PendingAnimationSettings;
+                    Op.bNeedsAnimation = true;
+                    bHasOperations = true;
+                }
+                
+                // 2. Operaciones de transformación
+                if (TurboFragment.bNeedsTransformUpdate)
+                {
+                    Op.Transform = TurboFragment.PendingTransform;
+                    Op.bNeedsTransform = true;
+                    bHasOperations = true;
+                }
+                
+                // 3. Operaciones de grupos por distancia (SIMPLIFICADO - SIN consultar grupo actual)
+                float DistanceToPlayer = FVector::Dist(CoreFragment.Position, PlayerLocation);
+                
+                // Determinar grupo objetivo basado en distancia
+                int32 TargetGroup = 0; // Máxima calidad por defecto
+                if (DistanceToPlayer > 500.0f) TargetGroup = 1;
+                if (DistanceToPlayer > 1000.0f) TargetGroup = 2;
+                if (DistanceToPlayer > 2000.0f) TargetGroup = 3;
+                
+                // ✅ SIMPLIFICADO: Reasignar SIEMPRE (evita consultar grupo actual durante iteración)
+                // Esto es seguro porque TurboSequence maneja internamente si ya está en el grupo correcto
+                Op.CurrentGroup = -1; // Valor especial para "remover de cualquier grupo"
+                Op.TargetGroup = TargetGroup;
+                Op.bNeedsGroupChange = true;
+                bHasOperations = true;
+                
+                // Solo agregar si hay alguna operación
+                if (bHasOperations)
+                {
+                    PendingOperations.Add(Op);
+                }
+            } });
+
+        // PASO 2: EJECUTAR todas las operaciones FUERA del loop (seguro para concurrencia)
+        for (const FTurboSequenceOperation &Op : PendingOperations)
+        {
+            // Animaciones
+            if (Op.bNeedsAnimation && Op.Animation)
+            {
+                ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                    Op.MeshData, Op.Animation, Op.AnimSettings);
+            }
+
+            // Transformaciones
+            if (Op.bNeedsTransform)
+            {
+                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                    Op.MeshData, Op.Transform);
+            }
+
+            // Grupos
+            if (Op.bNeedsGroupChange)
+            {
+                // ✅ PATRÓN SIMPLIFICADO: Solo agregar al grupo objetivo
+                // TurboSequence automáticamente maneja la remoción del grupo anterior
+                ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(Op.TargetGroup, Op.MeshData);
+            }
+        }
+
+        // PASO 3: RESETEAR flags EN ITERACIÓN SEPARADA (evita crash Mass Entity)
+        if (PendingOperations.Num() > 0)
+        {
+            Query.ForEachEntityChunk(EntityManager, ExecutionContext, [](FMassExecutionContext &Context)
+                                     {
+                TArrayView<FZombiTurboSequenceFragment> TurboFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+                
+                for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+                {
+                    FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
+                    
+                    // Resetear flags después de procesamiento exitoso
+                    if (TurboFragment.bNeedsAnimationUpdate || TurboFragment.bNeedsTransformUpdate)
+                    {
+                        TurboFragment.bNeedsAnimationUpdate = false;
+                        TurboFragment.bNeedsTransformUpdate = false;
+                    }
+                } });
+        }
+    }
+}
+
+// ❌ FUNCIÓN ELIMINADA: UpdateAllEntityGroups() - Integrada en ProcessAllTurboSequenceOperations()
+// ✅ CORRECCIÓN: Gestión de grupos SEPARADA para evitar condiciones de carrera
+/*void AZombiTestController::UpdateAllEntityGroups()
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+
+    // Obtener el EntitySubsystem para iterar sobre las entidades SIN modificar durante iteración
+    if (UMassEntitySubsystem *EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(GetWorld()))
+    {
+        FMassEntityManager &EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        // Crear query para obtener fragments que necesitan gestión de grupos
+        FMassEntityQuery Query;
+        Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+        Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+
+        // Crear contexto de ejecución
+        FMassExecutionContext ExecutionContext(EntityManager);
+
+        // PASO 1: RECOPILAR cambios de grupo sin aplicar (evita condiciones de carrera)
+        struct FGroupChange
+        {
+            FTurboSequence_MinimalMeshData_Lf MeshData;
+            int32 CurrentGroup;
+            int32 TargetGroup;
+        };
+
+        TArray<FGroupChange> PendingGroupChanges;
+
+        // Obtener posición del jugador UNA VEZ para optimización
+        FVector PlayerLocation = FVector::ZeroVector;
+        if (GetWorld()->GetFirstPlayerController())
+        {
+            if (APawn *PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn())
+            {
+                PlayerLocation = PlayerPawn->GetActorLocation();
+            }
+        }
+
+        // Iterar y SOLO recopilar cambios
+        Query.ForEachEntityChunk(EntityManager, ExecutionContext, [&PendingGroupChanges, PlayerLocation](FMassExecutionContext &Context)
+                                 {
+            TArrayView<const FZombiTurboSequenceFragment> TurboFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
+            TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
+
+            for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+            {
+                const FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
+                const FZombiCoreFragment& CoreFragment = CoreFragments[i];
+
+                if (!TurboFragment.IsValid())
+                {
+                    continue;
+                }
+
+                // Calcular distancia al jugador
+                float DistanceToPlayer = FVector::Dist(CoreFragment.Position, PlayerLocation);
+
+                // Determinar grupo objetivo según patrón oficial
+                int32 TargetGroup = 0; // Grupo 0 por defecto (alta calidad)
+                if (DistanceToPlayer > 500.0f) TargetGroup = 1;       // Grupo 1
+                if (DistanceToPlayer > 1000.0f) TargetGroup = 2;      // Grupo 2
+                if (DistanceToPlayer > 1500.0f) TargetGroup = 3;      // Grupo 3+
+
+                // Obtener grupo actual de la entidad
+                int32 CurrentGroup = ATurboSequence_Manager_Lf::GetUpdateGroupIndexFromMeshID_Concurrent(
+                    TurboFragment.MeshData.RootMotionMeshID);
+
+                // Solo registrar cambio si es necesario
+                if (CurrentGroup != TargetGroup && CurrentGroup != -1)
+                {
+                    FGroupChange Change;
+                    Change.MeshData = TurboFragment.MeshData;
+                    Change.CurrentGroup = CurrentGroup;
+                    Change.TargetGroup = TargetGroup;
+                    PendingGroupChanges.Add(Change);
+                }
+            } });
+
+        // PASO 2: APLICAR cambios fuera del loop (seguro para concurrencia)
+        for (const FGroupChange &Change : PendingGroupChanges)
+        {
+            // Remover del grupo actual
+            ATurboSequence_Manager_Lf::RemoveInstanceFromUpdateGroup_Concurrent(Change.CurrentGroup, Change.MeshData);
+
+            // Agregar al nuevo grupo
+            ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(Change.TargetGroup, Change.MeshData);
+        }
+    }
+}*/
+
+// Función auxiliar mantenida para compatibilidad (ahora no se usa en el loop crítico)
+void AZombiTestController::UpdateEntityGroupByDistance(FZombiTurboSequenceFragment &TurboFragment,
+                                                       const FZombiCoreFragment &CoreFragment)
+{
+    // Esta función ya no se llama durante iteración crítica
+    // Se mantiene para posibles usos futuros no críticos
 }

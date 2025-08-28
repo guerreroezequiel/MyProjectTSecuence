@@ -5,13 +5,13 @@
 #include "MassEntityTypes.h"
 #include "TurboSequence_MinimalData_Lf.h"
 #include "TurboSequence_MeshAsset_Lf.h"
+#include "Engine/Engine.h"
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
- * Fragmento optimizado para manejar la representación visual de entidades zombi usando TurboSequence
- * OPTIMIZADO: 32 bytes máximo para 5000+ entidades
- * State Sync Architecture - Solo datos esenciales
- * SHADOW OPTIMIZATION: Configuración de sombras por distancia
+ * ✅ PATRÓN OFICIAL: Fragmento que almacena datos lógicos para TurboSequence
+ * Incluye datos pendientes para que el controlador principal aplique después del "big ECS loop"
+ * Según documentación: ECS prepara datos, controlador aplica funciones TurboSequence
  */
 USTRUCT()
 struct FZombiTurboSequenceFragment : public FMassFragment
@@ -30,6 +30,20 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> CurrentAnimation;
 
+	// ✅ PATRÓN OFICIAL: Datos pendientes para aplicar en el controlador
+	UPROPERTY()
+	FTransform PendingTransform;
+
+	UPROPERTY()
+	FTurboSequence_AnimPlaySettings_Lf PendingAnimationSettings;
+
+	// Flags de actualización
+	UPROPERTY()
+	uint8 bNeedsAnimationUpdate : 1;
+
+	UPROPERTY()
+	uint8 bNeedsTransformUpdate : 1;
+
 	// Configuración de sombras optimizada (1 bit)
 	UPROPERTY()
 	uint8 ShadowQuality : 1; // 0=Off, 1=On (simplificado para optimización)
@@ -40,6 +54,9 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 		TurboSequenceAsset = nullptr;
 		CurrentAnimation = nullptr;
 		ShadowQuality = 1; // Low por defecto para optimización
+		bNeedsAnimationUpdate = false;
+		bNeedsTransformUpdate = false;
+		PendingTransform = FTransform::Identity;
 	}
 
 	// Métodos de utilidad
