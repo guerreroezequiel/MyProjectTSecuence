@@ -9,16 +9,17 @@
 #include "ZombiTurboSequenceFragment.generated.h"
 
 /**
- * ✅ PATRÓN OFICIAL: Fragmento que almacena datos lógicos para TurboSequence
- * Incluye datos pendientes para que el controlador principal aplique después del "big ECS loop"
- * Según documentación: ECS prepara datos, controlador aplica funciones TurboSequence
+ * ✅ PATRÓN OFICIAL TURBOSEQUENCE: Fragment que almacena datos lógicos
+ * ECS prepara datos → Controller aplica a TurboSequence después del "big loop"
+ * Optimizado para 10k+ entidades con memory layout eficiente
  */
 USTRUCT()
 struct FZombiTurboSequenceFragment : public FMassFragment
 {
 	GENERATED_BODY()
 
-	// Handle para la instancia visual de TurboSequence (16 bytes)
+	// ═══ CORE TURBOSEQUENCE DATA ═══
+	// Handle para la instancia visual (16 bytes)
 	UPROPERTY()
 	FTurboSequence_MinimalMeshData_Lf MeshData;
 
@@ -26,45 +27,57 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 	UPROPERTY()
 	TObjectPtr<UTurboSequence_MeshAsset_Lf> TurboSequenceAsset;
 
+	// ═══ ANIMATION STATE ═══
 	// Animación actual (8 bytes)
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> CurrentAnimation;
 
-	// ✅ PATRÓN OFICIAL: Datos pendientes para aplicar en el controlador
+	// ═══ PENDING OPERATIONS (PATRÓN OFICIAL) ═══
+	// Transform pendiente para aplicar en controller
 	UPROPERTY()
 	FTransform PendingTransform;
 
+	// Settings de animación pendientes
 	UPROPERTY()
 	FTurboSequence_AnimPlaySettings_Lf PendingAnimationSettings;
 
-	// Flags de actualización
+	// ═══ UPDATE FLAGS (OPTIMIZADO) ═══
+	// Flags de actualización compactos (3 bits total)
 	UPROPERTY()
 	uint8 bNeedsAnimationUpdate : 1;
 
 	UPROPERTY()
 	uint8 bNeedsTransformUpdate : 1;
 
-	// Configuración de sombras optimizada (1 bit)
 	UPROPERTY()
-	uint8 ShadowQuality : 1; // 0=Off, 1=On (simplificado para optimización)
+	uint8 ShadowQuality : 1; // 0=Off, 1=On
 
-	// Constructor por defecto
+	// ═══ CONSTRUCTOR OPTIMIZADO ═══
 	FZombiTurboSequenceFragment()
+		: TurboSequenceAsset(nullptr), CurrentAnimation(nullptr), PendingTransform(FTransform::Identity), bNeedsAnimationUpdate(false), bNeedsTransformUpdate(false), ShadowQuality(1) // High quality por defecto
 	{
-		TurboSequenceAsset = nullptr;
-		CurrentAnimation = nullptr;
-		ShadowQuality = 1; // Low por defecto para optimización
-		bNeedsAnimationUpdate = false;
-		bNeedsTransformUpdate = false;
-		PendingTransform = FTransform::Identity;
+		// PendingAnimationSettings se inicializa automáticamente
 	}
 
-	// Métodos de utilidad
-	bool IsValid() const { return MeshData.IsMeshDataValid() && TurboSequenceAsset != nullptr; }
-	void SetAnimation(UAnimSequence *NewAnimation) { CurrentAnimation = NewAnimation; }
+	// ═══ UTILITY METHODS ═══
+	FORCEINLINE bool IsValid() const
+	{
+		return MeshData.IsMeshDataValid() && TurboSequenceAsset != nullptr;
+	}
 
-	// Configuración de sombras
-	void SetShadowQuality(uint8 Quality) { ShadowQuality = Quality > 0 ? 1 : 0; }
-	uint8 GetShadowQuality() const { return ShadowQuality; }
-	bool ShouldCastShadows() const { return ShadowQuality > 0; }
+	FORCEINLINE void SetAnimation(UAnimSequence *NewAnimation)
+	{
+		CurrentAnimation = NewAnimation;
+	}
+
+	// ═══ SHADOW OPTIMIZATION ═══
+	FORCEINLINE void SetShadowQuality(uint8 Quality)
+	{
+		ShadowQuality = Quality > 0 ? 1 : 0;
+	}
+
+	FORCEINLINE bool ShouldCastShadows() const
+	{
+		return ShadowQuality > 0;
+	}
 };

@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "MassEntitySubsystem.h"
 #include "MassExecutionContext.h"
+#include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 
 AZombiTestController::AZombiTestController()
 {
@@ -184,8 +185,16 @@ void AZombiTestController::Tick(float DeltaTime)
     static TArray<float> AccumulatedDeltaTimes;
     const int32 MaxUpdateGroups = 4;
 
-    // Inicializar array de DeltaTimes acumulados
-    AccumulatedDeltaTimes.SetNum(MaxUpdateGroups + 1);
+    // ✅ CORREGIDO: Inicializar UNA SOLA VEZ, no cada frame
+    if (AccumulatedDeltaTimes.Num() == 0)
+    {
+        AccumulatedDeltaTimes.SetNum(MaxUpdateGroups + 1);
+        // Inicializar todos en 0
+        for (int32 i = 0; i <= MaxUpdateGroups; ++i)
+        {
+            AccumulatedDeltaTimes[i] = 0.0f;
+        }
+    }
 
     // Acumular DeltaTime para TODOS los grupos
     for (float &Delta : AccumulatedDeltaTimes)
@@ -256,6 +265,8 @@ void AZombiTestController::LogPerformanceMetrics()
 
 // ✅ PATRÓN OFICIAL UNIFICADO: Procesar TODAS las operaciones TurboSequence en UNA iteración
 // Combina: actualizaciones pendientes + gestión de grupos para evitar condiciones de carrera
+// ✅ PATRÓN OFICIAL TURBOSEQUENCE: SEPARACIÓN TOTAL ECS vs TurboSequence
+// Fase 1: Recolectar datos → Fase 2: Aplicar TurboSequence FUERA del Mass loop
 void AZombiTestController::ProcessAllTurboSequenceOperations(float DeltaTime)
 {
     if (!GetWorld())
@@ -263,65 +274,117 @@ void AZombiTestController::ProcessAllTurboSequenceOperations(float DeltaTime)
         return;
     }
 
-    // Obtener el EntitySubsystem para iterar sobre las entidades
-    if (UMassEntitySubsystem *EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(GetWorld()))
+    UMassEntitySubsystem *EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(GetWorld());
+    if (!EntitySubsystem)
     {
-        FMassEntityManager &EntityManager = EntitySubsystem->GetMutableEntityManager();
+        return;
+    }
 
-        // Crear query para obtener fragments que necesitan actualización
+    FMassEntityManager &EntityManager = EntitySubsystem->GetMutableEntityManager();
+    FMassExecutionContext ExecutionContext(EntityManager);
+
+    // ESTRUCTURA PARA OPERACIONES PENDIENTES
+    struct FTurboSequenceOperation
+    {
+        FTurboSequence_MinimalMeshData_Lf MeshData;
+        UAnimSequence *Animation = nullptr;
+        FTurboSequence_AnimPlaySettings_Lf AnimSettings;
+        FTransform Transform;
+        bool bNeedsAnimation = false;
+        bool bNeedsTransform = false;
+        // ✅ SINCRONIZACIÓN ECS ↔ TURBOSEQUENCE
+        int32 TargetGroup = -1;
+        bool bNeedsGroupChange = false;
+    };
+
+    TArray<FTurboSequenceOperation> PendingOperations;
+
+    // FASE 1: RECOLECTAR datos SIN modificar fragments NI llamar TurboSequence
+    // ✅ SINCRONIZACIÓN ECS TAGS ↔ TURBOSEQUENCE GROUPS
+    struct FLODQuery
+    {
         FMassEntityQuery Query;
-        Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
-        Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+        int32 TurboSequenceGroup;
+        FString LODName;
+    };
 
-        // Crear contexto de ejecución
-        FMassExecutionContext ExecutionContext(EntityManager);
+    TArray<FLODQuery> LODQueries;
 
-        // PASO 1: RECOPILAR TODAS las operaciones (animación + grupos) sin ejecutar
-        struct FTurboSequenceOperation
-        {
-            FTurboSequence_MinimalMeshData_Lf MeshData;
-            UAnimSequence *Animation = nullptr;
-            FTurboSequence_AnimPlaySettings_Lf AnimSettings;
-            FTransform Transform;
-            bool bNeedsAnimation = false;
-            bool bNeedsTransform = false;
-            // Gestión de grupos
-            int32 CurrentGroup = -1;
-            int32 TargetGroup = -1;
-            bool bNeedsGroupChange = false;
-        };
+    // ✅ MAPEO DIRECTO: Tags ECS → TurboSequence Groups
+    {
+        FLODQuery Query60FPS;
+        Query60FPS.Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+        Query60FPS.Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+        Query60FPS.Query.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+        Query60FPS.Query.AddTagRequirement<FUpdate60FPS>(EMassFragmentPresence::All);
+        Query60FPS.TurboSequenceGroup = 0; // Alta calidad
+        Query60FPS.LODName = TEXT("Update60FPS");
+        LODQueries.Add(Query60FPS);
+    }
 
-        TArray<FTurboSequenceOperation> PendingOperations;
+    {
+        FLODQuery Query30FPS;
+        Query30FPS.Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+        Query30FPS.Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+        Query30FPS.Query.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+        Query30FPS.Query.AddTagRequirement<FUpdate30FPS>(EMassFragmentPresence::All);
+        Query30FPS.TurboSequenceGroup = 1;
+        Query30FPS.LODName = TEXT("Update30FPS");
+        LODQueries.Add(Query30FPS);
+    }
 
-        // Obtener posición del jugador para cálculos de distancia
-        FVector PlayerLocation = FVector::ZeroVector;
-        if (APawn *PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
-        {
-            PlayerLocation = PlayerPawn->GetActorLocation();
-        }
+    {
+        FLODQuery Query15FPS;
+        Query15FPS.Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+        Query15FPS.Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+        Query15FPS.Query.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+        Query15FPS.Query.AddTagRequirement<FUpdate15FPS>(EMassFragmentPresence::All);
+        Query15FPS.TurboSequenceGroup = 2;
+        Query15FPS.LODName = TEXT("Update15FPS");
+        LODQueries.Add(Query15FPS);
+    }
 
-        // Recopilar operaciones SIN ejecutar TurboSequence NI modificar fragmentos
-        Query.ForEachEntityChunk(EntityManager, ExecutionContext, [&PendingOperations, PlayerLocation](FMassExecutionContext &Context)
-                                 {
+    {
+        FLODQuery Query5FPS;
+        Query5FPS.Query.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadOnly);
+        Query5FPS.Query.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+        Query5FPS.Query.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+        Query5FPS.Query.AddTagRequirement<FUpdate5FPS>(EMassFragmentPresence::All);
+        Query5FPS.TurboSequenceGroup = 3;
+        Query5FPS.LODName = TEXT("Update5FPS");
+        LODQueries.Add(Query5FPS);
+    }
+
+    // ✅ RECOLECTAR por LOD usando sincronización perfecta Tags → Groups
+    for (const FLODQuery &LODQuery : LODQueries)
+    {
+        // Crear copia mutable del query para ForEachEntityChunk
+        FMassEntityQuery MutableQuery = LODQuery.Query;
+        MutableQuery.ForEachEntityChunk(EntityManager, ExecutionContext, [&PendingOperations, &LODQuery](FMassExecutionContext &Context)
+                                        {
             TArrayView<const FZombiTurboSequenceFragment> TurboFragments = Context.GetFragmentView<FZombiTurboSequenceFragment>();
             TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-            
+
             for (int32 i = 0; i < Context.GetNumEntities(); ++i)
             {
-                const FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
-                const FZombiCoreFragment& CoreFragment = CoreFragments[i];
-                
+                const FZombiTurboSequenceFragment &TurboFragment = TurboFragments[i];
+
                 if (!TurboFragment.IsValid())
                 {
                     continue;
                 }
-                
-                // RECOPILAR todas las operaciones (animación + grupos)
+
+                // ✅ OPERACIÓN CON GRUPO SINCRONIZADO AUTOMÁTICAMENTE
                 FTurboSequenceOperation Op;
                 Op.MeshData = TurboFragment.MeshData;
                 bool bHasOperations = false;
-                
-                // 1. Operaciones de animación
+
+                // ✅ SINCRONIZACIÓN AUTOMÁTICA: Tag ECS → TurboSequence Group
+                Op.TargetGroup = LODQuery.TurboSequenceGroup;
+                Op.bNeedsGroupChange = true;
+                bHasOperations = true;
+
+                // Recolectar animaciones pendientes
                 if (TurboFragment.bNeedsAnimationUpdate && TurboFragment.CurrentAnimation)
                 {
                     Op.Animation = TurboFragment.CurrentAnimation;
@@ -329,83 +392,67 @@ void AZombiTestController::ProcessAllTurboSequenceOperations(float DeltaTime)
                     Op.bNeedsAnimation = true;
                     bHasOperations = true;
                 }
-                
-                // 2. Operaciones de transformación
+
+                // Recolectar transforms pendientes
                 if (TurboFragment.bNeedsTransformUpdate)
                 {
                     Op.Transform = TurboFragment.PendingTransform;
                     Op.bNeedsTransform = true;
                     bHasOperations = true;
                 }
-                
-                // 3. Operaciones de grupos por distancia (SIMPLIFICADO - SIN consultar grupo actual)
-                float DistanceToPlayer = FVector::Dist(CoreFragment.Position, PlayerLocation);
-                
-                // Determinar grupo objetivo basado en distancia
-                int32 TargetGroup = 0; // Máxima calidad por defecto
-                if (DistanceToPlayer > 500.0f) TargetGroup = 1;
-                if (DistanceToPlayer > 1000.0f) TargetGroup = 2;
-                if (DistanceToPlayer > 2000.0f) TargetGroup = 3;
-                
-                // ✅ SIMPLIFICADO: Reasignar SIEMPRE (evita consultar grupo actual durante iteración)
-                // Esto es seguro porque TurboSequence maneja internamente si ya está en el grupo correcto
-                Op.CurrentGroup = -1; // Valor especial para "remover de cualquier grupo"
-                Op.TargetGroup = TargetGroup;
-                Op.bNeedsGroupChange = true;
-                bHasOperations = true;
-                
-                // Solo agregar si hay alguna operación
+
                 if (bHasOperations)
                 {
                     PendingOperations.Add(Op);
                 }
             } });
+    }
 
-        // PASO 2: EJECUTAR todas las operaciones FUERA del loop (seguro para concurrencia)
-        for (const FTurboSequenceOperation &Op : PendingOperations)
+    // FASE 2: APLICAR operaciones TurboSequence FUERA del Mass loop
+    for (const FTurboSequenceOperation &Op : PendingOperations)
+    {
+        // ✅ SINCRONIZACIÓN: Asegurar que entidad esté en el grupo correcto
+        if (Op.bNeedsGroupChange)
         {
-            // Animaciones
-            if (Op.bNeedsAnimation && Op.Animation)
-            {
-                ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
-                    Op.MeshData, Op.Animation, Op.AnimSettings);
-            }
-
-            // Transformaciones
-            if (Op.bNeedsTransform)
-            {
-                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
-                    Op.MeshData, Op.Transform);
-            }
-
-            // Grupos
-            if (Op.bNeedsGroupChange)
-            {
-                // ✅ PATRÓN SIMPLIFICADO: Solo agregar al grupo objetivo
-                // TurboSequence automáticamente maneja la remoción del grupo anterior
-                ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(Op.TargetGroup, Op.MeshData);
-            }
+            ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(Op.TargetGroup, Op.MeshData);
         }
 
-        // PASO 3: RESETEAR flags EN ITERACIÓN SEPARADA (evita crash Mass Entity)
-        if (PendingOperations.Num() > 0)
+        if (Op.bNeedsAnimation && Op.Animation)
         {
-            Query.ForEachEntityChunk(EntityManager, ExecutionContext, [](FMassExecutionContext &Context)
-                                     {
-                TArrayView<FZombiTurboSequenceFragment> TurboFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+            ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                Op.MeshData,
+                Op.Animation,
+                Op.AnimSettings);
+        }
+
+        if (Op.bNeedsTransform)
+        {
+            ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                Op.MeshData,
+                Op.Transform);
+        }
+    }
+
+    // FASE 3: RESETEAR flags en iteración separada
+    if (PendingOperations.Num() > 0)
+    {
+        FMassEntityQuery ResetQuery;
+        ResetQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
+
+        ResetQuery.ForEachEntityChunk(EntityManager, ExecutionContext, [](FMassExecutionContext &Context)
+                                      {
+            TArrayView<FZombiTurboSequenceFragment> TurboFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+            
+            for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+            {
+                FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
                 
-                for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+                if (TurboFragment.bNeedsAnimationUpdate || TurboFragment.bNeedsTransformUpdate)
                 {
-                    FZombiTurboSequenceFragment& TurboFragment = TurboFragments[i];
-                    
-                    // Resetear flags después de procesamiento exitoso
-                    if (TurboFragment.bNeedsAnimationUpdate || TurboFragment.bNeedsTransformUpdate)
-                    {
-                        TurboFragment.bNeedsAnimationUpdate = false;
-                        TurboFragment.bNeedsTransformUpdate = false;
-                    }
-                } });
-        }
+                    TurboFragment.bNeedsAnimationUpdate = false;
+                    TurboFragment.bNeedsTransformUpdate = false;
+                }
+            } });
     }
 }
 
