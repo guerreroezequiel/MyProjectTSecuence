@@ -220,19 +220,35 @@ struct FTurboSequenceOperation {
 
 ---
 
-## 📋 **PLAN DE MIGRACIÓN POR FASES**
+## 📋 **PLAN DE MIGRACIÓN POR FASES - PRIORIDAD: SEPARACIÓN LOOPS**
 
-### 🔥 **FASE 1: ELIMINACIONES CRÍTICAS**
+### 🔥 **FASE 1: SEPARACIÓN CRÍTICA ECS ↔ TURBOSEQUENCE**
 
-#### 1.1 Eliminar Controlador Problemático
-- **❌ ELIMINAR**: `ZombiTestController.h/cpp`
-- **✅ CREAR**: `ZombiSystemCoordinator.h/cpp`
-- **🎯 IMPACTO**: Elimina 16 queries → 1 query (94% reducción)
+#### 1.1 **PROBLEMA CRÍTICO IDENTIFICADO**: 16 Queries Simultáneas
+**Ubicación actual**:
+- **ZombiBehaviorProcessor**: 4 queries (Update60FPS, Update30FPS, Update15FPS, Update5FPS)
+- **ZombiMovementProcessor**: 4 queries (Update60FPS, Update30FPS, Update15FPS, Update5FPS)  
+- **ZombiTurboSequenceProcessor**: 1 query (TransformSync)
+- **ZombiLODProcessor**: 1 query (LODQuery)
+- **ZombiTestController**: 4 queries dinámicas (Query60FPS, Query30FPS, Query15FPS, Query5FPS)
+- **Total**: **14-16 queries ejecutándose cada frame**
 
-#### 1.2 Eliminar Procesador LOD Problemático  
-- **❌ ELIMINAR**: `ZombiLODProcessor.h/cpp`
-- **✅ INTEGRAR**: Lógica inline en coordinador
-- **🎯 IMPACTO**: Elimina 3000 comandos diferidos por frame
+#### 1.2 **PROBLEMA CRÍTICO**: 2 Llamadas SolveMeshes Por Frame
+**Ubicación**: `ZombiTestController::Tick()` líneas 212-214 y 224
+```cpp
+// ❌ LLAMADA 1: Grupo background 
+ATurboSequence_Manager_Lf::SolveMeshes_GameThread(
+    AccumulatedDeltaTimes[CurrentBackgroundGroup], GetWorld(), UpdateContext);
+
+// ❌ LLAMADA 2: Grupo 0 alta calidad
+ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, GetWorld(), HighQualityContext);
+```
+
+#### 1.3 **SOLUCIÓN INMEDIATA**: Crear Coordinador de Separación
+- **❌ ELIMINAR**: `ZombiTestController.h/cpp` (16 queries + 2 SolveMeshes)
+- **✅ CREAR**: `UZombiSystemCoordinator` con separación estricta
+- **🎯 IMPACTO**: 16 queries → 4 queries máximo (75% reducción)
+- **🎯 IMPACTO**: 2 SolveMeshes → 1 SolveMeshes (50% reducción)
 
 ### ⚡ **FASE 2: REFACTORIZACIÓN DE PROCESADORES**
 
@@ -262,55 +278,100 @@ void ExecuteForLOD(ELODLevel TargetLOD) {
 - **❌ ELIMINAR COMPLETAMENTE**
 - **✅ FUSIONAR**: Lógica va al coordinador
 
-### 🚀 **FASE 3: COORDINADOR PRINCIPAL**
+### 🚀 **FASE 2: COORDINADOR CON SEPARACIÓN ESTRICTA**
 
-#### 3.1 Implementar UZombiSystemCoordinator
+#### 2.1 **IMPLEMENTACIÓN CRÍTICA**: UZombiSystemCoordinator
+**Objetivo**: Separación TOTAL de loops ECS y TurboSequence según documentación oficial.
+
 ```cpp
-// EN: ZombiSystemCoordinator.cpp
+// NUEVO ARCHIVO: ZombiSystemCoordinator.cpp
 
 void UZombiSystemCoordinator::Tick(float DeltaTime) {
-    // ✅ CUMPLE PRINCIPIO TURBOSEQUENCE: Separación total ECS → TurboSequence
-    ExecuteECSBigLoop(DeltaTime);        // PRIMERO: ECS completo
-    ExecuteTurboSequenceBigLoop(DeltaTime); // DESPUÉS: TurboSequence completo
+    // ✅ PRINCIPIO TURBOSEQUENCE: Separación TOTAL ECS → TurboSequence
+    
+    // FASE 1: ECS "Big Loop" - SOLO lógica ECS
+    ExecuteECSBigLoop(DeltaTime);
+    
+    // FASE 2: TurboSequence "Big Loop" - SOLO operaciones visuales  
+    ExecuteTurboSequenceBigLoop(DeltaTime);
+    
     FrameCounter++;
 }
 
+// FASE 1: ECS PURO - Sin llamadas TurboSequence
 void UZombiSystemCoordinator::ExecuteECSBigLoop(float DeltaTime) {
-    // Discriminación LOD inteligente para 5000 entidades
+    // ✅ SOLUCIÓN: Solo 4 queries máximo con LOD discriminativo
     if (ShouldExecuteCritical(DeltaTime)) {
-        ExecuteBehaviorForLOD(ELODLevel::Critical);  // ~100 entidades - cada frame
-        ExecuteMovementForLOD(ELODLevel::Critical);
+        ExecuteECSForLOD(ELODLevel::Critical);  // 1 query unificada
     }
     
     if (ShouldExecuteHigh(DeltaTime)) {
-        ExecuteBehaviorForLOD(ELODLevel::High);      // ~400 entidades - cada 2 frames
-        ExecuteMovementForLOD(ELODLevel::High);
+        ExecuteECSForLOD(ELODLevel::High);      // 1 query unificada
     }
     
     if (ShouldExecuteNormal(DeltaTime)) {
-        ExecuteBehaviorForLOD(ELODLevel::Normal);    // ~1500 entidades - cada 4 frames
-        ExecuteMovementForLOD(ELODLevel::Normal);
+        ExecuteECSForLOD(ELODLevel::Normal);    // 1 query unificada
     }
     
     if (ShouldExecuteLow(DeltaTime)) {
-        ExecuteBehaviorForLOD(ELODLevel::Low);       // ~3000 entidades - cada 12 frames
-        ExecuteMovementForLOD(ELODLevel::Low);
+        ExecuteECSForLOD(ELODLevel::Low);       // 1 query unificada
     }
     
-    // LOD management SIEMPRE se ejecuta (gestión de tags)
-    ExecuteLODManagement();
+    // MÁXIMO 4 queries vs 16 actuales = 75% reducción
 }
 
+// FASE 2: TURBOSEQUENCE PURO - Sin ECS
 void UZombiSystemCoordinator::ExecuteTurboSequenceBigLoop(float DeltaTime) {
-    // ✅ CUMPLE "Big Loop": Recolectar TODAS las operaciones
+    // ✅ "Big Loop": Recolectar TODAS las operaciones pendientes
     TArray<FTurboSequenceOperation> AllOperations;
     CollectAllTurboSequenceOperations(AllOperations);
     
-    // ✅ CUMPLE "Update all at once": Aplicar masivamente
+    // ✅ "Update all at once": Aplicar TODAS las operaciones masivamente
     ApplyAllTurboSequenceOperations(AllOperations);
     
-    // ✅ CUMPLE "Una llamada SolveMeshes": UNA sola llamada por grupo
-    ExecuteSolveMeshesForAllGroups(DeltaTime);
+    // ✅ "Una llamada SolveMeshes": SOLO UNA llamada por grupo
+    ExecuteSolveMeshesCorrect(DeltaTime);  // vs 2 llamadas actuales
+}
+
+// SOLUCIÓN ESPECÍFICA: Una sola llamada SolveMeshes rotativa
+void UZombiSystemCoordinator::ExecuteSolveMeshesCorrect(float DeltaTime) {
+    static int32 CurrentGroup = 0;
+    static TArray<float> AccumulatedDeltas = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    
+    // Acumular delta para todos los grupos
+    for (float& Delta : AccumulatedDeltas) {
+        Delta += DeltaTime;
+    }
+    
+    // ✅ CORRECCIÓN: Solo UNA llamada SolveMeshes por frame
+    FTurboSequence_UpdateContext_Lf Context;
+    Context.GroupIndex = CurrentGroup;
+    
+    ATurboSequence_Manager_Lf::SolveMeshes_GameThread(
+        AccumulatedDeltas[CurrentGroup], GetWorld(), Context);
+    
+    AccumulatedDeltas[CurrentGroup] = 0.0f;
+    CurrentGroup = (CurrentGroup + 1) % 5; // Rotar grupos 0-4
+    
+    // RESULTADO: 2 llamadas → 1 llamada = 50% reducción
+}
+```
+
+#### 2.2 **ECS Unificado Por LOD**
+```cpp
+// SOLUCIÓN: Una query unificada por LOD vs 4 queries separadas por procesador
+void UZombiSystemCoordinator::ExecuteECSForLOD(ELODLevel TargetLOD) {
+    FMassEntityQuery UnifiedQuery = CreateUnifiedQueryForLOD(TargetLOD);
+    
+    // ✅ UNA SOLA iteración por LOD que hace TODO el trabajo ECS
+    UnifiedQuery.ForEachEntityChunk(EntityManager, Context, 
+        [this, TargetLOD](FMassExecutionContext& Context) {
+            // TODO en una sola pasada - cache locality optimizada
+            ProcessBehaviorInline(Context, TargetLOD);
+            ProcessMovementInline(Context, TargetLOD);
+            ProcessLODInline(Context, TargetLOD);
+            MarkTurboSequenceOperations(Context, TargetLOD);
+        });
 }
 ```
 
@@ -378,27 +439,36 @@ FVector UZombiSystemCoordinator::GetCachedPlayerLocation(float CurrentTime) {
 
 ---
 
-## 📊 **IMPACTO ESPERADO POR FASE**
+## 📊 **IMPACTO PROYECTADO POR DÍA**
 
-### **Fase 1 (Eliminaciones Críticas)**
-- **Reducción queries**: 16 → 1 (94% reducción)
-- **Eliminación comandos diferidos**: 3,000 → 0 operaciones
-- **FPS esperado**: 20 → 45-60 FPS con 500 entidades
+### **Día 1-3 (Eliminación Controller Crítica)**
+- **Reducción queries**: 16 → 4 queries (75% reducción inmediata)
+- **Reducción SolveMeshes**: 2 → 1 llamada (50% reducción inmediata)  
+- **FPS esperado**: 20 → 35-45 FPS con 500 entidades
+- **Impacto**: **Soluciona Problemas #1, #3, #6** del análisis crítico
 
-### **Fase 2 (Refactorización Procesadores)**  
-- **Modularidad preservada**: Procesadores especializados mantenidos
-- **Colaboración mejorada**: Sin conflictos entre equipos
-- **Mantenibilidad**: Testing aislado por procesador
+### **Día 4-6 (Separación Estricta)**
+- **Compliance TurboSequence**: 100% principios oficiales implementados
+- **Eliminación mezcla ECS-TS**: Separación total de responsabilidades
+- **Cache locality**: Optimización acceso memoria por separación 
+- **FPS esperado**: 35-45 → 50-65 FPS con 500 entidades
 
-### **Fase 3 (Coordinador Principal)**
-- **Compliance TurboSequence**: 100% principios oficiales
-- **Escalabilidad**: LOD discriminativo para 5000 entidades  
-- **Rendimiento**: Big loop + Una llamada SolveMeshes
+### **Día 7-10 (Optimización Queries)**
+- **Eliminación comandos diferidos**: 3,000 → 0 operaciones por frame
+- **Queries unificadas**: 4 → 4 queries pero optimizadas (cache locality)
+- **FPS esperado**: 50-65 → 65-80 FPS con 500 entidades
+- **Impacto**: **Soluciona Problemas #2, #4, #7** del análisis crítico
 
-### **Fase 4 (Optimizaciones Específicas)**
-- **Cache locality**: Estados/grupos/jugador cached
-- **Eliminación búsquedas**: TSManager cached
-- **FPS final esperado**: 45-60 FPS con 5000 entidades
+### **Día 11-14 (Cache y Optimizaciones)**
+- **Cache hit rate**: >95% para estados/grupos/jugador
+- **Eliminación búsquedas**: TSManager cached (Problema #5)
+- **FPS esperado**: 65-80 → 80-100 FPS con 500 entidades
+- **Escalabilidad**: **Primera prueba con 5000 entidades** → 45-60 FPS proyectados
+
+### **Día 15 (Testing Escalabilidad)**
+- **Objetivo final**: **5000 entidades a 45-60 FPS estables**
+- **Validación**: Compliance TurboSequence + ECS modular
+- **Entrega**: Sistema completamente optimizado y validado
 
 ---
 
@@ -441,42 +511,44 @@ ZombiSpawnerSubsystem (cache TSManager)
 
 ---
 
-## ⏱️ **CRONOGRAMA DE IMPLEMENTACIÓN**
+## ⏱️ **CRONOGRAMA AJUSTADO - PRIORIDAD SEPARACIÓN LOOPS**
 
-### **Semana 1: Preparación**
-- Crear `ZombiSystemTypes.h`
-- Crear estructura base `ZombiSystemCoordinator.h`
-- Backup código actual
+### **DÍA 1-3: ELIMINACIÓN CRÍTICA DEL CONTROLLER**
+🎯 **OBJETIVO**: Eliminar ZombiTestController que causa 16 queries + 2 SolveMeshes
+- **Día 1**: Backup completo del código actual
+- **Día 2**: Crear `ZombiSystemTypes.h` y estructura base `ZombiSystemCoordinator.h`
+- **Día 3**: Implementar separación básica ECS ↔ TurboSequence en coordinador
+- **Testing**: Verificar que el sistema arranca sin crashes
 
-### **Semana 2: Fase 1 (Crítica)**
-- Implementar `UZombiSystemCoordinator` básico
-- Eliminar `ZombiTestController`
-- Eliminar `ZombiLODProcessor`
-- **Testing**: Verificar que funciona básicamente
+### **DÍA 4-6: IMPLEMENTACIÓN DE SEPARACIÓN ESTRICTA**  
+🎯 **OBJETIVO**: Separación TOTAL de loops según principios TurboSequence
+- **Día 4**: Implementar `ExecuteECSBigLoop()` con queries unificadas
+- **Día 5**: Implementar `ExecuteTurboSequenceBigLoop()` con una sola SolveMeshes
+- **Día 6**: Eliminar completamente `ZombiTestController.h/cpp`
+- **Testing**: Verificar **16 queries → 4 queries** y **2 SolveMeshes → 1 SolveMeshes**
 
-### **Semana 3: Fase 2 (Refactorización)**
-- Adaptar `ZombiBehaviorProcessor` → `ExecuteForLOD()`
-- Adaptar `ZombiMovementProcessor` → `ExecuteForLOD()`
-- Eliminar `ZombiTurboSequenceProcessor`
-- **Testing**: Verificar procesadores modulares
+### **DÍA 7-10: OPTIMIZACIÓN DE QUERIES RESTANTES**
+🎯 **OBJETIVO**: Optimizar procesadores ECS para evitar queries redundantes
+- **Día 7**: Adaptar `ZombiBehaviorProcessor` para trabajar con coordinador
+- **Día 8**: Adaptar `ZombiMovementProcessor` para trabajar con coordinador  
+- **Día 9**: Eliminar `ZombiLODProcessor` (comandos diferidos) y `ZombiTurboSequenceProcessor`
+- **Día 10**: Integrar lógica inline en coordinador unificado
+- **Testing**: Verificar **eliminación 3000 comandos diferidos**
 
-### **Semana 4: Fase 3 (Coordinador Completo)**
-- Implementar `ExecuteECSBigLoop()` completo
-- Implementar `ExecuteTurboSequenceBigLoop()` completo
-- Implementar discriminación LOD temporal
-- **Testing**: Verificar coordinación completa
+### **DÍA 11-14: CACHE Y OPTIMIZACIONES FINALES**
+🎯 **OBJETIVO**: Cache de estados/grupos y optimizaciones específicas
+- **Día 11**: Implementar cache de estados (solo cambios reales)
+- **Día 12**: Implementar cache de grupos TurboSequence (evitar llamadas innecesarias)
+- **Día 13**: Optimizar `ZombiSpawnerSubsystem` (cache TSManager)
+- **Día 14**: Cache de jugador y optimizaciones menores
+- **Testing**: Verificar rendimiento objetivo **20 FPS → 45-60 FPS**
 
-### **Semana 5: Fase 4 (Optimizaciones)**
-- Implementar cache de estados/grupos
-- Optimizar `ZombiSpawnerSubsystem`
-- Implementar cache de jugador
-- **Testing**: Verificar rendimiento objetivo
-
-### **Semana 6: Testing y Validación**
-- Test de rendimiento con 5000 entidades
-- Validación compliance TurboSequence  
-- Documentación final
-- **Entrega**: Sistema optimizado completo
+### **DÍA 15: TESTING DE ESCALABILIDAD**
+🎯 **OBJETIVO**: Verificar escalabilidad a 5000 entidades
+- Pruebas con 1000, 2000, 3000, 4000, 5000 entidades
+- Validación compliance TurboSequence al 100%
+- Medición FPS y estabilidad
+- **Entrega**: Sistema optimizado funcionando
 
 ---
 
