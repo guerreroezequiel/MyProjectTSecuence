@@ -8,12 +8,7 @@
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiLODFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-// ZombiUpdateProcessor eliminado - migrado a sistema especializado
-// ZombiChaseProcessor eliminado - migrado a sistema especializado
+// Procesadores individuales migrados al coordinador unificado
 #include "MassExecutionContext.h"
 #include "TurboSequence_MeshAsset_Lf.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
@@ -24,22 +19,13 @@ UZombiMassSubsystem::UZombiMassSubsystem()
     // Configuración básica del subsystem
 }
 
-// Inicialización: obtiene referencia al Mass Entity Subsystem
+// Inicialización: configuración básica
 void UZombiMassSubsystem::Initialize(FSubsystemCollectionBase &Collection)
 {
     Super::Initialize(Collection);
 
-    // Obtiene el MassEntitySubsystem
-    MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
-
-    if (MassEntitySubsystem)
-    {
-        UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Sistema Mass Entity inicializado correctamente"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("ZombiMassSubsystem: No se pudo obtener MassEntitySubsystem"));
-    }
+    // NOTA: MassEntitySubsystem se inicializa en OnWorldBeginPlay cuando el mundo está listo
+    UE_LOG(LogTemp, Log, TEXT("ZombiMassSubsystem: Subsystem inicializado, esperando mundo listo..."));
 }
 
 // Se ejecuta cuando el mundo está listo
@@ -47,8 +33,20 @@ void UZombiMassSubsystem::OnWorldBeginPlay(UWorld &InWorld)
 {
     Super::OnWorldBeginPlay(InWorld);
 
-    // Registra los procesadores de Mass Entity
-    RegisterMassProcessors();
+    // Inicializa MassEntitySubsystem cuando el mundo está listo
+    MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+
+    if (MassEntitySubsystem)
+    {
+        UE_LOG(LogTemp, Log, TEXT("✅ ZombiMassSubsystem: MassEntitySubsystem inicializado correctamente"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ZombiMassSubsystem: No se pudo obtener MassEntitySubsystem"));
+    }
+
+    // Inicializa el coordinador principal
+    InitializeSystemCoordinator();
 }
 
 // Limpieza al destruir el subsystem
@@ -180,25 +178,29 @@ FORCEINLINE FRotator UZombiMassSubsystem::GenerateRandomRotation() const
     return FRotator(0.0f, FMath::RandRange(0.0f, 360.0f), 0.0f);
 }
 
-// Registra los procesadores de Mass Entity
-void UZombiMassSubsystem::RegisterMassProcessors()
+// Inicializa el coordinador principal
+void UZombiMassSubsystem::InitializeSystemCoordinator()
 {
     // Evita ejecutar esto múltiples veces
-    if (bProcessorsRegistered)
+    if (bCoordinatorInitialized)
     {
         return;
     }
 
-    if (!MassEntitySubsystem)
+    // Obtener coordinador del Game Instance
+    if (UGameInstance *GameInstance = GetWorld()->GetGameInstance())
     {
-        MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
-    }
-
-    if (MassEntitySubsystem)
-    {
-        // En UE5.5.4, los procesadores se registran automáticamente
-        VerifyProcessorsRegistration();
-        bProcessorsRegistered = true;
+        SystemCoordinator = GameInstance->GetSubsystem<UZombiSystemCoordinator>();
+        if (SystemCoordinator)
+        {
+            UE_LOG(LogTemp, Log, TEXT("✅ ZombiMassSubsystem: Coordinador encontrado y iniciado"));
+            SystemCoordinator->StartSystem();
+            bCoordinatorInitialized = true;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ ZombiMassSubsystem: Coordinador no disponible"));
+        }
     }
     else
     {
@@ -206,13 +208,15 @@ void UZombiMassSubsystem::RegisterMassProcessors()
     }
 }
 
-// Verifica que los procesadores están registrados correctamente
-void UZombiMassSubsystem::VerifyProcessorsRegistration()
+// Verifica que el coordinador está inicializado correctamente
+void UZombiMassSubsystem::VerifyCoordinatorInitialization()
 {
-    // En UE5.5.4, los procesadores se registran automáticamente
-    // Solo verificamos que el sistema Mass Entity esté funcionando
-    if (MassEntitySubsystem)
+    if (SystemCoordinator && SystemCoordinator->IsSystemActive())
     {
-        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Sistema Mass Entity funcionando correctamente"));
+        UE_LOG(LogTemp, Log, TEXT("🎮 ZombiMassSubsystem: Coordinador funcionando correctamente"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ ZombiMassSubsystem: Coordinador no activo"));
     }
 }

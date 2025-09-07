@@ -9,11 +9,8 @@
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 
 #include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
-#include "Systems/Zombies/ECS/Processors/ZombiMovementProcessor.h"
-#include "Systems/Zombies/ECS/Processors/ZombiBehaviorProcessor.h"
-
-#include "Systems/Zombies/ECS/Processors/ZombiTurboSequenceProcessor.h"
-// ZombiUpdateProcessor eliminado - migrado a sistema especializado
+#include "Systems/Zombies/ECS/Coordinators/ZombiSystemCoordinator.h"
+// Procesadores individuales están siendo migrados al coordinador unificado
 #include "ZombiMassSubsystem.generated.h"
 
 // Subsystem que maneja el registro de entidades zombi en el sistema Mass Entity
@@ -51,16 +48,20 @@ private:
 	// Lista de entidades registradas (para limpieza)
 	TArray<FMassEntityHandle> RegisteredEntities;
 
+	// Referencia al coordinador principal (reemplaza procesadores individuales)
+	UPROPERTY()
+	UZombiSystemCoordinator *SystemCoordinator = nullptr;
+
 	// Banderas para verificar si el sistema está configurado
-	bool bProcessorsRegistered = false;
+	bool bCoordinatorInitialized = false;
 
 	// Genera una rotación aleatoria para spawning
 	FRotator GenerateRandomRotation() const;
 
-	// Registra los procesadores de Mass Entity
-	void RegisterMassProcessors();
+	// Inicializa el coordinador principal
+	void InitializeSystemCoordinator();
 
 private:
-	// Verifica que los procesadores están registrados correctamente
-	void VerifyProcessorsRegistration();
+	// Verifica que el coordinador está inicializado correctamente
+	void VerifyCoordinatorInitialization();
 };

@@ -12,6 +12,8 @@
 #include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
 
 // Constructor del subsystem
 UZombiSpawnerSubsystem::UZombiSpawnerSubsystem()
@@ -150,9 +152,37 @@ FVector UZombiSpawnerSubsystem::GenerateRandomSpawnLocation(const FVector &Cente
     // Convierte a coordenadas cartesianas
     float X = Center.X + RandomRadius * FMath::Cos(FMath::DegreesToRadians(RandomAngle));
     float Y = Center.Y + RandomRadius * FMath::Sin(FMath::DegreesToRadians(RandomAngle));
-    float Z = Center.Z; // Mantiene la altura del centro
 
-    return FVector(X, Y, Z);
+    // Line trace hacia abajo para encontrar el suelo
+    FVector StartLocation = FVector(X, Y, Center.Z + 1000.0f); // Empezar 1000 unidades arriba
+    FVector EndLocation = FVector(X, Y, Center.Z - 1000.0f);   // Terminar 1000 unidades abajo
+
+    FHitResult HitResult;
+    FCollisionQueryParams QueryParams;
+    QueryParams.bTraceComplex = false;
+    QueryParams.bReturnPhysicalMaterial = false;
+
+    UWorld *World = GetWorld();
+    if (World && World->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_WorldStatic, QueryParams))
+    {
+        // Si encuentra suelo, usar esa altura + un pequeño offset
+        float GroundZ = HitResult.Location.Z;
+        float FinalZ = GroundZ + 5.0f; // Reducido de 50 a 5 unidades
+
+        // Log para debugging (solo ocasionalmente para no spam)
+        if (FMath::RandRange(0.0f, 1.0f) < 0.1f) // 10% de probabilidad
+        {
+            UE_LOG(LogTemp, Log, TEXT("🌍 Ground trace: Suelo en Z=%.1f, Spawn en Z=%.1f (offset +5)"), GroundZ, FinalZ);
+        }
+
+        return FVector(X, Y, FinalZ);
+    }
+    else
+    {
+        // Si no encuentra suelo, usar la altura del centro como fallback
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ No se encontró suelo en X=%.1f Y=%.1f, usando altura del centro Z=%.1f"), X, Y, Center.Z);
+        return FVector(X, Y, Center.Z);
+    }
 }
 
 // Genera una rotación aleatoria
