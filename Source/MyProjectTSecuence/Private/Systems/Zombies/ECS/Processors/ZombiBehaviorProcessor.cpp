@@ -5,6 +5,7 @@
 #include "MassExecutionContext.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiBehaviorFragment.h"
 #include "Systems/Zombies/ECS/Fragments/ZombiCoreFragment.h"
+#include "Systems/Zombies/ECS/Fragments/ZombiTurboSequenceFragment.h"
 #include "Systems/Zombies/ECS/Tags/ZombiTags.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
@@ -30,50 +31,25 @@ UZombiBehaviorProcessor::UZombiBehaviorProcessor()
 
 void UZombiBehaviorProcessor::ConfigureQueries()
 {
-    // Query base para entidades activas
+    // ✅ SIMPLIFICADO: UNA SOLA QUERY - Sin comandos diferidos
+    // Elimina las 4 queries por frecuencia que generaban 3000 comandos diferidos por frame
     BehaviorQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
     BehaviorQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
+    BehaviorQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite); // ✅ AGREGADO: Para marcar bNeedsAnimationUpdate
     BehaviorQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
     BehaviorQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
     BehaviorQuery.RegisterWithProcessor(*this);
 
-    // Queries por frecuencia de actualización (orden de prioridad)
-
-    // Update60FPSQuery - TakeDamage, Attack (Crítico)
-    Update60FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
-    Update60FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    Update60FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
-    Update60FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-    Update60FPSQuery.AddTagRequirement<FUpdate60FPS>(EMassFragmentPresence::All);
-    Update60FPSQuery.RegisterWithProcessor(*this);
-
-    // Update30FPSQuery - Chase (Alta prioridad)
-    Update30FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
-    Update30FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    Update30FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
-    Update30FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-    Update30FPSQuery.AddTagRequirement<FUpdate30FPS>(EMassFragmentPresence::All);
-    Update30FPSQuery.RegisterWithProcessor(*this);
-
-    // Update15FPSQuery - Seek, WalkAround (Normal)
-    Update15FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
-    Update15FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    Update15FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
-    Update15FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-    Update15FPSQuery.AddTagRequirement<FUpdate15FPS>(EMassFragmentPresence::All);
-    Update15FPSQuery.RegisterWithProcessor(*this);
-
-    // Update5FPSQuery - Idle, Dead (Mínima)
-    Update5FPSQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadWrite);
-    Update5FPSQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadOnly);
-    Update5FPSQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
-    Update5FPSQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
-    Update5FPSQuery.AddTagRequirement<FUpdate5FPS>(EMassFragmentPresence::All);
-    Update5FPSQuery.RegisterWithProcessor(*this);
+    // ❌ ELIMINADO: Update60FPSQuery, Update30FPSQuery, Update15FPSQuery, Update5FPSQuery
+    // RAZÓN: Generaban comandos diferidos masivos (3000 por frame)
+    // REEMPLAZADO POR: Una sola query con LOD interno simple
 }
 
 void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassExecutionContext &Context)
 {
+    // ✅ REACTIVADO: Procesador de comportamiento para manejar estados y animaciones
+    // Ahora maneja la lógica de comportamiento y prepara datos para animaciones
+
     // Solo ejecutar durante el juego (PIE), no en el editor
     if (!GetWorld() || !GetWorld()->IsGameWorld())
     {
@@ -93,18 +69,22 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-    // Procesar entidades por orden de prioridad usando queries por frecuencia
-
-    // 1. Update60FPSQuery - TakeDamage, Attack (Crítico)
-    Update60FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
-                                        {
+    // ✅ SIMPLIFICADO: UNA SOLA QUERY - Sin comandos diferidos
+    // Procesa TODAS las entidades en una sola pasada, sin separación por frecuencia
+    BehaviorQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
+                                     {
         TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
         TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
+        TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
 
         for (int32 i = 0; i < Context.GetNumEntities(); ++i)
         {
             FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
             const FZombiCoreFragment& CoreFragment = CoreFragments[i];
+            FZombiTurboSequenceFragment& TurboSequenceFragment = TurboSequenceFragments[i];
+
+            // Guardar estado anterior para detectar cambios
+            EZombiState PreviousState = BehaviorFragment.GetState();
 
             // Calcular distancia al jugador
             float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
@@ -121,92 +101,21 @@ void UZombiBehaviorProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
 
             // Actualizar comportamiento de horda
             UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
-        } });
 
-    // 2. Update30FPSQuery - Chase (Alta prioridad)
-    Update30FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
-                                        {
-        TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-
-        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-        {
-            FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCoreFragment& CoreFragment = CoreFragments[i];
-
-            // Calcular distancia al jugador
-            float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
-            BehaviorFragment.SetStateData(DistanceToPlayer);
-
-            // Actualizar timers de comportamiento
-            UpdateActionTimers(BehaviorFragment, DeltaTime);
-
-            // Evaluar transiciones de estado
-            EvaluateStateTransitions(BehaviorFragment, DistanceToPlayer);
-
-            // Actualizar estado actual
-            UpdateCurrentState(BehaviorFragment, DistanceToPlayer, DeltaTime);
-
-            // Actualizar comportamiento de horda
-            UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
-        } });
-
-    // 3. Update15FPSQuery - Seek, WalkAround (Normal)
-    Update15FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
-                                        {
-        TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-
-        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-        {
-            FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCoreFragment& CoreFragment = CoreFragments[i];
-
-            // Calcular distancia al jugador
-            float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
-            BehaviorFragment.SetStateData(DistanceToPlayer);
-
-            // Actualizar timers de comportamiento
-            UpdateActionTimers(BehaviorFragment, DeltaTime);
-
-            // Evaluar transiciones de estado
-            EvaluateStateTransitions(BehaviorFragment, DistanceToPlayer);
-
-            // Actualizar estado actual
-            UpdateCurrentState(BehaviorFragment, DistanceToPlayer, DeltaTime);
-
-            // Actualizar comportamiento de horda
-            UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
-        } });
-
-    // 4. Update5FPSQuery - Idle, Dead (Mínima)
-    Update5FPSQuery.ForEachEntityChunk(EntityManager, Context, [this, DeltaTime](FMassExecutionContext &Context)
-                                       {
-        TArrayView<FZombiBehaviorFragment> BehaviorFragments = Context.GetMutableFragmentView<FZombiBehaviorFragment>();
-        TArrayView<const FZombiCoreFragment> CoreFragments = Context.GetFragmentView<FZombiCoreFragment>();
-
-        for (int32 i = 0; i < Context.GetNumEntities(); ++i)
-        {
-            FZombiBehaviorFragment& BehaviorFragment = BehaviorFragments[i];
-            const FZombiCoreFragment& CoreFragment = CoreFragments[i];
-
-            // Calcular distancia al jugador
-            float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
-            BehaviorFragment.SetStateData(DistanceToPlayer);
-
-            // Actualizar timers de comportamiento
-            UpdateActionTimers(BehaviorFragment, DeltaTime);
-
-            // Evaluar transiciones de estado
-            EvaluateStateTransitions(BehaviorFragment, DistanceToPlayer);
-
-            // Actualizar estado actual
-            UpdateCurrentState(BehaviorFragment, DistanceToPlayer, DeltaTime);
-
-            // Actualizar comportamiento de horda
-            UpdateHordeBehavior(BehaviorFragment, CoreFragment, DeltaTime);
+            // ✅ DETECTAR CAMBIO DE ESTADO Y MARCAR PARA ACTUALIZACIÓN DE ANIMACIÓN
+            EZombiState CurrentState = BehaviorFragment.GetState();
+            if (PreviousState != CurrentState)
+            {
+                TurboSequenceFragment.bNeedsAnimationUpdate = true;
+                UE_LOG(LogTemp, VeryVerbose, TEXT("🎭 Estado cambiado: %d → %d, marcando para actualización de animación"), 
+                       (int32)PreviousState, (int32)CurrentState);
+            }
         } });
 }
+
+// ===========================
+// MÉTODOS AUXILIARES SIMPLIFICADOS
+// ===========================
 
 void UZombiBehaviorProcessor::EvaluateStateTransitions(FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer)
 {

@@ -54,7 +54,7 @@ struct FZombiTurboSequenceFragment : public FMassFragment
 
 	// ═══ CONSTRUCTOR OPTIMIZADO ═══
 	FZombiTurboSequenceFragment()
-		: TurboSequenceAsset(nullptr), CurrentAnimation(nullptr), PendingTransform(FTransform::Identity), bNeedsAnimationUpdate(false), bNeedsTransformUpdate(false), ShadowQuality(1) // High quality por defecto
+		: TurboSequenceAsset(nullptr), CurrentAnimation(nullptr), PendingTransform(FTransform::Identity), bNeedsAnimationUpdate(false), bNeedsTransformUpdate(false), ShadowQuality(0) // 🧪 TESTING: Sombras desactivadas temporalmente
 	{
 		// PendingAnimationSettings se inicializa automáticamente
 	}

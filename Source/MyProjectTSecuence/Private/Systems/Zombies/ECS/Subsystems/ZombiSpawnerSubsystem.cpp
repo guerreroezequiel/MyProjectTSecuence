@@ -122,6 +122,14 @@ void UZombiSpawnerSubsystem::ClearAllZombis()
 // Crea una entidad Mass con todos los fragmentos necesarios
 FMassEntityHandle UZombiSpawnerSubsystem::CreateZombiMassEntity(const FVector &SpawnLocation)
 {
+    // 🔍 DIAGNÓSTICO: Log entrada (solo primera entidad)
+    static bool bLoggedFirstSpawn = false;
+    if (!bLoggedFirstSpawn)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔍 CreateZombiMassEntity: Iniciando creación en %s"), *SpawnLocation.ToString());
+        bLoggedFirstSpawn = true;
+    }
+
     // Usa el nuevo ZombiMassSubsystem para crear entidades puras
     if (UZombiMassSubsystem *ZombiMassSubsystem = GetWorld()->GetSubsystem<UZombiMassSubsystem>())
     {
@@ -132,12 +140,16 @@ FMassEntityHandle UZombiSpawnerSubsystem::CreateZombiMassEntity(const FVector &S
         {
             CreateTurboSequenceVisualInstance(EntityHandle, SpawnLocation);
         }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ CreateZombiMassEntity: EntityHandle inválido o TurboSequenceAsset NULL"));
+        }
 
         return EntityHandle;
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("No se pudo obtener ZombiMassSubsystem"));
+        UE_LOG(LogTemp, Error, TEXT("❌ CreateZombiMassEntity: No se pudo obtener ZombiMassSubsystem"));
         return FMassEntityHandle();
     }
 }
@@ -268,40 +280,45 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         TurboSequenceFragment.MeshData);
 
     // PASO 11: PATRÓN OFICIAL - PlayAnimation_Concurrent con animación inicial
+
     if (TurboSequenceFragment.TurboSequenceAsset &&
         TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary &&
         TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
     {
-        // Buscar animación Idle por defecto (patrón robusto)
+        // 🎭 BUSCAR ANIMACIONES ESPECÍFICAS DEL MANNEQUIN
         UAnimSequence *DefaultAnimation = nullptr;
 
-        // Primero buscar Idle
+        // Buscar MM_Idle primero (animación por defecto)
         for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
         {
-            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Idle"), ESearchCase::IgnoreCase))
+            if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Idle"), ESearchCase::IgnoreCase))
             {
                 DefaultAnimation = AnimItem.Animation;
+                UE_LOG(LogTemp, Log, TEXT("✅ Animación MM_Idle encontrada y configurada"));
                 break;
             }
         }
 
-        // Si no hay Idle, buscar Walk
+        // Si no hay MM_Idle, buscar MM_Walk_Fwd
         if (!DefaultAnimation)
         {
             for (const FAnimationLibraryItem_Lf &AnimItem : TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations)
             {
-                if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("Walk"), ESearchCase::IgnoreCase))
+                if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(TEXT("MM_Walk_Fwd"), ESearchCase::IgnoreCase))
                 {
                     DefaultAnimation = AnimItem.Animation;
+                    UE_LOG(LogTemp, Log, TEXT("✅ Animación MM_Walk_Fwd encontrada y configurada"));
                     break;
                 }
             }
         }
 
         // Como último recurso, usar la primera animación disponible
-        if (!DefaultAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation)
+        if (!DefaultAnimation && TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations.Num() > 0)
         {
             DefaultAnimation = TurboSequenceFragment.TurboSequenceAsset->AnimationLibrary->Animations[0].Animation;
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ Usando primera animación disponible: %s"),
+                   DefaultAnimation ? *DefaultAnimation->GetName() : TEXT("NULL"));
         }
 
         // PATRÓN OFICIAL - PlayAnimation_Concurrent

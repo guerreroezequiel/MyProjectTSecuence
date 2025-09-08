@@ -76,6 +76,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Zombi System")
     void AutoSpawnZombiesForTesting(int32 Count = 500, float SpawnRadius = 2000.0f);
 
+    /**
+     * Spawna entidades usando SOLO TurboSequence, sin ECS ni Mass Entity
+     * Para testing de performance puro de TurboSequence
+     */
+    void SpawnPureTurboSequenceEntities(int32 Count, const FVector &SpawnCenter, float SpawnRadius);
+
+    /**
+     * Obtiene la animación correcta basada en el estado del zombie
+     */
+    UAnimSequence *
+    GetAnimationForState(EZombiState State, UTurboSequence_MeshAsset_Lf *Asset);
+
+    /**
+     * 🔍 DIAGNÓSTICO: Verificar qué tags tienen las entidades
+     */
+    void DiagnoseEntityTags();
+
 protected:
     // ===========================
     // FASE 1: ECS "BIG LOOP" PURO
@@ -217,6 +234,10 @@ private:
 
     UPROPERTY()
     APawn *PlayerPawn = nullptr;
+
+    // Variables para TurboSequence puro (sin ECS)
+    TArray<FVector> PureTSPositions;
+    TArray<int32> PureTSInstanceIDs;
 
     // ===============================
     // CACHE DE OPTIMIZACIÓN

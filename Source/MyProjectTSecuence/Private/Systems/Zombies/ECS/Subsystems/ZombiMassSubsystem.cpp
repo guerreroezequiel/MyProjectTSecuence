@@ -62,15 +62,25 @@ void UZombiMassSubsystem::Deinitialize()
 FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnLocation,
                                                            UTurboSequence_MeshAsset_Lf *TurboSequenceAsset)
 {
+    // 🔍 DIAGNÓSTICO: Log entrada (solo primera entidad)
+    static bool bLoggedFirstEntity = false;
+    if (!bLoggedFirstEntity)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔍 RegisterZombiEntity: Iniciando creación de entidad en %s"), *SpawnLocation.ToString());
+        bLoggedFirstEntity = true;
+    }
+
     // Intenta obtener el MassEntitySubsystem si no lo tenemos
     if (!MassEntitySubsystem)
     {
+        UE_LOG(LogTemp, Log, TEXT("🔍 RegisterZombiEntity: Obteniendo MassEntitySubsystem"));
         MassEntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
         if (!MassEntitySubsystem)
         {
-            UE_LOG(LogTemp, Warning, TEXT("No se puede registrar entidad: MassEntitySubsystem no disponible"));
+            UE_LOG(LogTemp, Error, TEXT("❌ RegisterZombiEntity: MassEntitySubsystem no disponible"));
             return FMassEntityHandle();
         }
+        UE_LOG(LogTemp, Log, TEXT("✅ RegisterZombiEntity: MassEntitySubsystem obtenido"));
     }
 
     // Crea la entidad Mass usando el método más simple de UE5.5
@@ -117,14 +127,30 @@ FMassEntityHandle UZombiMassSubsystem::RegisterZombiEntity(const FVector &SpawnL
     // Crea la entidad
     FMassEntityHandle EntityHandle = EntityManager.CreateEntity(FragmentList);
 
+    // 🔍 DIAGNÓSTICO: Verificar si la entidad se creó
+    if (EntityHandle.IsValid())
+    {
+        UE_LOG(LogTemp, Log, TEXT("✅ RegisterZombiEntity: Entidad creada exitosamente (ID: %d)"), EntityHandle.Index);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ RegisterZombiEntity: Falló la creación de entidad"));
+        return FMassEntityHandle();
+    }
+
     // Agregar tags necesarios para que los queries optimizados funcionen
     EntityManager.AddTagToEntity(EntityHandle, FActiveTag::StaticStruct());
+
+    // ✅ AGREGAR TAG DE LOD: Por defecto, todas las entidades empiezan con FUpdate30FPS
+    // Esto permite que el coordinador las procese en el Big Loop
+    EntityManager.AddTagToEntity(EntityHandle, FUpdate30FPS::StaticStruct());
 
     // IMPORTANTE: NO agregar FDeadTag - el query del MovementProcessor requiere EMassFragmentPresence::None para DeadTag
     // Esto significa que las entidades NO deben tener el DeadTag para ser procesadas
 
     // Guarda la referencia para limpieza
     RegisteredEntities.Add(EntityHandle);
+    UE_LOG(LogTemp, Log, TEXT("✅ RegisterZombiEntity: Entidad registrada exitosamente. Total: %d"), RegisteredEntities.Num());
 
     return EntityHandle;
 }

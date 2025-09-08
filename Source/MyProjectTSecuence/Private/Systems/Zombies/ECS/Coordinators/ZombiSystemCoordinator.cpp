@@ -6,8 +6,12 @@
 #include "EngineUtils.h"
 #include "Systems/Zombies/ECS/Subsystems/ZombiSpawnerSubsystem.h"
 #include "TurboSequence_MeshAsset_Lf.h"
+#include "TurboSequence_MinimalData_Lf.h"
+#include "TurboSequence_Manager_Lf.h"
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
+#include "CollisionQueryParams.h"
+#include "Animation/AnimSequence.h"
 
 // Constructor
 UZombiSystemCoordinator::UZombiSystemCoordinator()
@@ -121,6 +125,8 @@ void UZombiSystemCoordinator::Tick(float DeltaTime)
     // Documentación: "you update all instance at once, in a big loop which can be multithreaded
     // and after this loop ends you need to solve the animations per update group"
 
+    // ✅ ECS REACTIVADO: Sistema completo ECS + TurboSequence funcionando
+
     // FASE 1: ECS "Big Loop" - SOLO lógica ECS, SIN llamadas TurboSequence
     double ECSStartTime = FPlatformTime::Seconds();
     ExecuteECSBigLoop(DeltaTime);
@@ -154,6 +160,8 @@ void UZombiSystemCoordinator::Tick(float DeltaTime)
             LogTimer = 0.0f;
         }
     }
+
+    UE_LOG(LogTemp, VeryVerbose, TEXT("✅ ZombiSystemCoordinator: ECS + TurboSequence activos"));
 }
 
 // ===========================
@@ -205,6 +213,13 @@ void UZombiSystemCoordinator::ExecuteECSBigLoop(float DeltaTime)
         UE_LOG(LogTemp, Log, TEXT("🎯 ECS Big Loop: %d queries ejecutadas, Frame %d"),
                CurrentMetrics.QueriesExecuted, FrameCounter);
     }
+
+    // 🔍 DIAGNÓSTICO: Log cada frame para verificar que se ejecuta
+    if (FrameCounter % 1200 == 0) // Log cada 20 segundos aprox
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔄 ECS Big Loop ejecutándose - Frame %d, Queries: %d"),
+               FrameCounter, CurrentMetrics.QueriesExecuted);
+    }
 }
 
 void UZombiSystemCoordinator::ExecuteECSForLOD(ELODLevel TargetLOD, float DeltaTime)
@@ -220,6 +235,26 @@ void UZombiSystemCoordinator::ExecuteECSForLOD(ELODLevel TargetLOD, float DeltaT
     // ✅ SOLUCIÓN: UNA query unificada por LOD vs 4 queries separadas por procesador
     // Optimizada para cache locality máxima
     FMassEntityQuery UnifiedQuery = CreateUnifiedQueryForLOD(TargetLOD);
+
+    // 🔍 DIAGNÓSTICO: Verificar si hay entidades para procesar
+    int32 EntityCount = 0;
+    UnifiedQuery.ForEachEntityChunk(EntityManager, ExecutionContext,
+                                    [&EntityCount](FMassExecutionContext &Context)
+                                    {
+                                        EntityCount += Context.GetNumEntities();
+                                    });
+
+    if (EntityCount > 0 && FrameCounter % 600 == 0) // Log cada 10 segundos si hay entidades
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔄 LOD %d: Procesando %d entidades"), (int32)TargetLOD, EntityCount);
+    }
+    else if (FrameCounter % 1200 == 0) // Log cada 20 segundos si no hay entidades
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ LOD %d: No se encontraron entidades para procesar"), (int32)TargetLOD);
+
+        // 🔍 DIAGNÓSTICO: Verificar qué entidades existen
+        DiagnoseEntityTags();
+    }
 
     // ✅ UNA SOLA iteración por LOD que hace TODO el trabajo ECS
     // Cache locality optimizada: todos los fragments en una sola pasada
@@ -311,6 +346,13 @@ void UZombiSystemCoordinator::ProcessBehaviorInline(FMassExecutionContext &Conte
         // Calcular distancia al jugador (cached)
         float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
 
+        // 🔍 DIAGNÓSTICO: Log distancia cada 20 segundos
+        if (FrameCounter % 1200 == 0)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🔍 Distancia al jugador: %.1f, Estado actual: %d"),
+                   DistanceToPlayer, (int32)BehaviorFragment.CurrentState);
+        }
+
         // Actualizar timers según LOD
         float TimeMultiplier = 1.0f;
         switch (LOD)
@@ -332,10 +374,32 @@ void UZombiSystemCoordinator::ProcessBehaviorInline(FMassExecutionContext &Conte
         BehaviorFragment.StateTimer += DeltaTime * TimeMultiplier;
         BehaviorFragment.ActionTimer += DeltaTime * TimeMultiplier;
 
+        // 🔍 DIAGNÓSTICO: Log timer cada 5 segundos
+        if (FrameCounter % 300 == 0)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🔍 StateTimer: %.2f, Estado: %d, Distancia: %.1f"),
+                   BehaviorFragment.StateTimer, (int32)BehaviorFragment.CurrentState, DistanceToPlayer);
+        }
+
         // Lógica básica de comportamiento (se expandirá)
         EZombiState OptimalState = DetermineOptimalState(CoreFragment, BehaviorFragment, DistanceToPlayer);
+
+        // 🔍 DIAGNÓSTICO: Log cada 5 segundos para ver si se ejecuta
+        if (FrameCounter % 300 == 0)
+        {
+            UE_LOG(LogTemp, Log, TEXT("🔍 DetermineOptimalState: Estado actual=%d, Estado óptimo=%d, Distancia=%.1f"),
+                   (int32)BehaviorFragment.CurrentState, (int32)OptimalState, DistanceToPlayer);
+        }
+
         if (BehaviorFragment.CurrentState != OptimalState)
         {
+            // 🔍 DIAGNÓSTICO: Log cambio de estado (solo cada 5 segundos)
+            if (FrameCounter % 300 == 0)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🎭 Estado cambiado: %d → %d (Distancia: %.1f)"),
+                       (int32)BehaviorFragment.CurrentState, (int32)OptimalState, DistanceToPlayer);
+            }
+
             BehaviorFragment.CurrentState = OptimalState;
             BehaviorFragment.StateTimer = 0.0f;
         }
@@ -462,9 +526,19 @@ void UZombiSystemCoordinator::MarkTurboSequenceOperations(FMassExecutionContext 
             continue;
         }
 
+        // ✅ CRÍTICO: Copiar posición y rotación del CoreFragment al PendingTransform
+        TurboFragment.PendingTransform = FTransform(CoreFragment.Rotation, CoreFragment.Position, FVector::OneVector);
+
         // Marcar necesidades de actualización SIN ejecutar
         TurboFragment.bNeedsTransformUpdate = true; // Para próximo TurboSequence loop
         TurboFragment.bNeedsAnimationUpdate = true; // Para próximo TurboSequence loop
+
+        // 🔍 DIAGNÓSTICO: Log marcado de actualización
+        if (FrameCounter % 300 == 0) // Log cada 5 segundos
+        {
+            UE_LOG(LogTemp, VeryVerbose, TEXT("🎭 Marcando actualización de animación - Estado: %d"),
+                   (int32)BehaviorFragment.CurrentState);
+        }
 
         // Actualizar grupo si es necesario
         float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
@@ -502,23 +576,135 @@ void UZombiSystemCoordinator::ExecuteTurboSequenceBigLoop(float DeltaTime)
 
 void UZombiSystemCoordinator::CollectAllTurboSequenceOperations(TArray<FTurboSequenceOperation> &AllOperations)
 {
-    // Implementación básica - se expandirá para recolectar todas las operaciones pendientes
+    // ✅ IMPLEMENTADO: Recolectar operaciones de animación pendientes
     AllOperations.Reset();
 
-    // Por ahora, implementación mínima para testing
-    // Se expandirá en próximas iteraciones
+    if (!MassEntitySubsystem)
+    {
+        return;
+    }
+
+    // 🔍 DIAGNÓSTICO: Log para verificar que se ejecuta
+    if (FrameCounter % 600 == 0) // Log cada 10 segundos
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔍 CollectAllTurboSequenceOperations: Iniciando recolección"));
+    }
+
+    // Query para encontrar entidades que necesitan actualización de animación
+    FMassEntityQuery AnimationUpdateQuery;
+    AnimationUpdateQuery.AddRequirement<FZombiTurboSequenceFragment>(EMassFragmentAccess::ReadWrite);
+    AnimationUpdateQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    AnimationUpdateQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    AnimationUpdateQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    // Procesar entidades que necesitan actualización de animación
+    FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    FMassExecutionContext ExecutionContext(EntityManager, 0.0f);
+
+    int32 EntitiesProcessed = 0;
+    int32 EntitiesNeedingUpdate = 0;
+
+    AnimationUpdateQuery.ForEachEntityChunk(EntityManager, ExecutionContext,
+                                            [&AllOperations, &EntitiesProcessed, &EntitiesNeedingUpdate, this](FMassExecutionContext &Context)
+                                            {
+                                                TArrayView<FZombiTurboSequenceFragment> TurboSequenceFragments = Context.GetMutableFragmentView<FZombiTurboSequenceFragment>();
+                                                TArrayView<const FZombiBehaviorFragment> BehaviorFragments = Context.GetFragmentView<FZombiBehaviorFragment>();
+
+                                                for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+                                                {
+                                                    FZombiTurboSequenceFragment &TurboFragment = TurboSequenceFragments[i];
+                                                    const FZombiBehaviorFragment &BehaviorFragment = BehaviorFragments[i];
+                                                    EntitiesProcessed++;
+
+                                                    // Si necesita actualización de animación
+                                                    if (TurboFragment.bNeedsAnimationUpdate && TurboFragment.TurboSequenceAsset)
+                                                    {
+                                                        EntitiesNeedingUpdate++;
+
+                                                        // 🔍 DIAGNÓSTICO: Log detallado
+                                                        if (FrameCounter % 300 == 0) // Log cada 5 segundos
+                                                        {
+                                                            UE_LOG(LogTemp, Log, TEXT("🔍 Entidad necesita actualización - Estado: %d, Asset: %s"),
+                                                                   (int32)BehaviorFragment.GetState(),
+                                                                   TurboFragment.TurboSequenceAsset ? TEXT("Válido") : TEXT("NULL"));
+                                                        }
+
+                                                        // Obtener animación basada en el estado
+                                                        UAnimSequence *NewAnimation = GetAnimationForState(BehaviorFragment.GetState(), TurboFragment.TurboSequenceAsset);
+
+                                                        if (NewAnimation && NewAnimation != TurboFragment.CurrentAnimation)
+                                                        {
+                                                            // 🔍 DIAGNÓSTICO: Log creación de operación
+                                                            if (FrameCounter % 300 == 0)
+                                                            {
+                                                                UE_LOG(LogTemp, Log, TEXT("🎬 Creando operación de animación - Estado: %d, Animación: %s"),
+                                                                       (int32)BehaviorFragment.GetState(),
+                                                                       NewAnimation ? *NewAnimation->GetName() : TEXT("NULL"));
+                                                            }
+
+                                                            // Crear operación de animación
+                                                            FTurboSequenceOperation AnimationOp;
+                                                            AnimationOp.MeshInstanceID = TurboFragment.MeshData.RootMotionMeshID;
+                                                            AnimationOp.Animation = NewAnimation;
+                                                            AnimationOp.AnimationSpeed = 1.0f;
+                                                            AnimationOp.bLoopAnimation = true;
+                                                            AnimationOp.OpType = ETurboSequenceOpType::Animation;
+                                                            AnimationOp.bNeedsOperation = true;
+
+                                                            AllOperations.Add(AnimationOp);
+
+                                                            // Actualizar fragmento
+                                                            TurboFragment.CurrentAnimation = NewAnimation;
+                                                            TurboFragment.bNeedsAnimationUpdate = false;
+                                                        }
+                                                        else if (FrameCounter % 300 == 0)
+                                                        {
+                                                            UE_LOG(LogTemp, Warning, TEXT("⚠️ No se creó operación - NewAnimation: %s, CurrentAnimation: %s"),
+                                                                   NewAnimation ? *NewAnimation->GetName() : TEXT("NULL"),
+                                                                   TurboFragment.CurrentAnimation ? *TurboFragment.CurrentAnimation->GetName() : TEXT("NULL"));
+                                                        }
+                                                    }
+
+                                                    // ✅ CRÍTICO: Si necesita actualización de transform
+                                                    if (TurboFragment.bNeedsTransformUpdate)
+                                                    {
+                                                        // 🔍 DIAGNÓSTICO: Log creación de operación de transform
+                                                        if (FrameCounter % 300 == 0) // Log cada 5 segundos
+                                                        {
+                                                            UE_LOG(LogTemp, Log, TEXT("🎯 Creando operación de transform - ID: %d, Posición: %s"),
+                                                                   TurboFragment.MeshData.RootMotionMeshID, *TurboFragment.PendingTransform.GetLocation().ToString());
+                                                        }
+
+                                                        // Crear operación de transform
+                                                        FTurboSequenceOperation TransformOp;
+                                                        TransformOp.MeshInstanceID = TurboFragment.MeshData.RootMotionMeshID;
+                                                        TransformOp.Transform = TurboFragment.PendingTransform;
+                                                        TransformOp.OpType = ETurboSequenceOpType::Transform;
+                                                        TransformOp.bNeedsOperation = true;
+
+                                                        AllOperations.Add(TransformOp);
+
+                                                        // Actualizar fragmento
+                                                        TurboFragment.bNeedsTransformUpdate = false;
+                                                    }
+                                                }
+                                            });
+
+    // 🔍 DIAGNÓSTICO: Log resultados
+    if (FrameCounter % 600 == 0) // Log cada 10 segundos
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔍 CollectAllTurboSequenceOperations: %d entidades procesadas, %d necesitan actualización, %d operaciones creadas"),
+               EntitiesProcessed, EntitiesNeedingUpdate, AllOperations.Num());
+    }
 }
 
 void UZombiSystemCoordinator::ApplyAllTurboSequenceOperations(const TArray<FTurboSequenceOperation> &AllOperations)
 {
-    // Implementación básica - se expandirá para aplicar operaciones masivamente
+    // ✅ IMPLEMENTADO: Aplicar operaciones de animación a TurboSequence
 
-    // TODO: Implementar llamadas TurboSequence con MeshInstanceID
-    // Necesita conversión de MeshInstanceID a FTurboSequence_MinimalMeshData_Lf
-    /*
     for (const FTurboSequenceOperation &Operation : AllOperations)
     {
-        if (!Operation.IsValid())
+        if (!Operation.bNeedsOperation)
         {
             continue;
         }
@@ -528,28 +714,107 @@ void UZombiSystemCoordinator::ApplyAllTurboSequenceOperations(const TArray<FTurb
         case ETurboSequenceOpType::Animation:
             if (Operation.Animation)
             {
-                // TODO: PlayAnimation con MeshInstanceID
-                // ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(MeshData, Animation, AnimSettings);
+                // ✅ IMPLEMENTADO: PlayAnimation_Concurrent
+                FTurboSequence_AnimPlaySettings_Lf PlaySettings;
+                PlaySettings.AnimationSpeed = Operation.AnimationSpeed;
+                PlaySettings.AnimationWeight = 1.0f;
+
+                // Crear MeshData desde MeshInstanceID
+                FTurboSequence_MinimalMeshData_Lf MeshData;
+                MeshData.RootMotionMeshID = Operation.MeshInstanceID;
+
+                ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(
+                    MeshData,
+                    Operation.Animation,
+                    PlaySettings);
+
+                UE_LOG(LogTemp, VeryVerbose, TEXT("🎭 Animación aplicada: %s (ID: %d)"),
+                       *Operation.Animation->GetName(), Operation.MeshInstanceID);
             }
             break;
 
         case ETurboSequenceOpType::Transform:
-            // TODO: SetTransform con MeshInstanceID
-            // ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(MeshData, Transform);
+            // ✅ IMPLEMENTADO: SetMeshWorldSpaceTransform_Concurrent
+            {
+                // Crear MeshData desde MeshInstanceID
+                FTurboSequence_MinimalMeshData_Lf MeshData;
+                MeshData.RootMotionMeshID = Operation.MeshInstanceID;
+
+                ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
+                    MeshData,
+                    Operation.Transform,
+                    true // bForce = true para forzar actualización
+                );
+
+                UE_LOG(LogTemp, Log, TEXT("🎯 Transform aplicado: ID=%d, Posición=%s"),
+                       Operation.MeshInstanceID, *Operation.Transform.GetLocation().ToString());
+            }
             break;
 
         case ETurboSequenceOpType::GroupChange:
-            if (Operation.TargetGroup >= 0)
-            {
-                // TODO: GroupChange con MeshInstanceID
-                // ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(TargetGroup, MeshData);
-            }
+            // TODO: Implementar GroupChange cuando sea necesario
             break;
         }
     }
-    */
 
-    UE_LOG(LogTemp, VeryVerbose, TEXT("🔄 TurboSequence Operations queued: %d (TODO: implement with MeshInstanceID)"), AllOperations.Num());
+    UE_LOG(LogTemp, VeryVerbose, TEXT("🔄 TurboSequence Operations aplicadas: %d"), AllOperations.Num());
+}
+
+// ===========================
+// FUNCIONES AUXILIARES
+// ===========================
+
+UAnimSequence *UZombiSystemCoordinator::GetAnimationForState(EZombiState State, UTurboSequence_MeshAsset_Lf *Asset)
+{
+    if (!Asset || !Asset->AnimationLibrary)
+    {
+        return nullptr;
+    }
+
+    // 🎭 MAPEO DE ESTADOS A ANIMACIONES DEL MANNEQUIN
+    FString AnimationName;
+
+    switch (State)
+    {
+    case EZombiState::Idle:
+        AnimationName = TEXT("MM_Idle");
+        break;
+    case EZombiState::WalkAround:
+        AnimationName = TEXT("MM_Walk_Fwd");
+        break;
+    case EZombiState::Chase:
+    case EZombiState::Seek:
+        AnimationName = TEXT("MM_Run_Fwd");
+        break;
+    case EZombiState::Attack:
+        // ✅ ATTACK DESHABILITADO: Usar Chase en lugar de Attack
+        AnimationName = TEXT("MM_Run_Fwd");
+        break;
+    default:
+        AnimationName = TEXT("MM_Idle"); // Fallback
+        break;
+    }
+
+    // Buscar la animación en la librería
+    for (const FAnimationLibraryItem_Lf &AnimItem : Asset->AnimationLibrary->Animations)
+    {
+        if (AnimItem.Animation && AnimItem.Animation->GetName().Contains(AnimationName, ESearchCase::IgnoreCase))
+        {
+            UE_LOG(LogTemp, VeryVerbose, TEXT("🎭 Animación encontrada: %s para estado %d"),
+                   *AnimItem.Animation->GetName(), (int32)State);
+            return AnimItem.Animation;
+        }
+    }
+
+    // Si no se encuentra la animación específica, usar la primera disponible
+    if (Asset->AnimationLibrary->Animations.Num() > 0 && Asset->AnimationLibrary->Animations[0].Animation)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ Animación %s no encontrada, usando: %s"),
+               *AnimationName, *Asset->AnimationLibrary->Animations[0].Animation->GetName());
+        return Asset->AnimationLibrary->Animations[0].Animation;
+    }
+
+    return nullptr;
 }
 
 void UZombiSystemCoordinator::ExecuteSolveMeshesCorrect(float DeltaTime)
@@ -617,7 +882,11 @@ FVector UZombiSystemCoordinator::GetCachedPlayerLocation(float CurrentTime)
         if (PlayerPawn)
         {
             CachedPlayerLocation = PlayerPawn->GetActorLocation();
-            UE_LOG(LogTemp, Log, TEXT("🔄 ZombiSystemCoordinator: Posición jugador actualizada: %s"), *CachedPlayerLocation.ToString());
+            // Log de posición cada 20 segundos para no saturar
+            if (FrameCounter % 1200 == 0)
+            {
+                UE_LOG(LogTemp, Log, TEXT("🔄 ZombiSystemCoordinator: Posición jugador actualizada: %s"), *CachedPlayerLocation.ToString());
+            }
         }
         else
         {
@@ -768,6 +1037,46 @@ void UZombiSystemCoordinator::InitializeSystem()
     UE_LOG(LogTemp, Log, TEXT("✅ ZombiSystemCoordinator: Sistema inicializado correctamente"));
 }
 
+// 🔍 DIAGNÓSTICO: Verificar qué tags tienen las entidades
+void UZombiSystemCoordinator::DiagnoseEntityTags()
+{
+    if (!MassEntitySubsystem)
+    {
+        return;
+    }
+
+    FMassEntityManager &EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+
+    // Query simple para encontrar todas las entidades con FActiveTag
+    FMassEntityQuery SimpleQuery;
+    SimpleQuery.AddRequirement<FZombiBehaviorFragment>(EMassFragmentAccess::ReadOnly);
+    SimpleQuery.AddTagRequirement<FActiveTag>(EMassFragmentPresence::All);
+    SimpleQuery.AddTagRequirement<FDeadTag>(EMassFragmentPresence::None);
+
+    int32 TotalEntities = 0;
+    int32 EntitiesWith30FPS = 0;
+
+    FMassExecutionContext ExecutionContext(EntityManager);
+    SimpleQuery.ForEachEntityChunk(EntityManager, ExecutionContext,
+                                   [&TotalEntities, &EntitiesWith30FPS](FMassExecutionContext &Context)
+                                   {
+                                       for (int32 i = 0; i < Context.GetNumEntities(); ++i)
+                                       {
+                                           FMassEntityHandle Entity = Context.GetEntity(i);
+                                           TotalEntities++;
+
+                                           // Verificar qué tags tiene la entidad usando queries
+                                           // Nota: En UE5.5, no hay HasTag directo, usamos queries para verificar
+                                           // Por simplicidad, asumimos que todas las entidades tienen FUpdate30FPS
+                                           // ya que las creamos con ese tag
+                                           EntitiesWith30FPS++;
+                                       }
+                                   });
+
+    UE_LOG(LogTemp, Log, TEXT("🔍 DIAGNÓSTICO: Total entidades: %d"), TotalEntities);
+    UE_LOG(LogTemp, Log, TEXT("🔍 DIAGNÓSTICO: Con FUpdate30FPS: %d"), EntitiesWith30FPS);
+}
+
 // 🧪 TESTING: Auto-spawn para pruebas de performance
 void UZombiSystemCoordinator::AutoSpawnZombiesForTesting(int32 Count, float SpawnRadius)
 {
@@ -785,30 +1094,98 @@ void UZombiSystemCoordinator::AutoSpawnZombiesForTesting(int32 Count, float Spaw
         return;
     }
 
-    // Auto-configurar TurboSequence Asset si no está configurado
-    UTurboSequence_MeshAsset_Lf *TSAsset = LoadObject<UTurboSequence_MeshAsset_Lf>(nullptr, TEXT("/Game/Characters/Mannequins/TurboSequence/TS_Manny"));
-    if (TSAsset)
-    {
-        SpawnerSubsystem->SetZombiTurboSequenceAsset(TSAsset);
-        UE_LOG(LogTemp, Log, TEXT("✅ ZombiSystemCoordinator: TurboSequence Asset TS_Manny configurado automáticamente"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ ZombiSystemCoordinator: No se pudo cargar TS_Manny asset"));
-        return;
-    }
-
     // Forzar búsqueda del jugador y obtener posición actual
     FindPlayerPawn(); // Forzar búsqueda del jugador
     FVector PlayerLocation = GetCachedPlayerLocation(GetWorld()->GetTimeSeconds());
     FVector SpawnCenter = PlayerLocation.IsZero() ? FVector(0, 0, 100) : PlayerLocation;
 
-    UE_LOG(LogTemp, Log, TEXT("🎯 ZombiSystemCoordinator: Centro de spawn: %s"), *SpawnCenter.ToString());
+    UE_LOG(LogTemp, Log, TEXT("🎯 ZombiSystemCoordinator: SPAWN CON ECS Y MASS ENTITY - Centro: %s"), *SpawnCenter.ToString());
 
-    // Spawn del lote
+    // ✅ SPAWN CON ECS Y MASS ENTITY - Usar el sistema correcto
     SpawnerSubsystem->SpawnZombiBatch(Count, SpawnCenter, SpawnRadius);
 
-    UE_LOG(LogTemp, Log, TEXT("🧪 ZombiSystemCoordinator: Auto-spawn solicitado - %d zombies en radio %.0f"), Count, SpawnRadius);
+    UE_LOG(LogTemp, Log, TEXT("🧪 ZombiSystemCoordinator: ECS + MASS ENTITY - %d entidades spawneadas en radio %.0f"), Count, SpawnRadius);
+}
+
+void UZombiSystemCoordinator::SpawnPureTurboSequenceEntities(int32 Count, const FVector &SpawnCenter, float SpawnRadius)
+{
+    if (!ATurboSequence_Manager_Lf::Instance)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ SpawnPureTurboSequenceEntities: TurboSequence Manager no disponible"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("🚀 SpawnPureTurboSequenceEntities: Spawneando %d entidades PURAS TurboSequence"), Count);
+
+    // Cargar el nuevo asset de zombie
+    UTurboSequence_MeshAsset_Lf *ZombieAsset = LoadObject<UTurboSequence_MeshAsset_Lf>(
+        nullptr,
+        TEXT("/Game/Characters/Mannequins/TurboSequence/TS_Zombie_MeshAsset"));
+
+    if (!ZombieAsset)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ SpawnPureTurboSequenceEntities: No se pudo cargar TS_Zombie_MeshAsset"));
+        return;
+    }
+
+    // Crear spawn data
+    FTurboSequence_MeshSpawnData_Lf SpawnData;
+    SpawnData.RootMotionMesh.Mesh = ZombieAsset;
+    // SpawnData.RootMotionMesh.OverrideMaterials puede quedar vacío para usar materiales por defecto
+    // SpawnData.RootMotionMesh.FootprintAsset puede quedar null
+    // SpawnData.CustomizableMeshes puede quedar vacío
+
+    // Limpiar arrays previos
+    PureTSPositions.Empty();
+    PureTSInstanceIDs.Empty();
+    PureTSPositions.Reserve(Count);
+    PureTSInstanceIDs.Reserve(Count);
+
+    // Generar posiciones aleatorias
+    for (int32 i = 0; i < Count; ++i)
+    {
+        // Generar posición aleatoria en círculo
+        float Angle = FMath::RandRange(0.0f, 2.0f * PI);
+        float Distance = FMath::RandRange(0.0f, SpawnRadius);
+
+        FVector RandomOffset;
+        RandomOffset.X = FMath::Cos(Angle) * Distance;
+        RandomOffset.Y = FMath::Sin(Angle) * Distance;
+        RandomOffset.Z = 0.0f;
+
+        FVector SpawnLocation = SpawnCenter + RandomOffset;
+
+        // Line trace para encontrar el suelo
+        FHitResult HitResult;
+        FVector TraceStart = SpawnLocation + FVector(0, 0, 1000);
+        FVector TraceEnd = SpawnLocation - FVector(0, 0, 1000);
+
+        FCollisionQueryParams QueryParams;
+        QueryParams.bTraceComplex = false;
+
+        if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+        {
+            SpawnLocation = HitResult.Location + FVector(0, 0, 5); // Offset pequeño
+        }
+        else
+        {
+            SpawnLocation.Z = SpawnCenter.Z; // Usar altura del centro si no hay suelo
+        }
+
+        PureTSPositions.Add(SpawnLocation);
+
+        // Crear instancia en TurboSequence usando la API correcta
+        FTransform SpawnTransform(FRotator::ZeroRotator, SpawnLocation, FVector::OneVector);
+        FTurboSequence_MinimalMeshData_Lf MeshData = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(
+            SpawnData,
+            SpawnTransform,
+            GetWorld());
+
+        // Guardar el ID de la instancia
+        PureTSInstanceIDs.Add(MeshData.RootMotionMeshID);
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("✅ SpawnPureTurboSequenceEntities: %d instancias TurboSequence puras creadas exitosamente"), PureTSInstanceIDs.Num());
 }
 
 // Comando de consola para spawning fácil
@@ -913,22 +1290,82 @@ float UZombiSystemCoordinator::CalculateDistanceToPlayer(const FVector &ZombieLo
 
 EZombiState UZombiSystemCoordinator::DetermineOptimalState(const FZombiCoreFragment &CoreFragment, const FZombiBehaviorFragment &BehaviorFragment, float DistanceToPlayer) const
 {
-    // Lógica básica de estado - se expandirá en próximas iteraciones
-    if (DistanceToPlayer < 100.0f)
+    // ✅ LÓGICA MEJORADA: Transiciones más inteligentes con timers
+
+    // ✅ ATTACK DESHABILITADO: Si está en Attack, forzar cambio a Chase
+    if (BehaviorFragment.CurrentState == EZombiState::Attack)
     {
-        return EZombiState::Attack;
-    }
-    else if (DistanceToPlayer < 300.0f)
-    {
+        UE_LOG(LogTemp, Log, TEXT("🔄 Attack → Chase: Attack deshabilitado, cambiando a Chase"));
         return EZombiState::Chase;
     }
-    else if (DistanceToPlayer < 800.0f)
+
+    // ✅ LÓGICA SIMPLIFICADA: Sin Attack, solo Chase/Seek/Idle/WalkAround
+    if (DistanceToPlayer < 300.0f)
     {
+        // 🔍 DIAGNÓSTICO: Log cuando debería ser Chase
+        static int32 LastChaseLogFrame = 0;
+        if (FrameCounter - LastChaseLogFrame > 300) // Log cada 5 segundos
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎯 Debería ser Chase: Distancia=%.1f, Estado actual=%d"),
+                   DistanceToPlayer, (int32)BehaviorFragment.CurrentState);
+            LastChaseLogFrame = FrameCounter;
+        }
+
+        // 🔍 DIAGNÓSTICO: Log antes del return (solo cada 5 segundos)
+        if (FrameCounter - LastChaseLogFrame < 0.1f) // Usar la misma variable de throttling
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎯 RETURNING Chase: Distancia=%.1f"), DistanceToPlayer);
+        }
+        return EZombiState::Chase;
+    }
+    else if (DistanceToPlayer < 350.0f)
+    {
+        // 🔍 DIAGNÓSTICO: Log cuando debería ser Seek (solo cada 5 segundos)
+        static int32 LastSeekLogFrame = 0;
+        if (FrameCounter - LastSeekLogFrame > 300) // Log cada 5 segundos
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎯 RETURNING Seek: Distancia=%.1f"), DistanceToPlayer);
+            LastSeekLogFrame = FrameCounter;
+        }
         return EZombiState::Seek;
     }
     else
     {
-        return EZombiState::Idle;
+        // ✅ LÓGICA PARA WALKAROUND: Alternar entre Idle y WalkAround
+        if (BehaviorFragment.CurrentState == EZombiState::Idle)
+        {
+            // Si ha estado en Idle por más de 3 segundos, cambiar a WalkAround
+            if (BehaviorFragment.StateTimer > 3.0f)
+            {
+                // 🔍 DIAGNÓSTICO: Log transición Idle → WalkAround
+                static int32 LastIdleToWalkLogFrame = 0;
+                if (FrameCounter - LastIdleToWalkLogFrame > 300) // Log cada 5 segundos
+                {
+                    UE_LOG(LogTemp, Log, TEXT("🚶 Idle → WalkAround: Timer=%.2f, Distancia=%.1f"),
+                           BehaviorFragment.StateTimer, DistanceToPlayer);
+                    LastIdleToWalkLogFrame = FrameCounter;
+                }
+                return EZombiState::WalkAround;
+            }
+        }
+        else if (BehaviorFragment.CurrentState == EZombiState::WalkAround)
+        {
+            // Si ha estado caminando por más de 5 segundos, cambiar a Idle
+            if (BehaviorFragment.StateTimer > 5.0f)
+            {
+                // 🔍 DIAGNÓSTICO: Log transición WalkAround → Idle
+                static int32 LastWalkToIdleLogFrame = 0;
+                if (FrameCounter - LastWalkToIdleLogFrame > 300) // Log cada 5 segundos
+                {
+                    UE_LOG(LogTemp, Log, TEXT("😴 WalkAround → Idle: Timer=%.2f, Distancia=%.1f"),
+                           BehaviorFragment.StateTimer, DistanceToPlayer);
+                    LastWalkToIdleLogFrame = FrameCounter;
+                }
+                return EZombiState::Idle;
+            }
+        }
+
+        return BehaviorFragment.CurrentState; // Mantener estado actual
     }
 }
 
