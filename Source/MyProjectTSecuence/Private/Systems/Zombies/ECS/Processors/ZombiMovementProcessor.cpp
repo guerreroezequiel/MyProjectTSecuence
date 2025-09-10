@@ -103,8 +103,8 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
             // 🔍 DIAGNÓSTICO: Log movimiento solo cada 5 segundos (no cada frame)
             if (bShouldLog)
             {
-                UE_LOG(LogTemp, Log, TEXT("🏃 Movimiento: Estado=%d, Velocidad=%.1f, Posición=%s"), 
-                       (int32)CurrentState, CoreFragment.MovementSpeed, *CoreFragment.Position.ToString());
+                UE_LOG(LogTemp, Log, TEXT("🏃 Movimiento: Estado=%d, Velocidad=%.1f, Posición=%s, Timer=%.2f"), 
+                       (int32)CurrentState, CoreFragment.MovementSpeed, *CoreFragment.Position.ToString(), CoreFragment.BehaviorTimer);
             }
 
             // Procesar movimiento según estado
@@ -112,9 +112,14 @@ void UZombiMovementProcessor::Execute(FMassEntityManager &EntityManager, FMassEx
             {
                 ProcessPlayerChaseMovement(CoreFragment, DeltaTime);
             }
-            else
+            else if (CurrentState == EZombiState::WalkAround)
             {
                 ProcessRandomMovement(CoreFragment, DeltaTime);
+            }
+            else if (CurrentState == EZombiState::Idle)
+            {
+                // En Idle, mantener velocidad 0
+                CoreFragment.MovementSpeed = 0.0f;
             }
 
             // Procesar rotación y movimiento
@@ -178,26 +183,35 @@ void UZombiMovementProcessor::ProcessRandomMovement(FZombiCoreFragment &CoreFrag
     // Actualizar timer de cambio de dirección
     CoreFragment.BehaviorTimer += DeltaTime;
 
+    // 🔍 DIAGNÓSTICO: Log cada 5 segundos para ver el timer
+    static float LastLogTime = 0.0f;
+    float CurrentTime = GetWorld()->GetTimeSeconds();
+    if (CurrentTime - LastLogTime > 5.0f)
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔄 ProcessRandomMovement: Timer=%.2f, Interval=%.2f, Velocidad=%.1f"),
+               CoreFragment.BehaviorTimer, CoreFragment.DirectionChangeInterval, CoreFragment.MovementSpeed);
+        LastLogTime = CurrentTime;
+    }
+
     // Cambiar dirección aleatoriamente
     if (CoreFragment.BehaviorTimer >= CoreFragment.DirectionChangeInterval)
     {
         CoreFragment.MovementDirection = GenerateRandomDirection();
         CoreFragment.BehaviorTimer = 0.0f;
 
-        // Cambiar velocidad aleatoriamente
+        // Cambiar velocidad aleatoriamente (sin velocidad 0 para WalkAround)
         float SpeedVariation = FMath::RandRange(0.0f, 1.0f);
-        if (SpeedVariation < 0.3f)
+        if (SpeedVariation < 0.5f)
         {
-            CoreFragment.MovementSpeed = 0.0f;
-        }
-        else if (SpeedVariation < 0.7f)
-        {
-            CoreFragment.MovementSpeed = 25.0f;
+            CoreFragment.MovementSpeed = 25.0f; // Velocidad baja
         }
         else
         {
-            CoreFragment.MovementSpeed = 80.0f;
+            CoreFragment.MovementSpeed = 80.0f; // Velocidad alta
         }
+
+        UE_LOG(LogTemp, Log, TEXT("🎲 Cambio de dirección: Velocidad=%.1f, Dirección=%s"),
+               CoreFragment.MovementSpeed, *CoreFragment.MovementDirection.ToString());
     }
 }
 

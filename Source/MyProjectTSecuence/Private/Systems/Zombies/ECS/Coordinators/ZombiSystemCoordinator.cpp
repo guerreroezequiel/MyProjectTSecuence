@@ -533,6 +533,13 @@ void UZombiSystemCoordinator::MarkTurboSequenceOperations(FMassExecutionContext 
         TurboFragment.bNeedsTransformUpdate = true; // Para próximo TurboSequence loop
         TurboFragment.bNeedsAnimationUpdate = true; // Para próximo TurboSequence loop
 
+        // 🔍 DIAGNÓSTICO: Log marcado de transform
+        if (FrameCounter % 300 == 0) // Log cada 5 segundos
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎯 Marcando actualización de transform - Posición: %s, ID: %d"),
+                   *CoreFragment.Position.ToString(), TurboFragment.MeshData.RootMotionMeshID);
+        }
+
         // 🔍 DIAGNÓSTICO: Log marcado de actualización
         if (FrameCounter % 300 == 0) // Log cada 5 segundos
         {
@@ -543,6 +550,13 @@ void UZombiSystemCoordinator::MarkTurboSequenceOperations(FMassExecutionContext 
         // Actualizar grupo si es necesario
         float DistanceToPlayer = CalculateDistanceToPlayer(CoreFragment.Position);
         int32 OptimalGroup = DetermineOptimalGroup(DistanceToPlayer, BehaviorFragment.CurrentState);
+
+        // 🔍 DIAGNÓSTICO: Log grupo del zombi
+        if (FrameCounter % 300 == 0) // Log cada 5 segundos
+        {
+            UE_LOG(LogTemp, Log, TEXT("🎯 Zombi en grupo %d, SolveMeshes procesando grupo 0"),
+                   OptimalGroup);
+        }
 
         FMassEntityHandle Entity = Context.GetEntity(i);
         UpdateGroupIfChanged(Entity, OptimalGroup, TurboFragment.MeshData);
@@ -570,7 +584,7 @@ void UZombiSystemCoordinator::ExecuteTurboSequenceBigLoop(float DeltaTime)
     if (bEnablePerformanceMetrics)
     {
         CurrentMetrics.TurboSequenceOperations = AllOperations.Num();
-        CurrentMetrics.SolveMeshesCalls = 1; // Solo una llamada por frame
+        CurrentMetrics.SolveMeshesCalls = 1; // Solo grupo 0
     }
 }
 
@@ -693,8 +707,19 @@ void UZombiSystemCoordinator::CollectAllTurboSequenceOperations(TArray<FTurboSeq
     // 🔍 DIAGNÓSTICO: Log resultados
     if (FrameCounter % 600 == 0) // Log cada 10 segundos
     {
-        UE_LOG(LogTemp, Log, TEXT("🔍 CollectAllTurboSequenceOperations: %d entidades procesadas, %d necesitan actualización, %d operaciones creadas"),
-               EntitiesProcessed, EntitiesNeedingUpdate, AllOperations.Num());
+        // Contar operaciones por tipo
+        int32 AnimationOps = 0;
+        int32 TransformOps = 0;
+        for (const FTurboSequenceOperation &Op : AllOperations)
+        {
+            if (Op.OpType == ETurboSequenceOpType::Animation)
+                AnimationOps++;
+            else if (Op.OpType == ETurboSequenceOpType::Transform)
+                TransformOps++;
+        }
+
+        UE_LOG(LogTemp, Log, TEXT("🔍 CollectAllTurboSequenceOperations: %d entidades procesadas, %d necesitan actualización, %d operaciones creadas (%d animación, %d transform)"),
+               EntitiesProcessed, EntitiesNeedingUpdate, AllOperations.Num(), AnimationOps, TransformOps);
     }
 }
 
@@ -740,14 +765,35 @@ void UZombiSystemCoordinator::ApplyAllTurboSequenceOperations(const TArray<FTurb
                 FTurboSequence_MinimalMeshData_Lf MeshData;
                 MeshData.RootMotionMeshID = Operation.MeshInstanceID;
 
+                // 🔍 DIAGNÓSTICO: Verificar validez del MeshInstanceID
+                if (Operation.MeshInstanceID <= 0)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("⚠️ MeshInstanceID inválido: %d"), Operation.MeshInstanceID);
+                    break;
+                }
+
+                // 🔍 DIAGNÓSTICO: Log antes de aplicar transform
+                static int32 LastTransformLogFrame = 0;
+                if (FrameCounter - LastTransformLogFrame > 300) // Log cada 5 segundos
+                {
+                    UE_LOG(LogTemp, Log, TEXT("🎯 APLICANDO Transform: ID=%d, Posición=%s, Rotación=%s"),
+                           Operation.MeshInstanceID,
+                           *Operation.Transform.GetLocation().ToString(),
+                           *Operation.Transform.GetRotation().Rotator().ToString());
+                    LastTransformLogFrame = FrameCounter;
+                }
+
                 ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(
                     MeshData,
                     Operation.Transform,
                     true // bForce = true para forzar actualización
                 );
 
-                UE_LOG(LogTemp, Log, TEXT("🎯 Transform aplicado: ID=%d, Posición=%s"),
-                       Operation.MeshInstanceID, *Operation.Transform.GetLocation().ToString());
+                // 🔍 DIAGNÓSTICO: Log después de aplicar transform
+                if (FrameCounter - LastTransformLogFrame < 0.1f) // Usar la misma variable de throttling
+                {
+                    UE_LOG(LogTemp, Log, TEXT("✅ Transform APLICADO a TurboSequence"));
+                }
             }
             break;
 
@@ -819,29 +865,27 @@ UAnimSequence *UZombiSystemCoordinator::GetAnimationForState(EZombiState State, 
 
 void UZombiSystemCoordinator::ExecuteSolveMeshesCorrect(float DeltaTime)
 {
-    // ✅ SOLUCIÓN CRÍTICA: UNA sola llamada SolveMeshes rotativa por frame
-    // vs 2 llamadas actuales = 50% reducción
+    // ✅ SOLUCIÓN SIMPLIFICADA: Un solo grupo para evitar complejidad de rotación
+    // TurboSequence requiere que los grupos se ejecuten de a uno por frame
 
-    // Acumular delta para todos los grupos
-    for (float &Delta : AccumulatedDeltaTimes)
-    {
-        Delta += DeltaTime;
-    }
-
-    // ✅ PATRÓN OFICIAL: Solo UNA llamada SolveMeshes por frame
+    // ✅ PATRÓN SIMPLIFICADO: Solo grupo 0, sin rotación
     FTurboSequence_UpdateContext_Lf Context;
-    Context.GroupIndex = CurrentSolveMeshGroup;
+    Context.GroupIndex = 0; // Siempre grupo 0
 
     ATurboSequence_Manager_Lf::SolveMeshes_GameThread(
-        AccumulatedDeltaTimes[CurrentSolveMeshGroup], GetWorld(), Context);
-
-    AccumulatedDeltaTimes[CurrentSolveMeshGroup] = 0.0f;
-    CurrentSolveMeshGroup = (CurrentSolveMeshGroup + 1) % MaxUpdateGroups; // Rotar grupos 0-4
+        DeltaTime, GetWorld(), Context);
 
     if (bEnableDetailedLogs && FrameCounter % 300 == 0) // Log cada 5 segundos aprox
     {
-        UE_LOG(LogTemp, Log, TEXT("🎯 SolveMeshes: Grupo %d procesado, Frame %d"),
-               CurrentSolveMeshGroup, FrameCounter);
+        UE_LOG(LogTemp, Log, TEXT("🎯 SolveMeshes: Grupo 0 procesado, Frame %d"),
+               FrameCounter);
+    }
+
+    // 🔍 DIAGNÓSTICO: Log cada frame para ver que se procesa grupo 0
+    if (FrameCounter % 60 == 0) // Log cada segundo aprox
+    {
+        UE_LOG(LogTemp, Log, TEXT("🔄 SolveMeshes: Procesando grupo 0, Frame %d"),
+               FrameCounter);
     }
 }
 
@@ -1371,21 +1415,7 @@ EZombiState UZombiSystemCoordinator::DetermineOptimalState(const FZombiCoreFragm
 
 int32 UZombiSystemCoordinator::DetermineOptimalGroup(float DistanceToPlayer, EZombiState CurrentState) const
 {
-    // Mapeo distancia/estado → grupo TurboSequence
-    if (DistanceToPlayer < 200.0f || CurrentState == EZombiState::Attack)
-    {
-        return 0; // Grupo 0 - alta calidad
-    }
-    else if (DistanceToPlayer < 500.0f || CurrentState == EZombiState::Chase)
-    {
-        return 1; // Grupo 1
-    }
-    else if (DistanceToPlayer < 800.0f)
-    {
-        return 2; // Grupo 2
-    }
-    else
-    {
-        return 3; // Grupo 3 - baja calidad
-    }
+    // ✅ SOLUCIÓN SIMPLIFICADA: Todos los zombis van al grupo 0
+    // Evita complejidad de múltiples grupos y rotación
+    return 0; // Siempre grupo 0
 }

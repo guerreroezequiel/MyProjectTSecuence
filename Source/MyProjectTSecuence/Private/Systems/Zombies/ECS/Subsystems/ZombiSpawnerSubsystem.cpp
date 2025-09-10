@@ -265,6 +265,10 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
         SpawnTransform,
         GetWorld());
 
+    // 🔍 DIAGNÓSTICO: Log creación de instancia TurboSequence
+    UE_LOG(LogTemp, Log, TEXT("🎭 TurboSequence instancia creada: ID=%d, Posición=%s"),
+           TurboSequenceFragment.MeshData.RootMotionMeshID, *SpawnTransform.GetLocation().ToString());
+
     // PASO 9: Verificar que la instancia se creó correctamente
     if (!TurboSequenceFragment.MeshData.IsMeshDataValid())
     {
@@ -273,8 +277,8 @@ void UZombiSpawnerSubsystem::CreateTurboSequenceVisualInstance(FMassEntityHandle
     }
 
     // PASO 10: PATRÓN OFICIAL - AddInstanceToUpdateGroup_Concurrent
-    // Distribución inteligente de grupos basada en posición para mejor LOD
-    int32 UpdateGroupIndex = FMath::Abs(static_cast<int32>(SpawnLocation.X + SpawnLocation.Y)) % 4;
+    // ✅ SOLUCIÓN SIMPLIFICADA: Todos los zombis van al grupo 0
+    int32 UpdateGroupIndex = 0; // Siempre grupo 0
     ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(
         UpdateGroupIndex,
         TurboSequenceFragment.MeshData);
