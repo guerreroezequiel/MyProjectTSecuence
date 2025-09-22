@@ -1,228 +1,239 @@
-# ECS-V2: Sistema Grid + ECS + TurboSequence para 3000+ entidades
+# ECS-V2: Grid + ECS + DOP para 3000+ entidades
 
-## Arquitectura Core: Grid-Based Movement System
+## Arquitectura DOP: Grid Discreto + ECS Puro
 
-### 1. Núcleo del Grid (Dispatcher)
-- **Grilla discreta por piso**: FloorId con CellSize fijo (0.6m)
-- **Capacidad por celda**: CellCapacity y presupuesto por portal (PortalCap)
-- **Aristas**: EdgeBits N/E/S/O para bloquear pasos y diagonales
-- **Dispatcher central**: tick lógico (12-15 Hz)
-  - Encola intenciones por celda/dirección (N, NE, ...)
-  - Despacha ganadores por destino según capacidad y prioridad
-  - Commit: actualiza celda de ganadores (único lugar de movimiento lógico)
-  - Wake/Sleep: perdedores duermen hasta cambio de Epoch o heartbeat
+### Grid System (12-15 Hz)
+- **CellSize fijo**: 0.6m (balance granularidad/performance)
+- **Dispatcher**: Enqueue → Dispatch → Commit (1 pass por tick)
+- **Event-Driven**: Sleep/Wake por Epoch (no CPU en atascos)
+- **Costo**: O(celdas activas), NO O(entidades)
 
-### 2. Fairness y Performance
-- **Token-Bucket + Ticket Round-Robin** por celda (evita starvation)
-- **Tiling**: procesar por tiles (16×16 celdas) para paralelismo
-- **Event-Driven**: en atascos, mayoría duerme (no consume CPU)
-- **Resolución por destino**: costo escala con #celdas activas, no #entidades
+### Fragment Unificado DOP (32 bytes)
+```cpp
+struct GridEntityFragment {
+    // Grid (16 bytes)
+    int16 CellX, CellY;      // posición discreta
+    uint8 FloorId;           // piso actual  
+    uint8 DirWish;           // 0=stay, 1-8=dirs
+    uint8 SleepTicks;        // countdown sleep
+    uint8 Flags;             // Role(2b) + Sleep(1b) + Active(1b)
+    
+    // Visual (8 bytes)
+    uint16 YawQ;             // cuantizado 16 dirs
+    uint16 GroupId;          // id de grupo
+    uint8 SlotIndex;         // slot en grupo
+    uint8 _pad[3];
+    
+    // TS Interp (8 bytes)
+    float WorldX, WorldY;    // para 60fps smooth
+};
+```
 
-## Datos ECS (Fragments/Tags Mínimos)
+### Grid Globals SOA (fuera ECS)
+```cpp
+TArray<uint8> CellCapacity[MaxCells];    // capacidad por celda
+TArray<uint8> CellOccupancy[MaxCells];   // ocupación actual
+TArray<uint32> CellQueues[MaxCells][8];  // colas por dirección
+TArray<uint16> CellEpoch[MaxCells];      // para wake/sleep
+```
 
-### Grid Fragments
-- **GridPositionFragment**: Cell{x,y}, FloorId
-- **MovementIntentFragment**: DirWish (0=Stay, 1..8=N..NW), SleepTicks
-- **OrientationFragment**: YawQ (cuantizable 16 dirs)
-- **GroupFragment**: RoleTag (Leader|Follower|Neutral), GroupId, SlotIndex
+## Procesadores DOP (3 únicos)
 
-### Globales SOA (no por entidad)
-- Walkable[], CellCapacity[], PortalCap[], EdgeBits[]
-- VertLinks[], Occupants[], Queues[dir], Epoch[], TicketRR[]
+### 1. IntentProcessor (12-15 Hz)
+```cpp
+// Procesa TODOS los roles en 1 query
+Query: GridEntityFragment (ALL roles)
+- Leaders: heading suave + cap giro 140°/s
+- Followers: offset hacia líder (slots blandos)  
+- Neutrals: wander/flow → DirWish
+```
 
-### TurboSequence Fragments
-- **TSTransformFragment**: datos listos para snapshot (interpolación 60 FPS)
-- **TSAnimationFragment**: clip/time/flags mínimos
+### 2. GridDispatcher (12-15 Hz) 
+```cpp
+// Enqueue + Dispatch + Commit en 1 pass
+Query: GridEntityFragment WHERE !Sleep
+- Enqueue: empuja a CellQueues[dir] por DirWish
+- Dispatch: concede por capacidad + prioridad
+- Commit: actualiza CellX,CellY + Epoch
+- Sleep: marca perdedores (SleepTicks = 8±2)
+```
 
-**Regla**: Fragments estables, cambios mínimos en estructuras
+### 3. VisualProcessor (60 FPS)
+```cpp  
+// Interpolación + Write Buffer
+Query: GridEntityFragment WHERE Active
+- Yaw: suaviza rotación + cuantización 16 dirs
+- World: Cell→World coords para smooth movement
+- Write: empaqueta a WriteBuffer (no directamente a TS)
+```
 
-## Pipeline de Procesadores ECS (orden crítico)
+## State Sync Pattern (ECS ↔ TurboSequence)
 
-### 1. Decisión de Intención (12-15 Hz)
-- **LeaderWishProcessor** (≤20 grupos): fija DirWish del líder con suavizado
-- **FollowerWishProcessor**: DirWish hacia offset relativo al líder (slots blandos)
-- **NeutralWishProcessor**: wander/flow local → DirWish
+### Participantes del Sync
+```cpp
+// ECS Side (Game Thread)
+- IntentProcessor, GridProcessor, VisualProcessor (12-15 Hz)
+- VisualProcessor: escribe a WriteBuffer
+- ECS Coordinator: llama SyncPoint.SwapBuffers() al final del tick
 
-### 2. Grid Dispatch (core del sistema)
-- **GridEnqueueProcessor**: empuja índices a colas por celda/dirección (respeta EdgeBits)
-- **GridDispatchProcessor**: por celda destino concede hasta min(FreeSlots, PortalBudget)
-  - Prioridad: Leader > Follower > Neutral, luego ticket
-- **GridCommitProcessor**: aplica grants → cambia Cell, actualiza Occupants y Epoch
-- **GridWakeProcessor**: despierta bloqueados por Epoch distinto o cooldown vencido
+// TurboSequence Side (Render Thread / Worker Thread)  
+- TS Big Loop: lee ReadBuffer cuando necesita (60 FPS)
+- No espera a ECS, usa último snapshot disponible
+- TSIntegration: consume ReadBuffer → TS instances
+```
 
-### 3. Interpolación Visual (60 FPS)
-- **YawIntegrateProcessor**: suaviza rotación + cuantización opcional (16 dirs)
-- **TSSnapshotProcessor**: empaqueta datos → TurboSequence
+### Timeline Detallado
+```
+Frame N:
+├─ ECS Tick (Game Thread):
+│  ├─ [12ms] IntentProcessor → GridProcessor → VisualProcessor
+│  ├─ [1ms] VisualProcessor → WriteBuffer (nuevos datos)
+│  └─ [0.1ms] SyncPoint.SwapBuffers() (WriteBuffer ↔ ReadBuffer)
+│
+└─ TS Big Loop (Render/Worker Thread):
+   ├─ [16ms] TSIntegration consume ReadBuffer (datos del Frame N-1)
+   ├─ [2ms] TS procesa animaciones + LOD + culling  
+   └─ [14ms] TS rendering/dispatch
+
+Frame N+1:
+├─ ECS Tick: usa ReadBuffer como WriteBuffer (swap)
+└─ TS Big Loop: usa nuevo ReadBuffer (datos del Frame N)
+```
+
+### SyncPoint Responsibilities
+```cpp
+class SyncPoint {
+    // Llamado por ECS Coordinator al final de cada tick
+    void SwapBuffers();           // Atomic swap WriteBuffer ↔ ReadBuffer
+    
+    // Llamado por TS Big Loop cuando necesita datos
+    TSSnapshot* GetReadBuffer();  // Thread-safe read access
+    
+    // Llamado por VisualProcessor durante tick ECS
+    TSSnapshot* GetWriteBuffer(); // Exclusive write access
+};
+```
 
 ## Estructura de Carpetas MVP
 
+```
 ECS-V2/
-├── Grid/                          # Sistema de grilla (PRIORIDAD 1)
-│   ├── Core/
-│   │   ├── GridDispatcher         # Dispatcher central del grid
-│   │   ├── CellManager           # Manejo de celdas y capacidades
-│   │   └── PortalManager         # Manejo de portales y EdgeBits
-│   ├── Data/
-│   │   ├── GridGlobals           # SOA: Walkable[], CellCapacity[], etc.
-│   │   ├── OccupancyTables       # Occupants[], Queues[dir], Epoch[]
-│   │   └── FairnessSystem        # Token-Bucket + Ticket Round-Robin
-│   └── Utils/
-│       ├── TileProcessor         # Procesamiento por tiles (16×16)
-│       └── GridMath              # Conversiones, direcciones, etc.
+├── Core/
+│   ├── Grid/
+│   │   ├── GridGlobals           # SOA arrays + math utils
+│   │   └── GridDispatcher        # Core dispatcher logic
+│   └── Config/
+│       ├── GridDefaults          # Constantes del sistema
+│       └── GridTypes             # Tipos básicos (direcciones, flags)
 ├── ECS/
 │   ├── Fragments/
-│   │   ├── Grid/
-│   │   │   ├── GridPositionFragment
-│   │   │   ├── MovementIntentFragment
-│   │   │   ├── OrientationFragment
-│   │   │   └── GroupFragment
-│   │   └── TurboSequence/
-│   │       ├── TSTransformFragment
-│   │       └── TSAnimationFragment
+│   │   └── GridEntityFragment    # Fragment unificado (32 bytes)
 │   ├── Processors/
-│   │   ├── Intent/               # Fase 1: Decisión
-│   │   │   ├── LeaderWishProcessor
-│   │   │   ├── FollowerWishProcessor
-│   │   │   └── NeutralWishProcessor
-│   │   ├── Grid/                 # Fase 2: Grid Dispatch
-│   │   │   ├── GridEnqueueProcessor
-│   │   │   ├── GridDispatchProcessor
-│   │   │   ├── GridCommitProcessor
-│   │   │   └── GridWakeProcessor
-│   │   └── Visual/               # Fase 3: Interpolación
-│   │       ├── YawIntegrateProcessor
-│   │       └── TSSnapshotProcessor
-│   └── Tags/
-│       ├── RoleTag               # Leader/Follower/Neutral
-│       ├── SleepTag              # Para entidades dormidas
-│       └── ActiveTag             # Para procesamiento
-├── Groups/                        # Sistema de grupos (PRIORIDAD 3)
-│   ├── GroupManager              # Merge/Split determinista
-│   ├── LeaderElection            # Líder virtual (ancla lógica)
-│   └── SlotAssignment            # Slots blandos para followers
-├── TurboSequence/
-│   ├── Integration/
-│   │   ├── SnapshotBuffer        # Double-buffer para datos TS
-│   │   └── EntityMapping         # EntityId ↔ TSInstanceId
-│   └── Rendering/
-│       ├── CullingLOD
-│       └── BatchRenderer
-└── Config/
-    ├── GridDefaults              # CellSize=0.6m, TickHz=12, etc.
-    └── PerformanceLimits         # Caps y presupuestos
+│   │   ├── IntentProcessor       # Decisión movimiento (todos roles)
+│   │   ├── GridProcessor         # Dispatch del grid
+│   │   └── VisualProcessor       # Interpolación + WriteBuffer
+│   └── Coordinator/
+│       └── ECSCoordinator        # Orchestration + sync timing
+├── Sync/
+│   ├── StateSync/
+│   │   ├── SyncPoint             # Coordinación ECS ↔ TS
+│   │   └── BufferSwap            # Double buffer management
+│   └── TurboSequence/
+│       ├── TSSnapshot            # Estructura de snapshot
+│       ├── TSIntegration         # Bridge ECS → TS big loop
+│       └── TSEntityMapping       # EntityId ↔ TSInstanceId
+└── Testing/
+    ├── GridTests                 # Unit tests para grid
+    ├── ProcessorTests            # Tests para processors
+    └── IntegrationTests          # Tests end-to-end
+```
+
+### Definición de Componentes MVP
+
+#### **Core/Grid/**
+- **GridGlobals**: SOA arrays globales (CellCapacity[], CellOccupancy[], CellQueues[][8], CellEpoch[]). Math utilities (coord→cell, direcciones, validaciones)
+- **GridDispatcher**: Lógica central de enqueue intenciones por celda/dir, dispatch con prioridad Leader>Follower>Neutral, commit updates + sleep/wake por Epoch
+
+#### **Core/Config/**
+- **GridDefaults**: Constantes (CELL_SIZE=0.6f, TICK_HZ=12, SLEEP_TICKS=8, CELL_CAP_CORRIDOR=1, CELL_CAP_ROOM=3, TurnRate=140°/s)
+- **GridTypes**: Enums (Direction 0-8, Role Leader/Follower/Neutral, Flags bits, FloorId type, basic grid math types)
+
+#### **ECS/Fragments/**
+- **GridEntityFragment**: Fragment unificado 32 bytes (CellX/Y, FloorId, DirWish, SleepTicks, Flags, YawQ, GroupId, SlotIndex, WorldX/Y)
+
+#### **ECS/Processors/**
+- **IntentProcessor**: Procesa TODOS los roles en 1 query (Leaders: heading suave + cap giro, Followers: offset hacia líder con slots blandos, Neutrals: wander/flow → DirWish)
+- **GridProcessor**: Enqueue + Dispatch + Commit en 1 pass (empuja a CellQueues por DirWish, concede por capacidad, actualiza CellX/Y + Epoch, marca perdedores como Sleep)
+- **VisualProcessor**: Interpolación 60fps (suaviza YawQ + cuantización 16 dirs, Cell→World coords, empaqueta WriteBuffer para TS)
+
+#### **ECS/Coordinator/**
+- **ECSCoordinator**: Orchestration (ejecuta pipeline Intent→Grid→Visual, timing de tick 12-15Hz, llama SyncPoint.SwapBuffers())
+
+#### **Sync/StateSync/**
+- **SyncPoint**: Coordinación thread-safe ECS↔TS (SwapBuffers() atomic, GetReadBuffer() para TS, GetWriteBuffer() para ECS)
+- **BufferSwap**: Double buffer (WriteBuffer para ECS escribe, ReadBuffer para TS lee, swap sin data races, 1 frame delay aceptable)
+
+#### **Sync/TurboSequence/**
+- **TSSnapshot**: Estructura SOA para snapshot (transforms[], animations[], flags[], groupKeys[] optimizada para TS big loop)
+- **TSIntegration**: Bridge final (consume ReadBuffer en TS big loop 60fps, no bloquea ECS, usa último snapshot disponible)
+- **TSEntityMapping**: Mapeo bidireccional EntityId↔TSInstanceId, pool de instancias TS, spawn/despawn coordination
+
+#### **Testing/**
+- **GridTests**: Unit tests (GridGlobals math, GridDispatcher logic, capacity limits, sleep/wake cycles, determinismo)
+- **ProcessorTests**: Tests (cada processor individual, pipeline completo, roles behavior, interpolación, snapshot building)
+- **IntegrationTests**: End-to-end (100 entidades random, 500 con animaciones, 5 grupos×100, stress test 3000+ entidades, timing)
 
   
 
-## Plan de Desarrollo MVP (Grid → Entidades → Grupos)
+## Plan DOP (5 fases)
 
-### **FASE 1: Grid System Foundation** 🔥 PRIORIDAD MÁXIMA
-**Objetivo**: Sistema de grilla funcional sin entidades
-- **GridDispatcher**: tick lógico (12-15 Hz), encolado/despacho básico
-- **CellManager**: CellSize=0.6m, CellCapacity, EdgeBits básicos
-- **GridGlobals**: SOA arrays (Walkable[], Occupants[], Queues[])
-- **GridMath**: conversiones coord→cell, direcciones (0-8), validaciones
-- **Testing**: Grid vacío + simulación de intenciones mock
+### **FASE 1: Grid Foundation** 🔥
+- **GridGlobals**: SOA arrays + math utils
+- **GridDispatcher**: enqueue/dispatch/commit básico
+- **Testing**: grid vacío + intenciones mock
 
-### **FASE 2: ECS Integration** 
-**Objetivo**: Entidades básicas moviéndose en el grid
-- **Grid Fragments**: GridPositionFragment, MovementIntentFragment
-- **Core Processors**: GridEnqueueProcessor, GridDispatchProcessor, GridCommitProcessor
-- **FairnessSystem**: Token-Bucket básico + Round-Robin por celda
-- **GridWakeProcessor**: sistema Sleep/Wake por Epoch
-- **Testing**: 100 entidades neutral moviéndose random
+### **FASE 2: ECS Integration**
+- **GridEntityFragment**: fragment unificado (32 bytes)
+- **IntentProcessor**: todos los roles en 1 query
+- **Testing**: 100 entidades neutral random
 
-### **FASE 3: TurboSequence Visual**
-**Objetivo**: Renderizado fluido 60 FPS con interpolación
-- **TSTransformFragment + TSAnimationFragment**
-- **YawIntegrateProcessor**: suavizado de rotación + cuantización 16 dirs
-- **TSSnapshotProcessor**: empaquetado para TurboSequence
-- **SnapshotBuffer**: double-buffer para sincronización
-- **Testing**: 500 entidades visibles con animaciones
+### **FASE 3: Visual Pipeline**
+- **VisualProcessor**: interpolación + TS snapshot
+- **Testing**: 500 entidades con animaciones
 
-### **FASE 4: Group System**
-**Objetivo**: Líderes y seguidores cohesivos
-- **GroupFragment**: RoleTag, GroupId, SlotIndex
-- **LeaderWishProcessor**: decisiones de líder con suavizado
-- **FollowerWishProcessor**: slots blandos hacia líder
-- **GroupManager**: merge/split determinista (≤20 grupos activos)
-- **Testing**: 5 grupos de 100 entidades c/u (500 total)
+### **FASE 4: Groups**
+- **Group logic**: en IntentProcessor (Leader/Follower)
+- **Testing**: 5 grupos × 100 entidades
 
-### **FASE 5: Performance & Scale**
-**Objetivo**: 3000+ entidades a 60 FPS
-- **TileProcessor**: paralelismo por tiles (16×16 celdas)
-- **PortalManager**: embudos con PortalCap (1-3)
-- **Performance profiling**: costo por #celdas activas vs #entidades
-- **Stress testing**: 3000 entidades, múltiples grupos, embudos
-- **MVP completion**: validación de criterios de éxito
+### **FASE 5: Scale**
+- **Tiling**: paralelismo 16×16 celdas
+- **Testing**: 3000+ entidades a 60 FPS
 
-## Patrones de Rendimiento Clave
+## Principios DOP
 
-### Event-Driven Performance
-- **Epoch & Sleep**: en atascos, mayoría duerme (no consume CPU)
-- **Resolución por destino**: costo escala con #celdas activas, no #entidades totales
-- **Double-Buffer + Command Buffer**: grants/commits sin data races
+### Performance Core
+- **1 Fragment**: 32 bytes, 1 archetype, máxima cache locality
+- **3 Processors**: mínimo scheduling overhead ECS
+- **Event-Driven**: Sleep/Wake por Epoch (no CPU en atascos)
+- **O(celdas activas)**: costo independiente de #entidades
 
-### Determinismo y Persistencia
-- **Dispatcher determinista**: mismos inputs → mismos outputs
-- **Persistencia por región**: snapshot SOA + catch-up discreto
-- **Network lockstep**: replicar inputs (DirWish/Target) y seeds
+### Defaults que Funcionan
+```cpp
+constexpr float CELL_SIZE = 0.6f;        // granularidad/performance
+constexpr uint8 TICK_HZ = 12;            // lógica movement
+constexpr uint8 SLEEP_TICKS = 8;         // cooldown base
+constexpr uint8 CELL_CAP_CORRIDOR = 1;   // pasillo 1m
+constexpr uint8 CELL_CAP_ROOM = 3;       // sala abierta
+```
 
-### Extensiones Futuras (plugs preparados)
-- **AOE celular**: reducir por celda/tile, aplicar a Occupants
-- **Sector Graph**: macro-ruta de líderes por sectores/portales
-- **LoS/Combate discreto**: usar EdgeBits para evitar interacción a través de muros
-- **Verticalidad (2.5D)**: VertLinks con PortalCap, cambio de FloorId
+### Criterios de Éxito ✅
+- **Embudos**: throughput estable, masa dormida
+- **Campo abierto**: costo O(celdas), no O(entidades)  
+- **Grupos**: frente coherente sin serpenteo
+- **Determinismo**: mismos inputs → mismos outputs
 
-## Configuración por Defecto (que "enciende")
-
-### Grid Defaults
-- **CellSize**: 0.6m (balance entre granularidad y performance)
-- **TickHz**: 12-15 Hz (lógica de movimiento)
-- **TurnRateMax**: 140°/s con Deadband=6°
-- **Cuantización**: 16 direcciones ON
-
-### Capacidades
-- **CellCapacity**: pasillo 1m=1; 1.6m=2; sala=3-4
-- **PortalCap**: 1-3 según ancho del embudo
-- **Cooldown (Sleep)**: 8 ± 2 ticks
-- **Wake**: por Epoch del destino
-
-## Criterios de Éxito (lo que DEBE pasar)
-
-### Embudos
-✅ **Throughput estable** = PortalCap  
-✅ **Masa atrás no gasta CPU** (sleep masivo)
-
-### Persecución
-✅ **Frente coherente**, sin serpenteo  
-✅ **Followers reenganchan** sin pops visuales
-
-### Campo Abierto  
-✅ **Costo por tick** depende de celdas activas, NO de cuántos spawns
-✅ **Escalabilidad lineal** con área activa
-
-### Persistencia/Net
-✅ **Reactivar/sincronizar** no altera resultados (determinismo)
-✅ **Catch-up discreto** funciona correctamente
-
-## Hardware Target & Optimizaciones
-
-### Target Specs
-- **CPU**: Intel i5/AMD Ryzen 5 (últimas generaciones)
-- **RAM**: 32GB DDR4/DDR5  
-- **GPU**: 8GB VRAM (RTX 3060/4060, RX 6600 XT+)
-- **Storage**: SSD/NVMe
-
-### Performance Strategy
-- **Grid-based**: O(celdas activas) no O(entidades)
-- **SOA**: cache locality para fragments
-- **Tiling**: paralelismo por tiles (16×16)
-- **Event-driven**: sleep masivo en atascos
-- **Double-buffer**: sync sin locks
-
-## Anti-patrones Críticos ❌
-- ❌ **Data races** entre ECS y Grid
-- ❌ **Reagrupar cada frame** (solo on-change)  
-- ❌ **O(n·m) loops** sin límites
-- ❌ **Solve antes de Cull/LOD**
-- ❌ **Cambios frecuentes** en estructuras de fragments
+### Anti-patrones ❌
+- ❌ Múltiples fragments relacionados
+- ❌ Processors sobre-especializados
+- ❌ Tags como flags (usar bits en fragment)
+- ❌ O(n·m) loops sin caps
