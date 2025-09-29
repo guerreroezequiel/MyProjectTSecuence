@@ -34,23 +34,125 @@
 - **Capa 6 – Debug/Observabilidad**
   - Overlays (capacidad, ocupación, flow, LOD, colas) y métricas asíncronas sin tocar el hot path.
 
----
 
 ## Roles y comportamiento
 - **Líder**
   - Procesa estímulos, decide meta/waypoints y ejecuta pathfinding económico (NavMesh/portales). Publica Goal/Seed: tiles destino, goal bias, portal bias, prioridad y cooldown.
 - **Seguidor** (pocos por líder; 8–32)
-  - Toma el Goal del líder, traza rutas promedio (downsample) y siembra el `FlowField` marcando tiles/celdas "dirty" con prioridad. No mueve entidades directamente.
-- **Horda**
-  - Solo lee `FlowField` + Occupancy/Density. Movimiento masivo con micro‑avoid mínimo por sub‑slots. Sin pathfinding, sin estímulos directos.
+  - Toma el Goal del líder, traza rutas promedio   121→- Líder nace de responders del estímulo y publica metas sesgadas por portales/regiones.
+   122→- Seguidores ⊆ responders del cluster del mismo estímulo; respetan cooldown.
+   123→- Horda no usa steering fino: se guía por `FlowField`, `Occupancy`, sub‑slots y portales.
+   124→- Ningún agente cambia de grupo > 1 vez por epoch; transiciones controladas por histéresis.
+   125→
+   126→---
+   127→
+   ## Estructura de carpetas (propuesta)
+   
+   Esta es la estructura mínima sugerida para implementar el sistema de grilla descrito en este documento. Es solo organización y naming; no crea archivos automáticamente.
+   
+   ### Código C++
+   `Source/MyProjectTSecuence/GridSystem/`
+   
+   ```text
+   Source/
+     MyProjectTSecuence/
+       GridSystem/
+         Core/                                   # Tipos base, config global, constantes
+           GridTypes.h                           # typedefs, enums, ids, helpers comunes
+           GridConfig.h/.cpp                     # tunables/constantes de grilla/tiles
+           GridWorld.h/.cpp                      # bounds, resolución, tiles/celdas
+           GridPortal.h/.cpp                     # definición de portales y links
+           GridEpoch.h                           # epoch global para sync (uint32)
+           TileVersioning.h                      # versión por tile/flow para validar lecturas
+         FlowField/                              # cálculo/almacenamiento flow multi‑fuente
+           FlowField.h/.cpp                      # interfaz de lectura/escritura de flow
+           FlowFieldRebuilder.h/.cpp             # orquesta rebuild parcial (token bucket)
+           FlowFieldSources.h/.cpp               # metas, sesgos, costos por fuente
+           FlowFieldStorage.h/.cpp               # SOA; versiones/epochs por celda
+           FlowFieldSolver.h/.cpp                # D* Lite / BFS multi‑fuente / mezcla costos; ESolverMode { BFS, MultiSource, DStarLite }
+           FlowFieldDirtyQueue.h/.cpp            # colas High/Normal; priority=f(heat, dist cámara, impacto)
+         Occupancy/                              # ocupación/capacidad estática y dinámica
+           OccupancyGrid.h/.cpp                  # mapa binario/estados por celda
+           CapacityGrid.h/.cpp                   # capacidad dura + SoftCapacity efectiva; SoftCapacityDelta; CapacityMode{HardOnly, SoftAdaptive}
+         Density/                                # densidad/heat y métricas por tile
+           DensityHeatGrid.h/.cpp                # AccumulateTraffic, Decay, GetHeat, IsStalled, GetQueuePressure
 
----
-
-## Reglas clave de escalado
-- **Pocos seguidores**: mantener 8–32 por líder con presupuesto duro (p.ej., ≤ 0.2–0.5 ms total). Son proxies de la marea, no mini‑líderes.
-- **Semilla → FlowField**: seguidores no recalculan todo; solo etiquetan tiles/celdas para rebuild parcial con token‑bucket.
-- **Una sola verdad**: el `FlowField` guía a todos. Líder/seguidores no empujan posiciones de la horda; publican waypoints/costos/sesgos.
-- **Histéresis en metas**: líder con cooldown; seguidores respetan ventana.
+         Systems/                                # orquestación (Mass/ECS)
+           Processors/
+             FlowFieldUpdateProcessor.h/.cpp     # consume DirtyQueue; respeta presupuesto
+             HordeDispatcherProcessor.h/.cpp     # solo lectura de flow/occupancy
+             ClusterLeaderSeedingProcessor.h/.cpp# downsample rutas; marca tiles/celdas dirty
+             DebugOverlayProcessor.h/.cpp        # dibuja capas/metricas de debug
+             PortalStatsProcessor.h/.cpp         # contadores por portal/corredor (liviano)
+           Subsystems/
+             GridWorldSubsystem.h/.cpp           # acceso único; allocs; registro processors
+         Components/                             # datos por entidad/grupo (Mass Fragments/Tags)
+           Fragments/
+             GridCellFragment.h                  # tileXY + subslot local
+             GroupIntentFragment.h               # goalId, role, cooldowns
+             FlowReadFragment.h                  # {TileId, FlowDir, FlowCost, VersionRead} cacheados
+           Tags/
+             HordeTag.h                          # marca entidades de horda
+             LeaderTag.h                         # marca líderes
+             FollowerTag.h                       # marca seguidores
+         Interfaces/                             # Bridges a NavMesh/BuildingHider/Portales
+           NavmeshBridge.h/.cpp                  # lecturas NavMesh (portales/navcells/goals)
+           BuildingHiderBridge.h/.cpp            # alturas/colisiones por piso (solo lectura)
+           PortalBridge.h/.cpp                   # (experimental) portales desde level design; devolver passthrough si no hay authoring
+         Debug/
+           GridDebugDraw.h/.cpp                  # helpers de dibujo de celdas/tiles
+           GridStats.h/.cpp                      # métricas agregadas y sampling
+           HeatMapOverlay.h/.cpp                 # overlay de heat/density
+           PortalOverlay.h/.cpp                  # overlay de portales/costos
+         Utils/
+           RingBuffer.h                          # buffers de eventos/time windows
+           TokenBucket.h                         # rate‑limiting de rebuilds y ticks
+           SpatialIndex.h/.cpp                   # índices espaciales/tiles activos
+           SmallVector.h                         # evitar allocs (o usar TInlineAllocator)
+         Data/
+           DT_GridTuning.h                       # tunables de grilla y presupuestos
+           DT_FlowSources.h                      # presets de fuentes/sesgos por escenario
+   ```
+   
+   ### Contenido y Blueprints
+   `Content/GridSystem/`
+   
+   ```text
+   Content/
+     GridSystem/
+       Blueprints/
+         BP_GridWorld          # actor helper para bounds/visual/debug
+         BP_GridOverlay        # toggle de overlays y settings en runtime
+       Materials/
+         M_Grid_Debug
+         MI_Grid_Debug_1m
+       Textures/
+         T_Grid_1m
+       UI/
+         WB_GridDebug
+       Data/
+          DT_GridTuning        # tunables (resolución, límites por etapa)
+          DT_FlowSources       # presets de fuentes/sesgos por escenario
+       Debug/
+         Profiles/             # colecciones de overlays y métricas
+   ```
+   
+   ### Editor/Tests/Opcional Plugin
+   
+   ```text
+   Content/Editor/GridSystem/   # íconos, utilidades de editor
+   Content/Tests/GridSystem/    # mapas de prueba sintéticos
+   
+   Plugins/GridSystem/          # (opcional) versión plugin si se independiza
+     Source/GridSystem/...      # espeja la estructura de C++ anterior
+     Content/GridSystem/...     # espeja la estructura de contenido
+   ```
+   
+   ### Notas
+   - **Resolución base**: 1 m/celda; tiles 64×64 celdas.
+   - **Nomenclatura**: prefijo `Grid` para clases núcleo; `FlowField*` para flow; `*Processor` para Mass/ECS; `*Subsystem` para orquestación global.
+   - **Integraciones**: bridges a `Navmesh` y a colisiones/alturas de Building Hider (solo lectura) para poblar `Occupancy/Portals`.
+   - **Debug**: overlays y métricas deben ser opt‑in y baratos (no tocar hot path).
 - **Offscreen LOD**: fuera de cámara, colapsar Seguidores → Horda proxy; en cámara, activar Líder + pocos Seguidores.
 
 ---
@@ -112,27 +214,35 @@
 - **Observabilidad/telemetría**: ≤ 0.3 ms (asíncrono, frame‑budgeted).
 - **Reserva/variabilidad**: 1.0–2.0 ms.
 
-Notas:
-- Los límites son orientativos; priorizar calidad visual en cámara y estabilidad de frame. Sub-sistemas deben degradar de forma "graciosa" al agotar presupuesto (menos tiles de flow, menor frecuencia, colapso de followers, etc.).
 
----
-
-## Reglas de consistencia e invariantes
-- Líder nace de responders del estímulo y publica metas sesgadas por portales/regiones.
-- Seguidores ⊆ responders del cluster del mismo estímulo; respetan cooldown.
-- Horda no usa steering fino: se guía por `FlowField`, `Occupancy`, sub‑slots y portales.
-- Ningún agente cambia de grupo > 1 vez por epoch; transiciones controladas por histéresis.
-
----
-
-## Métricas esenciales
-- ActiveTiles (% del total), CellsPerLOD, FlowRebuildTiles/Celdas por frame, Intent queues (largo, bloqueos), Portal usage, Horde merges/splits, Sleep/Wake transitions, AverageHeat, tiempo por subsistema y headroom.
-
----
-
-## Operatividad y roadmap
-- Implementar primero hot path (intenciones/arbitraje/commit) y scheduler reactivo.
-- Integrar flow multiobjetivo con rebuild parcial y token‑bucket.
-- Activar roles por densidad/heat y LOD reactivo (on/offscreen).
-- Optimizar behaviors por instancia (batch grande, cache‑friendly) y colisión local por tiles.
-- Añadir observabilidad asíncrona y pruebas sintéticas sin tocar hot path.
+#### Checklist de arranque (paso a paso)
+- Core + Subsystem
+  - GridWorldSubsystem crea storages (Occupancy/Flow/Density) y expone getters.
+  - BP_GridWorld dibuja bounds y celdas de 1 m (material de debug).
+- Occupancy estática
+  - Cargar paredes/portales en OccupancyGrid y CapacityGrid.
+  - Queries O(1) con SOA (sin mapas dinámicos).
+- FlowFieldStorage + DirtyQueue
+  - FlowFieldStorage: solo arrays y versiones; sin solver aún.
+  - FlowFieldDirtyQueue: dos colas (High/Normal).
+- Solver + Rebuilder
+  - FlowFieldSolver (BFS multi‑fuente) con mezcla simple de costos.
+  - FlowFieldRebuilder: token‑bucket N tiles + M celdas/frame.
+  - Overlay para ver qué se reconstruye hoy.
+- Followers (siembra)
+  - ClusterLeaderSeedingProcessor marca tiles/celdas dirty (downsample).
+  - Priorizar High si IsStalled o Heat > H_high.
+- Horda dummy
+  - HordeDispatcherProcessor lee FlowReadFragment (dir/costo) y mueve cubos.
+  - Saltar actualización si VersionRead no cambió.
+- Heat y anti‑atascos
+  - DensityHeatGrid (accumulate + decay).
+  - Coste inflado: Cost' = Cost + α*Heat + β*QueuePressure.
+- UI/Blueprints
+  - BP_GridOverlay + WB_GridDebug sliders: HeatDecay, H_high/H_low, FlowBudget, SoftCapacityDelta, PortalBiasScale.
+- Consola mínima
+  - grid.flow.rebuild_now, grid.heat.inject x y v, grid.debug.toggle, grid.portal.bias name s.
+- Pruebas sintéticas
+  - Embudo con un portal vs dos → observar desvío por Heat.
+  - Corredor capacity 1 con SoftAdaptive → ver “semáforo” natural.
+  - Stress de goals → el rebuild parcial mantiene FPS.
