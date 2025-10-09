@@ -91,10 +91,11 @@ Source/MyProjectTSecuence/GridSystem/
 │  ├── GridTypes.h                 # IDs, dirs (8-neigh), structs básicos
 │  ├── GridConfig.h/.cpp           # UDeveloperSettings: tamaños, T, α, β, budgets
 │  └── GridMath.h                  # world↔cell, vecinos, costos ort/diag, clamp/lerp
-├── Layers/
+├── Occupancy/
 │  ├── OccupancyGrid.h/.cpp        # walkable/blocked (+events de cambio)
-│  ├── CapacityGrid.h/.cpp         # capacidad por celda (hard/soft)
-│  └── DensityHeatGrid.h/.cpp
+│  └── CapacityGrid.h/.cpp         # capacidad por celda (hard/soft)
+├── Density/
+│  └── DensityHeatGrid.h/.cpp      # heat SOA por tile (Accumulate/Decay/Get)
 └── FlowField/
    ├── FlowFieldStorage.h/.cpp     # SOA: dist[], dir[]; acceso ReadDir(CellId)
    ├── FlowFieldSolver.h/.cpp      # BFS/Dijkstra multi-fuente + softmax/gradiente
@@ -104,21 +105,41 @@ Source/MyProjectTSecuence/GridSystem/
 ---
 
 ## Consola mínima
-- `grid.flow.rebuild_now`
-- `grid.heat.inject x y v`
+- `grid.flow.set_goal x y` — define una meta en coordenadas de celda.
+- `grid.flow.mark_tile tx ty` — marca un tile como dirty.
+- `grid.flow.rebuild_step [tiles] [cells]` — ejecuta un paso con presupuesto.
+- `grid.flow.rebuild_now` — consume toda la cola de tiles dirty.
+- `grid.flow.clear_all` — limpia storage y colas.
+- `grid.heat.inject x y v` — inyecta Heat en una celda.
+- `grid.heat.decay dt` — aplica decay global.
+- `grid.heat.clear` — limpia todo el Heat.
+ - `grid.occ.set x y state` — setea estado de celda (0=Empty,1=Obstacle,2=Portal).
+ - `grid.occ.clear` — limpia toda la capa de occupancy.
+
+Pendiente (debug/visualización):
 - `grid.debug.flow on|off`
 - `grid.debug.heat on|off`
 
 ---
 
-## Checklist
-- Inicializar `OccupancyGrid` y (opcional) `CapacityGrid`.
-- `DensityHeatGrid`: acumular y decaer Heat.
-- `FlowFieldStorage` + `FlowFieldRebuilder`:
-  - Resolver `dist` (BFS/Dijkstra) a 1 m.
-  - Calcular `dir` continua (softmax/gradiente).
-  - Versionar por tile. Rebuild parcial por dirty.
-- Agentes: leer `dir(i)` y mover `v = v_max·dir(i)` sin A*.
-- Debug overlays: `dist` (cost field), `dir` (flow), `Heat`.
+## Checklist (estado y próximos pasos)
+- [hecho] `FlowFieldStorage` (SOA por tile: `dist[]`, `dir[]`, `tileVersion[]`).
+- [hecho] `FlowFieldRebuilder` (cola de tiles dirty; presupuesto por frame; integración solver por tile).
+- [hecho] Consola mínima (`grid.flow.*`, `grid.heat.*`).
+- [hecho] `DensityHeatGrid` con almacenamiento real (SOA por tile) y comandos de consola.
+- [hecho] Solver real por tile: Dijkstra multi‑fuente 8‑dir con costo `moveCost + α·Heat + β·CapacityPressure(placeholder)` y dirección softmax.
+- [hecho] Base `OccupancyGrid` con almacenamiento por tile (walkable/blocked/portal) y API `IsBlocked/IsPortal/Get/Set`.
+
+Próximos pasos inmediatos (debug visual y authoring):
+- [alto] Overlays de debug:
+  - `grid.debug.flow on|off`: dibujar `dir` y/o `dist` por celda/tile.
+  - `grid.debug.heat on|off`: dibujar `Heat` (colormap) por celda.
+- [alto] Authoring/edición rápida de Occupancy desde consola:
+  - `grid.occ.set x y state` (0=Empty,1=Obstacle,2=Portal)
+  - `grid.occ.clear`
+- [medio] Exponer parámetros del solver por consola: `grid.flow.set_params T α β`.
+- [medio] Presupuesto por celdas: respetar `MaxCellsPerFrame` en `RebuildStep` (pausar/continuar entre frames).
+- [medio] Integrar presión por capacidad real en costo (`CapacityGrid`): `β·CapacityPressure`.
+- [bajo] Tunables en `UDeveloperSettings`/CVars (T, α, β, budgets) y pequeñas mejoras de estabilidad (histéresis de dirección).
 
 ---

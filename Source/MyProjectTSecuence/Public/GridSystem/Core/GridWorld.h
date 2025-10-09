@@ -13,6 +13,17 @@ namespace GridWorld
 	// NOTA: Mantener en runtime como una variable global/simple mientras avanzamos.
 	static FVector OriginWS = FVector::ZeroVector;
 
+	// Set/Get explícitos del origen del grid en mundo
+	FORCEINLINE void SetOriginWS(const FVector& InOrigin)
+	{
+		OriginWS = InOrigin;
+	}
+
+	FORCEINLINE const FVector& GetOriginWS()
+	{
+		return OriginWS;
+	}
+
 	// --- Celdas ---
 	FORCEINLINE int32 WorldToCellCoord(const float WorldCoordUU, const float OriginCoordUU)
 	{
@@ -60,6 +71,22 @@ namespace GridWorld
 		return FVector2D(
 			OriginWS.X + TileXY.X * GridConfig::TileDim * GridConfig::CellSizeUU,
 			OriginWS.Y + TileXY.Y * GridConfig::TileDim * GridConfig::CellSizeUU
+		);
+	}
+
+	// Devuelve los límites [MinCell, MaxCell] (incluyente) en coordenadas de celda para un tile dado
+	FORCEINLINE void TileBoundsInCells(const FIntPoint& TileXY, FIntPoint& OutMinCell, FIntPoint& OutMaxCell)
+	{
+		OutMinCell = FIntPoint(TileXY.X * GridConfig::TileDim, TileXY.Y * GridConfig::TileDim);
+		OutMaxCell = FIntPoint(OutMinCell.X + (GridConfig::TileDim - 1), OutMinCell.Y + (GridConfig::TileDim - 1));
+	}
+
+	// Asegura que un índice de celda local dentro del tile esté clamped al rango válido [0, TileDim-1]
+	FORCEINLINE FIntPoint ClampLocalCellInTile(const FIntPoint& LocalCellXY)
+	{
+		return FIntPoint(
+			FMath::Clamp(LocalCellXY.X, 0, GridConfig::TileDim - 1),
+			FMath::Clamp(LocalCellXY.Y, 0, GridConfig::TileDim - 1)
 		);
 	}
 

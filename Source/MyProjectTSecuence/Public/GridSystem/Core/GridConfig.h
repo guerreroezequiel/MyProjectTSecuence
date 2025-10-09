@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 
-// Config mínimos del Grid System (ver GRID_SYSTEM.md)
 // Unidades: 1 m = 100 uu (Unreal Units)
 
 namespace GridConfig
@@ -13,12 +12,6 @@ namespace GridConfig
 
 	// Epoch global (GRID_SYSTEM.md: Temporización y Epoch global)
 	inline constexpr float EpochMs = 200.0f;          // 5 Hz
-
-	// Seguidores por LOD (GRID_SYSTEM.md: LOD y visibilidad)
-	inline constexpr int32 FollowersLOD0 = 16;
-	inline constexpr int32 FollowersLOD1 = 8;
-	inline constexpr int32 FollowersLOD2 = 4;
-	inline constexpr int32 FollowersOffscreen = 0;
 
 	// Sub-slots por celda (GRID_SYSTEM.md: Capa 2 – Sub‑slots 2x2 de 50 cm)
 	inline constexpr int32  SubSlotsDim    = 2;                     // 2 x 2
