@@ -6,8 +6,9 @@
 #include "GridSystem/Core/GridMath.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
 #include "GridSystem/Occupancy/CapacityGrid.h"
-#include "GridSystem/Layers/DensityHeatGrid.h"
+#include "GridSystem/Density/DensityHeatGrid.h"
 #include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/FlowField/FlowFieldStorage.h"
 #include <limits>
 
 // FlowFieldSolver: interfaz de solver (BFS/Dijkstra multi-fuente) + dirección continua.
@@ -84,7 +85,7 @@ namespace Grid
 			FSolveStats Stats;
 			if (Goals.GoalCells.Num() == 0) { return Stats; }
 
-			// Precompute centros de metas en mundo (XY)
+			// Precompute centros de metas en mundo
 			TArray<FVector2D> GoalCenters;
 			GoalCenters.Reserve(Goals.GoalCells.Num());
 			for (const FIntPoint& g : Goals.GoalCells)
@@ -99,15 +100,13 @@ namespace Grid
 					const FIntPoint c(x, y);
 					const FVector2D cCenter = GridWorld::CellToWorldCenterXY(c);
 					// Distancia a la meta más cercana
-					float bestDist = TNumericLimits<float>::Infinity();
+					float bestDist = TNumericLimits<float>::Max();
 					int32 bestIdx = -1;
 					for (int32 gi = 0; gi < GoalCenters.Num(); ++gi)
 					{
 						const float d = FVector2D::Distance(cCenter, GoalCenters[gi]) / GridConfig::CellSizeUU; // en celdas
 						if (d < bestDist) { bestDist = d; bestIdx = gi; }
 					}
-
-					// Dist
 					WriteDist(c, bestDist);
 					// Dir: hacia la meta más cercana
 					FVector2D dir = FVector2D::ZeroVector;
@@ -125,7 +124,7 @@ namespace Grid
 			return Stats;
 		}
 
-		// Dijkstra multi-fuente por tile con costos: moveCost + AlphaHeat*Heat + BetaCapacity*Pressure(placeholder)
+		// Dijkstra multi-fuente por tile con costos: moveCost + Alphaheat*heat + BetaCapacity*Pressure(placeholder)
 		// Limita la expansión a [MinCell..MaxCell]. Si no hay metas dentro del tile, opcionalmente cae al solver euclidiano.
 		FORCEINLINE FSolveStats SolveTileDijkstra(const FIntPoint& MinCell, const FIntPoint& MaxCell, const FGoalSet& Goals, const FSolverParams& Params)
 		{
@@ -133,7 +132,7 @@ namespace Grid
 			const int32 TileDim = GridConfig::TileDim;
 			const int32 N = TileDim * TileDim;
 			TArray<float> Dist;
-			Dist.Init(TNumericLimits<float>::Infinity(), N);
+			Dist.Init(TNumericLimits<float>::Max(), N);
 
 			auto InBounds = [&](const FIntPoint& c)->bool {
 				return c.X >= MinCell.X && c.X <= MaxCell.X && c.Y >= MinCell.Y && c.Y <= MaxCell.Y;
@@ -177,7 +176,7 @@ namespace Grid
 					if (Open[i].D < bestD) { bestD = Open[i].D; bestIdx = i; }
 				}
 				const Node curr = Open[bestIdx];
-				Open.RemoveAtSwap(bestIdx, 1, false);
+				Open.RemoveAtSwap(bestIdx, 1, EAllowShrinking::No);
 
 				Stats.ExpandedCells++;
 

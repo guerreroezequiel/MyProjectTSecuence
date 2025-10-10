@@ -23,7 +23,7 @@ namespace Grid
 			void InitAll()
 			{
 				const int32 N = GridConfig::TileDim * GridConfig::TileDim;
-				Dist.Init(TNumericLimits<float>::Infinity(), N);
+				Dist.Init(TNumericLimits<float>::Max(), N);
 				Dir.Init(FVector2D::ZeroVector, N);
 			}
 		};
@@ -92,7 +92,7 @@ namespace Grid
 			WriteDir(CellXY, DirValue);
 		}
 
-		// Lectura de distancia (cost-to-go) por celda. Default: +inf (no resuelto)
+		// Lectura de distancia (cost-to-go) por celda. Default: +max (no resuelto)
 		FORCEINLINE float ReadDist(const FIntPoint& CellXY)
 		{
 			const FIntPoint TileXY  = GridWorld::CellToTileXY(CellXY);
@@ -102,7 +102,7 @@ namespace Grid
 				const int32 Idx = LocalIndex(LocalXY);
 				if (T->Dist.IsValidIndex(Idx)) { return T->Dist[Idx]; }
 			}
-			return TNumericLimits<float>::Infinity();
+			return TNumericLimits<float>::Max();
 		}
 
 		// Lectura de dirección continua del flow (normalizada). Default: (0,0)
