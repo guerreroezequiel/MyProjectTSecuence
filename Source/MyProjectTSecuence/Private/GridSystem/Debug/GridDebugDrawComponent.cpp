@@ -43,9 +43,18 @@ void UGridDebugDrawComponent::DrawCapacity()
     FIntPoint MinCell, MaxCell;
     GridWorld::TileBoundsInCells(TileXY, MinCell, MaxCell);
 
-    for (int32 y = MinCell.Y; y <= MaxCell.Y; y += GridStep)
+    // Dibuja el contorno del tile completo (64x64 celdas) para verificar tamaño
     {
-        for (int32 x = MinCell.X; x <= MaxCell.X; x += GridStep)
+        const FVector2D TileOrigin2D = GridWorld::TileToWorldOriginXY(TileXY);
+        const float TileSizeUU = GridConfig::TileDim * GridConfig::CellSizeUU;
+        const FVector TileCenter(TileOrigin2D.X + TileSizeUU * 0.5f, TileOrigin2D.Y + TileSizeUU * 0.5f, GridWorld::GetOriginWS().Z);
+        const FVector TileExtent(TileSizeUU * 0.5f, TileSizeUU * 0.5f, 2.f);
+        DrawDebugBox(GetWorld(), TileCenter, TileExtent, FQuat::Identity, FColor(0, 255, 0, 64), /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, /*Thickness*/ 2.f);
+    }
+
+    for (int32 y = MinCell.Y; y <= MaxCell.Y; ++y)
+    {
+        for (int32 x = MinCell.X; x <= MaxCell.X; ++x)
         {
             const FIntPoint CellXY(x, y);
 
@@ -60,11 +69,19 @@ void UGridDebugDrawComponent::DrawCapacity()
 			const bool bOver = (Base > 0) && (Count > Base);
 			const FColor Color = bOver ? FColor::Red : FColor::Green;
 
-			const FVector Extent(BoxExtent, BoxExtent, 2.f);
-			DrawDebugBox(GetWorld(), Center, Extent, FQuat::Identity, Color, /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, /*Thickness*/ 1.f);
+            // Ajuste al tamaño real de celda (1 m = 100 uu) con margen visual
+            const float HalfCell = GridConfig::CellSizeUU * 0.5f;
+            const float Margin = HalfCell * 0.10f; // 10% de margen
+            const FVector Extent(HalfCell - Margin, HalfCell - Margin, 2.f);
+            DrawDebugBox(GetWorld(), Center, Extent, FQuat::Identity, Color, /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, /*Thickness*/ 1.f);
 
-			const FString Txt = FString::Printf(TEXT("%d/%d"), Count, Base);
-			DrawDebugString(GetWorld(), Center + FVector(0, 0, TextZOffset), Txt, nullptr, FColor::White, 0.f, false);
+            // Mostrar texto solo si hay datos distintos de 0/0 y respetando GridStep para densidad
+            const bool bTextCell = ((x % GridStep) == 0) && ((y % GridStep) == 0);
+            if (bTextCell && (Base > 0 || Count > 0))
+            {
+                const FString Txt = FString::Printf(TEXT("%d/%d"), Count, Base);
+                DrawDebugString(GetWorld(), Center + FVector(0, 0, TextZOffset), Txt, nullptr, FColor::White, 0.f, false);
+            }
 		}
 	}
 }
