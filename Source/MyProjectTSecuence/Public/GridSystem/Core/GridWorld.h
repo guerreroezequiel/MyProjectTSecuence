@@ -60,9 +60,10 @@ namespace GridWorld
 
 	FORCEINLINE FIntPoint LocalCellInTile(const FIntPoint& CellXY)
 	{
+		auto PosMod = [](int32 a, int32 b) -> int32 { int32 r = a % b; return (r < 0) ? (r + b) : r; };
 		return FIntPoint(
-			CellXY.X - (CellXY.X / GridConfig::TileDim) * GridConfig::TileDim,
-			CellXY.Y - (CellXY.Y / GridConfig::TileDim) * GridConfig::TileDim
+			PosMod(CellXY.X, GridConfig::TileDim),
+			PosMod(CellXY.Y, GridConfig::TileDim)
 		);
 	}
 

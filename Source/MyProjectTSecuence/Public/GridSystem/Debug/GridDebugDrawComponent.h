@@ -30,10 +30,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Grid Debug")
 	float TextZOffset = 30.f;
 
+	// Opcional: origen custom del grid (si no se usa, toma el actual de GridWorld)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Grid Debug|Origin")
+	bool bUseCustomOrigin = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Grid Debug|Origin", meta=(EditCondition="bUseCustomOrigin"))
+	FVector CustomOriginWS = FVector::ZeroVector;
+
+	// Toggle por instancia para el contorno del tile
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Grid Debug|Visual")
+	bool bDrawTileOutline = true;
+
 protected:
 	virtual void InitializeComponent() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 	void DrawCapacity();
+	void DrawOccupancy();
+	FIntPoint GetFocusTileXY() const;
 };

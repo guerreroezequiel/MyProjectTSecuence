@@ -22,6 +22,10 @@
     {
       "Name": "TurboSequence_Lf",
       "Enabled": true
+    },
+    {
+      "Name": "EditorScriptingUtilities",
+      "Enabled": true
     }
   ],
   "TargetPlatforms": [],

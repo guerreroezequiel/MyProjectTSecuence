@@ -10,7 +10,21 @@ public class MyProjectTSecuence : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { 
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"MassEntity",  "GameplayDebugger", "TurboSequence_Lf"
+			"MassEntity", "GameplayDebugger", "TurboSequence_Lf", 
+			"UMG", "Slate", "SlateCore"
         });
+
+		if (Target.bBuildEditor)
+		{
+			PublicDependencyModuleNames.AddRange(new string[] {
+				"Blutility"
+			});
+
+			PrivateDependencyModuleNames.AddRange(new string[] { 
+				"UnrealEd",
+				"EditorScriptingUtilities",
+				"EditorStyle"
+			});
+		}
 	}
 }
