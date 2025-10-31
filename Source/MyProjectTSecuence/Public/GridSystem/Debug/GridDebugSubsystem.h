@@ -10,7 +10,7 @@
  * Subsistema de depuración para el sistema de grilla
  * Se integra con el GridEpochSubsystem para la sincronización de actualizaciones
  */
-UCLASS()
+UCLASS(Blueprintable, BlueprintType)
 class MYPROJECTTSECUENCE_API UGridDebugSubsystem : public UWorldSubsystem
 {
     GENERATED_BODY()
