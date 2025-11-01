@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "EditorUtilityWidget.h"
+#include "Blueprint/UserWidget.h"
 #include "Engine/CanvasRenderTarget2D.h"
 #include "GridDebugWidgetBase.generated.h"
 
@@ -12,7 +12,7 @@ class UImage;
  * Widget base para la visualización de depuración de la grilla
  */
 UCLASS(Abstract, Blueprintable, BlueprintType)
-class MYPROJECTTSECUENCE_API UGridDebugWidgetBase : public UEditorUtilityWidget
+class MYPROJECTTSECUENCE_API UGridDebugWidgetBase : public UUserWidget
 {
     GENERATED_BODY()
 
@@ -34,7 +34,7 @@ public:
 
 protected:
     /** Referencia al Render Target */
-    UPROPERTY(Transient)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
     TObjectPtr<UCanvasRenderTarget2D> GridRenderTarget;
 
     /** Color de las líneas de la grilla */
@@ -49,9 +49,13 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void CreateGridRenderTarget();
 
-    /** Actualiza la visualización */
+    /** Actualiza la visualización de la grilla */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void UpdateGridVisualization();
+
+    /** Tamaño de la celda en píxeles */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
+    float CellSize = 50.0f;
 
 private:
     /** Delegado para actualizar el render target */
