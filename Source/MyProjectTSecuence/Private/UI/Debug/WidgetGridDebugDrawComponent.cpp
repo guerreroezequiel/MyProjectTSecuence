@@ -97,26 +97,10 @@ void UWidgetGridDebugDrawComponent::UpdateDebugSettings(bool bInEnabled, const F
 
 void UWidgetGridDebugDrawComponent::DrawDebugGrid()
 {
-    if (!GetWorld())
+    if (!GetWorld() || Radius <= 0 || GridSize <= 0.0f)
     {
-        UE_LOG(LogTemp, Error, TEXT("WidgetGridDebugDrawComponent: No valid world to draw in"));
         return;
     }
-    
-    if (Radius <= 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("WidgetGridDebugDrawComponent: Invalid radius: %d"), Radius);
-        return;
-    }
-    
-    if (GridSize <= 0.0f)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("WidgetGridDebugDrawComponent: Invalid grid size: %.2f"), GridSize);
-        return;
-    }
-    
-    UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent: Drawing grid at %s with size %.2f and radius %d"), 
-        *CenterWorldLocation.ToString(), GridSize, Radius);
     
     const FVector Center = CenterWorldLocation;
     const float HalfGrid = GridSize * 0.5f;
