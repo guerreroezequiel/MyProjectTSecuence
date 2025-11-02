@@ -2,6 +2,8 @@
 #include "Engine/World.h"
 #include "GridSystem/Core/GridEpochSubsystem.h"
 #include "Misc/App.h"  // Para FApp::GetCurrentTime()
+#include "DrawDebugHelpers.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 
 UGridDebugSubsystem* UGridDebugSubsystem::GetGridDebugSubsystem(const UObject* WorldContextObject)
@@ -47,6 +49,9 @@ void UGridDebugSubsystem::Deinitialize()
         FTSTicker::GetCoreTicker().RemoveTicker(EpochTickHandle);
         EpochTickHandle.Reset();
     }
+    
+    // Limpiamos el área de debug
+    ClearDebugArea();
     
     Super::Deinitialize();
     UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem desinicializado"));
@@ -149,4 +154,54 @@ bool UGridDebugSubsystem::OnEpochTick(float DeltaTime)
     UE_LOG(LogTemp, VeryVerbose, TEXT("Tick de depuración #%d"), ++TickCount);
     
     return true; // Mantener el ticker activo
+}
+
+void UGridDebugSubsystem::UpdateDebugArea(const FIntPoint& Center, int32 Radius, float CellSize, FLinearColor Color, float Duration)
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+
+    // Calcular el tamaño total del área
+    const float TotalSize = (Radius * 2 + 1) * CellSize;
+    const FVector Extent(TotalSize * 0.5f, TotalSize * 0.5f, 10.0f);
+    
+    // Convertir la posición de la celda a posición en el mundo
+    // Esto es un ejemplo - ajusta según cómo esté configurado tu sistema de grilla
+    FVector WorldLocation = FVector(
+        Center.X * CellSize,
+        Center.Y * CellSize,
+        50.0f // Altura por defecto
+    );
+
+    // Actualizar el área de debug actual
+    CurrentDebugArea.CenterLocation = WorldLocation;
+    CurrentDebugArea.Extent = Extent;
+    CurrentDebugArea.Color = Color.ToFColor(true);
+    CurrentDebugArea.Duration = Duration;
+    bHasDebugArea = true;
+
+    // Dibujar el área de debug
+    DrawDebugBox(
+        GetWorld(),
+        WorldLocation,
+        Extent,
+        FQuat::Identity,
+        CurrentDebugArea.Color,
+        false,
+        Duration,
+        0,
+        CurrentDebugArea.LineThickness
+    );
+}
+
+void UGridDebugSubsystem::ClearDebugArea()
+{
+    if (bHasDebugArea)
+    {
+        // Limpiar cualquier debug draw existente
+        FlushPersistentDebugLines(GetWorld());
+        bHasDebugArea = false;
+    }
 }

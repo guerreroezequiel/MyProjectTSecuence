@@ -4,7 +4,32 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "GridSystem/Core/GridEpoch.h"
+#include "DrawDebugHelpers.h"
 #include "GridDebugSubsystem.generated.h"
+
+/**
+ * Estructura que contiene la información del área de debug
+ */
+USTRUCT(BlueprintType)
+struct FGridDebugArea
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadWrite, Category = "Grid|Debug")
+    FVector CenterLocation;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Grid|Debug")
+    FVector Extent;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Grid|Debug")
+    FColor Color = FColor::Green;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Grid|Debug")
+    float LineThickness = 2.0f;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Grid|Debug")
+    float Duration = 0.0f; // 0 = solo un frame
+};
 
 /**
  * Subsistema de depuración para el sistema de grilla
@@ -59,8 +84,25 @@ public:
      * Verifica si la simulación está en pausa
      * @return True si la simulación está pausada
      */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Grid|Debug")
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     bool IsPaused() const { return bIsPaused; }
+
+    /**
+     * Actualiza el área de debug que se dibujará en el mundo
+     * @param Center Celda central del área
+     * @param Radius Radio del área en celdas
+     * @param CellSize Tamaño de cada celda
+     * @param Color Color del debug
+     * @param Duration Duración del debug (0 = solo un frame)
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
+    void UpdateDebugArea(const FIntPoint& Center, int32 Radius, float CellSize, FLinearColor Color = FLinearColor::Green, float Duration = 0.0f);
+    
+    /**
+     * Limpia el área de debug actual
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
+    void ClearDebugArea();
 
 protected:
     // Callback para el tick del epoch
@@ -69,6 +111,10 @@ protected:
 private:
     // Estado del modo de depuración
     bool bIsDebugActive = false;
+    
+    // Área de debug actual
+    FGridDebugArea CurrentDebugArea;
+    bool bHasDebugArea = false;
     
     // Estado de pausa
     bool bIsPaused = false;
