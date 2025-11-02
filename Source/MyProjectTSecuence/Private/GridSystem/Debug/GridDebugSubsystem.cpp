@@ -310,29 +310,49 @@ void UGridDebugSubsystem::UpdateAllDebugComponents()
 
 void UGridDebugSubsystem::UpdateWidgetDebugArea(const FVector& CenterWorldLocation, float GridSize, int32 Radius)
 {
-    UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: UpdateWidgetDebugArea - Location: %s, GridSize: %.2f, Radius: %d, NumComponents: %d"), 
-        *CenterWorldLocation.ToString(), GridSize, Radius, WidgetDebugComponents.Num());
+    UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: UpdateWidgetDebugArea - Location: %s, GridSize: %.2f, Radius: %d, NumWidgetComponents: %d, NumDebugComponents: %d"), 
+        *CenterWorldLocation.ToString(), GridSize, Radius, WidgetDebugComponents.Num(), DebugComponents.Num());
     
-    if (WidgetDebugComponents.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem: No widget debug components registered!"));
-        return;
-    }
+    bool bAnyWidgetUpdated = false;
+    bool bAnyDebugUpdated = false;
     
-    bool bAnyComponentUpdated = false;
+    // Update all widget debug components
     for (TWeakObjectPtr<UWidgetGridDebugDrawComponent> Component : WidgetDebugComponents)
     {
         if (Component.IsValid())
         {
             UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: Updating widget debug component %p"), Component.Get());
             Component->UpdateDebugArea(CenterWorldLocation, GridSize, Radius);
-            bAnyComponentUpdated = true;
+            bAnyWidgetUpdated = true;
         }
     }
     
-    if (!bAnyComponentUpdated)
+    // Also update regular debug components with the same values
+    for (TWeakObjectPtr<UGridDebugDrawComponent> Component : DebugComponents)
+    {
+        if (Component.IsValid())
+        {
+            UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: Updating regular debug component %p"), Component.Get());
+            Component->UpdateDebugSettings(
+                true,           // bInEnabled
+                bDrawCapacity,  // bInDrawCapacity
+                bDrawTileOutline, // bInDrawTileOutline
+                Radius,         // InGridStep
+                GridSize,       // InBoxExtent
+                TextZOffset     // InTextZOffset
+            );
+            bAnyDebugUpdated = true;
+        }
+    }
+    
+    if (!bAnyWidgetUpdated)
     {
         UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem: No valid widget debug components found to update"));
+    }
+    
+    if (!bAnyDebugUpdated)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem: No valid debug components found to update"));
     }
 }
 
@@ -345,4 +365,11 @@ void UGridDebugSubsystem::ClearWidgetDebugAreas()
             Component->ClearDebugArea();
         }
     }
+}
+
+void UGridDebugSubsystem::UpdateAllDebugComponents(const FVector& CenterWorldLocation, float GridSize, int32 Radius)
+{
+    // This is just a wrapper that calls UpdateWidgetDebugArea
+    // to maintain backward compatibility
+    UpdateWidgetDebugArea(CenterWorldLocation, GridSize, Radius);
 }

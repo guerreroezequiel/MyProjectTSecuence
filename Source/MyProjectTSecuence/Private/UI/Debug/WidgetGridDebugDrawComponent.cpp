@@ -56,25 +56,40 @@ void UWidgetGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 void UWidgetGridDebugDrawComponent::UpdateDebugArea(const FVector& InCenterWorldLocation, float InGridSize, int32 InRadius)
 {
-    UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent: UpdateDebugArea - Location: %s, GridSize: %.2f, Radius: %d"), 
-        *InCenterWorldLocation.ToString(), InGridSize, InRadius);
-        
+    // Validate input parameters
+    if (InGridSize <= 0.0f || InRadius < 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("WidgetGridDebugDrawComponent: Invalid parameters - GridSize: %.2f, Radius: %d"), 
+            InGridSize, InRadius);
+        return;
+    }
+    
+    // Update component properties
     CenterWorldLocation = InCenterWorldLocation;
-    GridSize = FMath::Max(1.0f, InGridSize);
-    Radius = FMath::Max(0, InRadius);
+    GridSize = InGridSize;
+    Radius = InRadius;
+    
+    // Calculate the total number of cells in the grid (including center and all neighbors within radius)
+    const int32 GridWidth = (Radius * 2) + 1;  // Total cells in one dimension
+    const int32 TotalCells = GridWidth * GridWidth;
+    
+    UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent: UpdateDebugArea - Center: %s, CellSize: %.2f, Radius: %d, TotalCells: %d"), 
+        *InCenterWorldLocation.ToString(), GridSize, Radius, TotalCells);
     
     // Clear any previous debug drawings
     ClearDebugArea();
     
+    // If radius is 0, we're just drawing a single cell
+    if (Radius == 0)
+    {
+        UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent: Drawing single cell at %s"), 
+            *CenterWorldLocation.ToString());
+    }
+    
     // Immediately draw the new grid if enabled
     if (bIsEnabled)
     {
-        UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent: Drawing debug grid immediately"));
         DrawDebugGrid();
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("WidgetGridDebugDrawComponent: Debug drawing is disabled, not drawing grid"));
     }
 }
 
@@ -97,7 +112,7 @@ void UWidgetGridDebugDrawComponent::UpdateDebugSettings(bool bInEnabled, const F
 
 void UWidgetGridDebugDrawComponent::DrawDebugGrid()
 {
-    if (!GetWorld() || Radius <= 0 || GridSize <= 0.0f)
+    if (!GetWorld() || GridSize <= 0.0f)
     {
         return;
     }
@@ -106,28 +121,45 @@ void UWidgetGridDebugDrawComponent::DrawDebugGrid()
     const float HalfGrid = GridSize * 0.5f;
     const int32 CellCount = (Radius * 2) + 1;
     
-    // Draw grid lines
-    for (int32 X = -Radius; X <= Radius + 1; ++X)
+    // Calculate the total grid size in world units
+    const float TotalGridSize = CellCount * GridSize;
+    const FVector GridOrigin = Center - FVector(Radius * GridSize, Radius * GridSize, 0);
+    
+    // Draw vertical grid lines
+    for (int32 X = 0; X <= CellCount; ++X)
     {
-        const float XPos = Center.X + (X * GridSize);
-        const FVector Start = FVector(XPos, Center.Y - (Radius * GridSize), Center.Z);
-        const FVector End = FVector(XPos, Center.Y + ((Radius + 1) * GridSize), Center.Z);
+        const float XPos = GridOrigin.X + (X * GridSize);
+        const FVector Start = FVector(XPos, GridOrigin.Y, Center.Z);
+        const FVector End = FVector(XPos, GridOrigin.Y + TotalGridSize, Center.Z);
         
-        int32 LineHandle = -1;
         DrawDebugLine(GetWorld(), Start, End, DebugColor, false, DebugDuration, DepthPriority, LineThickness);
     }
     
-    for (int32 Y = -Radius; Y <= Radius + 1; ++Y)
+    // Draw horizontal grid lines
+    for (int32 Y = 0; Y <= CellCount; ++Y)
     {
-        const float YPos = Center.Y + (Y * GridSize);
-        const FVector Start = FVector(Center.X - (Radius * GridSize), YPos, Center.Z);
-        const FVector End = FVector(Center.X + ((Radius + 1) * GridSize), YPos, Center.Z);
+        const float YPos = GridOrigin.Y + (Y * GridSize);
+        const FVector Start = FVector(GridOrigin.X, YPos, Center.Z);
+        const FVector End = FVector(GridOrigin.X + TotalGridSize, YPos, Center.Z);
         
-        int32 LineHandle = -1;
         DrawDebugLine(GetWorld(), Start, End, DebugColor, false, DebugDuration, DepthPriority, LineThickness);
     }
     
     // Draw center cell highlight
     const FVector BoxExtent = FVector(HalfGrid, HalfGrid, 10.0f);
     DrawDebugBox(GetWorld(), Center, BoxExtent, FQuat::Identity, FColor::Yellow, false, DebugDuration, DepthPriority, 1.0f);
+    
+    // Draw cell coordinates for debugging
+    if (Radius <= 3)  // Only draw coordinates for small radii to avoid clutter
+    {
+        for (int32 Y = 0; Y < CellCount; ++Y)
+        {
+            for (int32 X = 0; X < CellCount; ++X)
+            {
+                const FVector CellCenter = GridOrigin + FVector(X * GridSize + HalfGrid, Y * GridSize + HalfGrid, 0);
+                const FString CoordString = FString::Printf(TEXT("(%d,%d)"), X - Radius, Y - Radius);
+                DrawDebugString(GetWorld(), CellCenter, CoordString, nullptr, FColor::White, 0.0f, true);
+            }
+        }
+    }
 }

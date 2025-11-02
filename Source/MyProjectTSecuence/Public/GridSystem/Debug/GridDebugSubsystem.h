@@ -133,6 +133,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
     void ClearWidgetDebugAreas();
 
+    /** Update all debug components with new parameters */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
+    void UpdateAllDebugComponents(const FVector& CenterWorldLocation, float GridSize, int32 Radius);
+
     // Debug Drawing Settings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
     bool bEnableDebugDrawing = true;
