@@ -4,7 +4,7 @@
 #include "Misc/App.h"  // Para FApp::GetCurrentTime()
 #include "DrawDebugHelpers.h"
 #include "Kismet/KismetSystemLibrary.h"
-
+#include "GridSystem/Debug/GridDebugDrawComponent.h"
 
 UGridDebugSubsystem* UGridDebugSubsystem::GetGridDebugSubsystem(const UObject* WorldContextObject)
 {
@@ -43,12 +43,14 @@ void UGridDebugSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UGridDebugSubsystem::Deinitialize()
 {
-    // Limpiamos el manejador del tick si existe
+    // Limpiar el ticker al destruir el subsistema
     if (EpochTickHandle.IsValid())
     {
         FTSTicker::GetCoreTicker().RemoveTicker(EpochTickHandle);
-        EpochTickHandle.Reset();
     }
+    
+    // Limpiar componentes registrados
+    DebugComponents.Empty();
     
     // Limpiamos el área de debug
     ClearDebugArea();
@@ -160,40 +162,81 @@ void UGridDebugSubsystem::UpdateDebugArea(const FIntPoint& Center, int32 Radius,
 {
     if (!GetWorld())
     {
+        UE_LOG(LogTemp, Warning, TEXT("No hay mundo válido para dibujar el área de debug"));
         return;
     }
 
-    // Calcular el tamaño total del área
-    const float TotalSize = (Radius * 2 + 1) * CellSize;
-    const FVector Extent(TotalSize * 0.5f, TotalSize * 0.5f, 10.0f);
+    // 1. Calcular el tamaño total del área en celdas
+    const int32 GridSize = (Radius * 2) + 1;
+    const float TotalSize = GridSize * CellSize;
     
-    // Convertir la posición de la celda a posición en el mundo
-    // Esto es un ejemplo - ajusta según cómo esté configurado tu sistema de grilla
-    FVector WorldLocation = FVector(
-        Center.X * CellSize,
-        Center.Y * CellSize,
-        50.0f // Altura por defecto
-    );
+    FVector WorldLocation;
+    
+    // 2. Obtener la posición en el mundo
+    if (bUseGridWorldOrigin)
+    {
+        // Usar el sistema de coordenadas de GridWorld
+        const FVector2D TileOrigin2D = GridWorld::TileToWorldOriginXY(Center);
+        WorldLocation = FVector(
+            TileOrigin2D.X + (TotalSize * 0.5f) - (CellSize * 0.5f),
+            TileOrigin2D.Y + (TotalSize * 0.5f) - (CellSize * 0.5f),
+            GridWorld::GetOriginWS().Z  // Usar la misma altura que el grid
+        );
+        UE_LOG(LogTemp, Log, TEXT("Actualizando área de debug en posición GridWorld: %s"), *WorldLocation.ToString());
+    }
+    else
+    {
+        // Sistema de coordenadas simple (backup)
+        WorldLocation = FVector(
+            Center.X * CellSize,
+            Center.Y * CellSize,
+            50.0f
+        );
+        UE_LOG(LogTemp, Log, TEXT("Actualizando área de debug en posición simple: %s"), *WorldLocation.ToString());
+    }
 
-    // Actualizar el área de debug actual
+    // 3. Calcular la extensión (mitad del tamaño total)
+    const FVector Extent(TotalSize * 0.5f, TotalSize * 0.5f, 10.0f);
+
+    // 4. Actualizar el área de debug actual
     CurrentDebugArea.CenterLocation = WorldLocation;
     CurrentDebugArea.Extent = Extent;
     CurrentDebugArea.Color = Color.ToFColor(true);
     CurrentDebugArea.Duration = Duration;
+    CurrentDebugArea.LineThickness = 2.0f; // Grosor de línea más visible
     bHasDebugArea = true;
 
-    // Dibujar el área de debug
+    // 5. Dibujar el área de debug
     DrawDebugBox(
         GetWorld(),
         WorldLocation,
         Extent,
         FQuat::Identity,
         CurrentDebugArea.Color,
-        false,
-        Duration,
-        0,
+        false,  // Persistent
+        Duration > 0 ? Duration : -1.0f,  // Si es 0, usar -1 para que sea permanente
+        0,      // Depth priority
         CurrentDebugArea.LineThickness
     );
+
+    // 6. Dibujar un punto en el centro para referencia
+    DrawDebugPoint(
+        GetWorld(),
+        WorldLocation,
+        10.0f,  // Tamaño
+        FColor::Red,  // Rojo para mayor visibilidad
+        false,  // Persistent
+        Duration > 0 ? Duration : -1.0f
+    );
+    
+    // 7. Dibujar líneas desde el centro a los bordes para mejor visibilidad
+    const FVector Right = WorldLocation + FVector(Extent.X, 0, 0);
+    const FVector Left = WorldLocation - FVector(Extent.X, 0, 0);
+    const FVector Forward = WorldLocation + FVector(0, Extent.Y, 0);
+    const FVector Backward = WorldLocation - FVector(0, Extent.Y, 0);
+    
+    DrawDebugLine(GetWorld(), Left, Right, FColor::Yellow, false, Duration > 0 ? Duration : -1.0f, 0, 1.0f);
+    DrawDebugLine(GetWorld(), Backward, Forward, FColor::Yellow, false, Duration > 0 ? Duration : -1.0f, 0, 1.0f);
 }
 
 void UGridDebugSubsystem::ClearDebugArea()
@@ -203,5 +246,41 @@ void UGridDebugSubsystem::ClearDebugArea()
         // Limpiar cualquier debug draw existente
         FlushPersistentDebugLines(GetWorld());
         bHasDebugArea = false;
+    }
+}
+
+void UGridDebugSubsystem::RegisterDebugComponent(UGridDebugDrawComponent* Component)
+{
+    if (Component && !DebugComponents.Contains(Component))
+    {
+        DebugComponents.Add(Component);
+        UE_LOG(LogTemp, Log, TEXT("Debug component registered. Total: %d"), DebugComponents.Num());
+    }
+}
+
+void UGridDebugSubsystem::UnregisterDebugComponent(UGridDebugDrawComponent* Component)
+{
+    if (Component)
+    {
+        DebugComponents.Remove(Component);
+        UE_LOG(LogTemp, Log, TEXT("Debug component unregistered. Remaining: %d"), DebugComponents.Num());
+    }
+}
+
+void UGridDebugSubsystem::UpdateAllDebugComponents()
+{
+    for (TWeakObjectPtr<UGridDebugDrawComponent> Component : DebugComponents)
+    {
+        if (Component.IsValid())
+        {
+            Component->UpdateDebugSettings(
+                bEnableDebugDrawing,
+                bDrawCapacity,
+                bDrawTileOutline,
+                GridStep,
+                BoxExtent,
+                TextZOffset
+            );
+        }
     }
 }

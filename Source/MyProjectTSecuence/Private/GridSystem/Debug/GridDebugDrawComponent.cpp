@@ -5,6 +5,7 @@
 // Core/grid helpers
 #include "GridSystem/Core/GridWorld.h"
 #include "GridSystem/Core/GridConfig.h"
+#include "GridSystem/Debug/GridDebugSubsystem.h"
 
 // Capas
 #include "GridSystem/Occupancy/CapacityGrid.h"
@@ -39,6 +40,7 @@ UGridDebugDrawComponent::UGridDebugDrawComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	bAutoActivate = true;
+	DebugSubsystem = nullptr;
 }
 
 void UGridDebugDrawComponent::DrawOccupancy()
@@ -114,24 +116,69 @@ FIntPoint UGridDebugDrawComponent::GetFocusTileXY() const
     return FIntPoint(0,0);
 }
 
+void UGridDebugDrawComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    
+    // Get the debug subsystem
+    DebugSubsystem = GetWorld()->GetSubsystem<UGridDebugSubsystem>();
+    if (DebugSubsystem)
+    {
+        DebugSubsystem->RegisterDebugComponent(this);
+        
+        // Initial update with current settings
+        UpdateDebugSettings(
+            DebugSubsystem->bEnableDebugDrawing,
+            DebugSubsystem->bDrawCapacity,
+            DebugSubsystem->bDrawTileOutline,
+            DebugSubsystem->GridStep,
+            DebugSubsystem->BoxExtent,
+            DebugSubsystem->TextZOffset
+        );
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem not found! Debug drawing will be disabled."));
+    }
+}
+
+void UGridDebugDrawComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (DebugSubsystem)
+    {
+        DebugSubsystem->UnregisterDebugComponent(this);
+    }
+    
+    Super::EndPlay(EndPlayReason);
+}
+
+void UGridDebugDrawComponent::UpdateDebugSettings(bool bInEnabled, bool bInDrawCapacity, bool bInDrawTileOutline, 
+    int32 InGridStep, float InBoxExtent, float InTextZOffset)
+{
+    bDrawCapacity = bInEnabled && bInDrawCapacity;
+    bDrawTileOutline = bInDrawTileOutline;
+    GridStep = FMath::Max(1, InGridStep);
+    BoxExtent = FMath::Max(1.0f, InBoxExtent);
+    TextZOffset = InTextZOffset;
+    
+    // Enable/disable ticking based on debug state
+    SetComponentTickEnabled(bInEnabled);
+}
+
 void UGridDebugDrawComponent::InitializeComponent()
 {
-	Super::InitializeComponent();
+    Super::InitializeComponent();
 }
 
 void UGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!GetWorld()) return;
-    // Origen per-instancia opcional
-    if (bUseCustomOrigin)
+    // Only draw if debug is enabled
+    if (DebugSubsystem && !DebugSubsystem->bEnableDebugDrawing)
     {
-        GridWorld::SetOriginWS(CustomOriginWS);
+        return;
     }
-    const int32 CapOn = CVarGridDebugCap.GetValueOnGameThread();
-    bDrawCapacity = (CapOn != 0);
-    GridStep = FMath::Max(1, CVarGridDebugGridStep.GetValueOnGameThread());
 
 	if (bDrawCapacity)
 	{

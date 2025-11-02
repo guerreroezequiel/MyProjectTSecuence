@@ -4,6 +4,9 @@
 #include "Components/ActorComponent.h"
 #include "GridDebugDrawComponent.generated.h"
 
+// Forward declaration to resolve circular dependency
+class UGridDebugSubsystem;
+
 /**
  * Componente mínimo para debug visual del grid.
  * Empieza dibujando la capa Capacity; luego se puede extender a Flow/Heat/Occupancy.
@@ -45,8 +48,20 @@ protected:
 	virtual void InitializeComponent() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+public:
+    /** Update component settings from the debug subsystem */
+    void UpdateDebugSettings(bool bInEnabled, bool bInDrawCapacity, bool bInDrawTileOutline, int32 InGridStep, float InBoxExtent, float InTextZOffset);
+
+protected:
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
-	void DrawCapacity();
-	void DrawOccupancy();
-	FIntPoint GetFocusTileXY() const;
+    void DrawCapacity();
+    void DrawOccupancy();
+    FIntPoint GetFocusTileXY() const;
+    
+    // Reference to the debug subsystem
+    UPROPERTY(Transient)
+    TObjectPtr<UGridDebugSubsystem> DebugSubsystem;
 };

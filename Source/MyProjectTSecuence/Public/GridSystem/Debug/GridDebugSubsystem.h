@@ -4,7 +4,11 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "GridSystem/Core/GridEpoch.h"
+#include "GridSystem/Core/GridWorld.h"
 #include "DrawDebugHelpers.h"
+// Forward declaration to resolve circular dependency
+class UGridDebugDrawComponent;
+
 #include "GridDebugSubsystem.generated.h"
 
 /**
@@ -104,6 +108,36 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void ClearDebugArea();
 
+    /** Register/Unregister debug components */
+    void RegisterDebugComponent(UGridDebugDrawComponent* Component);
+    void UnregisterDebugComponent(UGridDebugDrawComponent* Component);
+
+    /** Update all registered debug components */
+    void UpdateAllDebugComponents();
+
+    // Debug Drawing Settings
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    bool bEnableDebugDrawing = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    bool bDrawCapacity = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    bool bDrawTileOutline = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual", meta = (ClampMin = "1", UIMin = "1"))
+    int32 GridStep = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    float BoxExtent = 30.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    float TextZOffset = 30.0f;
+
+    // Usar el sistema de coordenadas de GridWorld
+    UPROPERTY(EditAnywhere, Category = "Grid|Debug")
+    bool bUseGridWorldOrigin = true;
+
 protected:
     // Callback para el tick del epoch
     bool OnEpochTick(float DeltaTime);
@@ -116,6 +150,9 @@ private:
     FGridDebugArea CurrentDebugArea;
     bool bHasDebugArea = false;
     
+    // Registro de componentes activos
+    TArray<TWeakObjectPtr<class UGridDebugDrawComponent>> DebugComponents;
+
     // Estado de pausa
     bool bIsPaused = false;
     
