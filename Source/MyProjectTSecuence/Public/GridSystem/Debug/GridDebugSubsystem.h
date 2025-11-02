@@ -6,8 +6,9 @@
 #include "GridSystem/Core/GridEpoch.h"
 #include "GridSystem/Core/GridWorld.h"
 #include "DrawDebugHelpers.h"
-// Forward declaration to resolve circular dependency
+// Forward declarations to resolve circular dependencies
 class UGridDebugDrawComponent;
+class UWidgetGridDebugDrawComponent;
 
 #include "GridDebugSubsystem.generated.h"
 
@@ -111,9 +112,26 @@ public:
     /** Register/Unregister debug components */
     void RegisterDebugComponent(UGridDebugDrawComponent* Component);
     void UnregisterDebugComponent(UGridDebugDrawComponent* Component);
+    
+    /** Register/Unregister widget debug components */
+    void RegisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
+    void UnregisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
 
     /** Update all registered debug components */
     void UpdateAllDebugComponents();
+    
+    /** 
+     * Update the debug area for all widget debug components
+     * @param CenterWorldLocation World location of the center cell
+     * @param GridSize Size of each grid cell
+     * @param Radius Number of cells to show in each direction from center
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
+    void UpdateWidgetDebugArea(const FVector& CenterWorldLocation, float GridSize, int32 Radius);
+    
+    /** Clear all widget debug areas */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
+    void ClearWidgetDebugAreas();
 
     // Debug Drawing Settings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
@@ -150,8 +168,9 @@ private:
     FGridDebugArea CurrentDebugArea;
     bool bHasDebugArea = false;
     
-    // Registro de componentes activos
-    TArray<TWeakObjectPtr<class UGridDebugDrawComponent>> DebugComponents;
+    // Active debug components
+    TArray<TWeakObjectPtr<UGridDebugDrawComponent>> DebugComponents;
+    TArray<TWeakObjectPtr<UWidgetGridDebugDrawComponent>> WidgetDebugComponents;
 
     // Estado de pausa
     bool bIsPaused = false;

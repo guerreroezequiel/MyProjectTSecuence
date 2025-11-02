@@ -5,6 +5,7 @@
 #include "DrawDebugHelpers.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "GridSystem/Debug/GridDebugDrawComponent.h"
+#include "UI/Debug/WidgetGridDebugDrawComponent.h"
 
 UGridDebugSubsystem* UGridDebugSubsystem::GetGridDebugSubsystem(const UObject* WorldContextObject)
 {
@@ -51,6 +52,9 @@ void UGridDebugSubsystem::Deinitialize()
     
     // Limpiar componentes registrados
     DebugComponents.Empty();
+    
+    // Limpiar componentes de widget registrados
+    WidgetDebugComponents.Empty();
     
     // Limpiamos el área de debug
     ClearDebugArea();
@@ -267,8 +271,27 @@ void UGridDebugSubsystem::UnregisterDebugComponent(UGridDebugDrawComponent* Comp
     }
 }
 
+void UGridDebugSubsystem::RegisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component)
+{
+    if (Component && !WidgetDebugComponents.Contains(Component))
+    {
+        WidgetDebugComponents.Add(Component);
+        UE_LOG(LogTemp, Log, TEXT("Widget debug component registered. Total: %d"), WidgetDebugComponents.Num());
+    }
+}
+
+void UGridDebugSubsystem::UnregisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component)
+{
+    if (Component)
+    {
+        WidgetDebugComponents.Remove(Component);
+        UE_LOG(LogTemp, Log, TEXT("Widget debug component unregistered. Remaining: %d"), WidgetDebugComponents.Num());
+    }
+}
+
 void UGridDebugSubsystem::UpdateAllDebugComponents()
 {
+    // Update regular debug components
     for (TWeakObjectPtr<UGridDebugDrawComponent> Component : DebugComponents)
     {
         if (Component.IsValid())
@@ -281,6 +304,45 @@ void UGridDebugSubsystem::UpdateAllDebugComponents()
                 BoxExtent,
                 TextZOffset
             );
+        }
+    }
+}
+
+void UGridDebugSubsystem::UpdateWidgetDebugArea(const FVector& CenterWorldLocation, float GridSize, int32 Radius)
+{
+    UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: UpdateWidgetDebugArea - Location: %s, GridSize: %.2f, Radius: %d, NumComponents: %d"), 
+        *CenterWorldLocation.ToString(), GridSize, Radius, WidgetDebugComponents.Num());
+    
+    if (WidgetDebugComponents.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem: No widget debug components registered!"));
+        return;
+    }
+    
+    bool bAnyComponentUpdated = false;
+    for (TWeakObjectPtr<UWidgetGridDebugDrawComponent> Component : WidgetDebugComponents)
+    {
+        if (Component.IsValid())
+        {
+            UE_LOG(LogTemp, Log, TEXT("GridDebugSubsystem: Updating widget debug component %p"), Component.Get());
+            Component->UpdateDebugArea(CenterWorldLocation, GridSize, Radius);
+            bAnyComponentUpdated = true;
+        }
+    }
+    
+    if (!bAnyComponentUpdated)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GridDebugSubsystem: No valid widget debug components found to update"));
+    }
+}
+
+void UGridDebugSubsystem::ClearWidgetDebugAreas()
+{
+    for (TWeakObjectPtr<UWidgetGridDebugDrawComponent> Component : WidgetDebugComponents)
+    {
+        if (Component.IsValid())
+        {
+            Component->ClearDebugArea();
         }
     }
 }
