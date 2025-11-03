@@ -5,7 +5,7 @@
 #include "WidgetGridDebugDrawComponent.generated.h"
 
 // Forward declarations
-class UGridDebugSubsystem;
+class UWidgetGridDebugSubsystem;
 
 /**
  * Component that handles debug drawing for the widget's grid visualization in the world.
@@ -44,9 +44,9 @@ protected:
     void DrawDebugGrid();
 
 private:
-    // Reference to the debug subsystem
+    // Reference to the widget debug subsystem
     UPROPERTY(Transient)
-    TObjectPtr<UGridDebugSubsystem> DebugSubsystem;
+    TObjectPtr<UWidgetGridDebugSubsystem> WidgetDebugSubsystem;
 
     // Current debug area properties
     FVector CenterWorldLocation;

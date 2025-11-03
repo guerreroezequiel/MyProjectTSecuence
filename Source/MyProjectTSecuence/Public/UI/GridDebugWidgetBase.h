@@ -5,9 +5,12 @@
 #include "Blueprint/UserWidget.h"
 #include "Engine/CanvasRenderTarget2D.h"
 #include "Math/IntPoint.h"
-#include "GridDebugWidgetBase.generated.h"
 
+// Forward declarations
 class UImage;
+class UWidgetGridDebugSubsystem;
+
+#include "GridDebugWidgetBase.generated.h"
 
 /**
  * Widget base para la visualización de depuración de la grilla
@@ -61,6 +64,26 @@ protected:
     /** Obtiene las coordenadas del widget para una coordenada del mundo de la grilla */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     FIntPoint GetWidgetGridPosition(const FIntPoint& WorldGridPosition) const;
+    
+    /**
+     * Updates the debug visualization for the specified world location
+     * @param WorldLocation The world location to debug
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
+    void UpdateDebugVisualization(const FVector& WorldLocation);
+    
+    /**
+     * Updates the debug visualization using grid coordinates
+     * @param CellCoord The grid coordinates to debug
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
+    void UpdateDebugVisualizationFromCoord(const FIntPoint& CellCoord);
+    
+    /**
+     * Clears the current debug visualization
+     */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
+    void ClearDebugVisualization();
 
     /** Tamaño de la celda en píxeles */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
@@ -82,4 +105,8 @@ private:
     /** Delegado para actualizar el render target */
     UFUNCTION()
     void OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, int32 Height);
+    
+    /** Reference to the widget debug subsystem */
+    UPROPERTY(Transient)
+    TObjectPtr<UWidgetGridDebugSubsystem> WidgetDebugSubsystem;
 };

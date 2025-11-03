@@ -1,5 +1,6 @@
 // GridDebugWidgetBase.cpp
 #include "UI/GridDebugWidgetBase.h"
+#include "UI/Debug/WidgetGridDebugSubsystem.h"
 #include "CanvasItem.h"
 #include "CanvasTypes.h"
 #include "Engine/Canvas.h"
@@ -8,6 +9,7 @@
 #include "Engine/Font.h"
 #include "Math/UnrealMathUtility.h"
 #include "Styling/SlateBrush.h"
+#include "Kismet/GameplayStatics.h"
 
 UGridDebugWidgetBase::UGridDebugWidgetBase(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -18,6 +20,12 @@ void UGridDebugWidgetBase::NativeConstruct()
 {
     Super::NativeConstruct();
     CreateGridRenderTarget();
+    
+    // Get the widget debug subsystem
+    if (UWorld* World = GetWorld())
+    {
+        WidgetDebugSubsystem = World->GetSubsystem<UWidgetGridDebugSubsystem>();
+    }
 }
 
 void UGridDebugWidgetBase::NativeDestruct()
@@ -79,10 +87,11 @@ FIntPoint UGridDebugWidgetBase::GetGridDimensions_Implementation() const
 
 FIntPoint UGridDebugWidgetBase::GetWorldGridPosition(const FIntPoint& WidgetGridPosition) const
 {
-    // Convierte de coordenadas de widget a coordenadas del mundo
-    const int32 WorldX = CenterCellX + (WidgetGridPosition.X - GridRadius);
-    const int32 WorldY = CenterCellY + (WidgetGridPosition.Y - GridRadius);
-    return FIntPoint(WorldX, WorldY);
+    // Convert widget grid coordinates to world grid coordinates
+    return FIntPoint(
+        CenterCellX + (WidgetGridPosition.X - GridRadius),
+        CenterCellY + (WidgetGridPosition.Y - GridRadius)
+    );
 }
 
 FIntPoint UGridDebugWidgetBase::GetWidgetGridPosition(const FIntPoint& WorldGridPosition) const
@@ -91,6 +100,32 @@ FIntPoint UGridDebugWidgetBase::GetWidgetGridPosition(const FIntPoint& WorldGrid
     const int32 WidgetX = GridRadius + (WorldGridPosition.X - CenterCellX);
     const int32 WidgetY = GridRadius + (WorldGridPosition.Y - CenterCellY);
     return FIntPoint(WidgetX, WidgetY);
+}
+
+void UGridDebugWidgetBase::UpdateDebugVisualization(const FVector& WorldLocation)
+{
+    if (WidgetDebugSubsystem)
+    {
+        // Update the debug visualization in the subsystem
+        WidgetDebugSubsystem->UpdateDebugVisualization(WorldLocation, CellSize, GridRadius);
+    }
+}
+
+void UGridDebugWidgetBase::UpdateDebugVisualizationFromCoord(const FIntPoint& CellCoord)
+{
+    if (WidgetDebugSubsystem)
+    {
+        // Update the debug visualization in the subsystem using grid coordinates
+        WidgetDebugSubsystem->UpdateDebugVisualizationFromCoord(CellCoord, CellSize, GridRadius);
+    }
+}
+
+void UGridDebugWidgetBase::ClearDebugVisualization()
+{
+    if (WidgetDebugSubsystem)
+    {
+        WidgetDebugSubsystem->ClearDebugVisualization();
+    }
 }
 
 FLinearColor UGridDebugWidgetBase::GetCellColor_Implementation(const FIntPoint& CellCoord) const

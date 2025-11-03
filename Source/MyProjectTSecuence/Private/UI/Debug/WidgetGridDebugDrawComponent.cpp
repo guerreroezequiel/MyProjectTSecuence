@@ -1,5 +1,5 @@
 #include "UI/Debug/WidgetGridDebugDrawComponent.h"
-#include "GridSystem/Debug/GridDebugSubsystem.h"
+#include "UI/Debug/WidgetGridDebugSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 
@@ -16,17 +16,34 @@ UWidgetGridDebugDrawComponent::UWidgetGridDebugDrawComponent()
     LineThickness = 2.0f;
     DebugDuration = -1.0f; // Persistent
     DepthPriority = 0;
+    
+    // Make sure this component ticks after the WidgetGridDebugSubsystem
+    PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
 }
 
 void UWidgetGridDebugDrawComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    // Get the debug subsystem
-    DebugSubsystem = GetWorld()->GetSubsystem<UGridDebugSubsystem>();
-    if (DebugSubsystem)
+    UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent - BeginPlay"));
+    
+    // Get the widget debug subsystem
+    UWorld* World = GetWorld();
+    if (!World)
     {
-        DebugSubsystem->RegisterWidgetDebugComponent(this);
+        UE_LOG(LogTemp, Error, TEXT("WidgetGridDebugDrawComponent - No se pudo obtener el World"));
+        return;
+    }
+    
+    WidgetDebugSubsystem = World->GetSubsystem<UWidgetGridDebugSubsystem>();
+    if (WidgetDebugSubsystem)
+    {
+        UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent - Registrando componente en el subsistema"));
+        WidgetDebugSubsystem->RegisterDebugComponent(this);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("WidgetGridDebugDrawComponent - No se pudo obtener el WidgetDebugSubsystem"));
     }
 }
 
@@ -35,10 +52,10 @@ void UWidgetGridDebugDrawComponent::EndPlay(const EEndPlayReason::Type EndPlayRe
     // Clear any active debug drawings
     ClearDebugArea();
     
-    // Unregister from the debug subsystem
-    if (DebugSubsystem)
+    // Unregister from the widget debug subsystem
+    if (WidgetDebugSubsystem)
     {
-        DebugSubsystem->UnregisterWidgetDebugComponent(this);
+        WidgetDebugSubsystem->UnregisterDebugComponent(this);
     }
     
     Super::EndPlay(EndPlayReason);
@@ -48,7 +65,8 @@ void UWidgetGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick Ti
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     
-    if (bIsEnabled)
+    // Only draw if enabled and we have a valid world
+    if (bIsEnabled && GetWorld())
     {
         DrawDebugGrid();
     }
@@ -56,6 +74,9 @@ void UWidgetGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick Ti
 
 void UWidgetGridDebugDrawComponent::UpdateDebugArea(const FVector& InCenterWorldLocation, float InGridSize, int32 InRadius)
 {
+    UE_LOG(LogTemp, Log, TEXT("WidgetGridDebugDrawComponent::UpdateDebugArea - Pos: %s, Tamaño: %.2f, Radio: %d"), 
+        *InCenterWorldLocation.ToString(), InGridSize, InRadius);
+        
     // Validate input parameters
     if (InGridSize <= 0.0f || InRadius < 0)
     {
