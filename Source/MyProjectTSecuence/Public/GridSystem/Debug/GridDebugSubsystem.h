@@ -7,7 +7,6 @@
 #include "GridSystem/Core/GridWorld.h"
 #include "DrawDebugHelpers.h"
 // Forward declarations to resolve circular dependencies
-class UGridDebugDrawComponent;
 class UWidgetGridDebugDrawComponent;
 
 #include "GridDebugSubsystem.generated.h"
@@ -109,10 +108,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void ClearDebugArea();
 
-    /** Register/Unregister debug components */
-    void RegisterDebugComponent(UGridDebugDrawComponent* Component);
-    void UnregisterDebugComponent(UGridDebugDrawComponent* Component);
-    
     /** Register/Unregister widget debug components */
     void RegisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
     void UnregisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
@@ -173,7 +168,6 @@ private:
     bool bHasDebugArea = false;
     
     // Active debug components
-    TArray<TWeakObjectPtr<UGridDebugDrawComponent>> DebugComponents;
     TArray<TWeakObjectPtr<UWidgetGridDebugDrawComponent>> WidgetDebugComponents;
 
     // Estado de pausa
