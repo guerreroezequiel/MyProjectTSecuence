@@ -112,8 +112,7 @@ void UGridDebugDrawComponent::DrawTileBorder()
                    true,  // bDrawShadow
                    1.5f); // Tamaño de la fuente
     
-    UE_LOG(LogTemp, Log, TEXT("Drawing tile border at (%.2f,%.2f) to (%.2f,%.2f)"), 
-           BottomLeft.X, BottomLeft.Y, TopRight.X, TopRight.Y);
+    // Tile border drawing code here - log removed to reduce log spam
 }
 
 void UGridDebugDrawComponent::DrawDebugCell(const FIntPoint& CellXY)

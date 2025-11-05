@@ -98,43 +98,6 @@ static FAutoConsoleCommand GCmdGridOccClear(
     })
 );
 
-// grid.debug.tile_border
-static FAutoConsoleCommand GCmdGridDebugTileBorder(
-    TEXT("grid.debug.tile_border"),
-    TEXT("Toggle drawing of tile borders: grid.debug.tile_border <0|1>"),
-    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
-    {
-        if (Args.Num() < 1) 
-        { 
-            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.debug.tile_border <0|1>")); 
-            return; 
-        }
-        
-        int32 bEnable = 0;
-        LexFromString(bEnable, *Args[0]);
-        
-        // Encontrar el componente de debug en el mundo
-        UWorld* World = GEngine->GetWorld();
-        if (!World) return;
-        
-        // Usar TArray para encontrar actores con el componente
-        TArray<AActor*> Actors;
-        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
-        
-        for (AActor* Actor : Actors)
-        {
-            if (UGridDebugDrawComponent* DebugComp = Actor->FindComponentByClass<UGridDebugDrawComponent>())
-            {
-                DebugComp->bDrawTileBorder = (bEnable != 0);
-                UE_LOG(LogTemp, Log, TEXT("Tile border drawing %s"), 
-                    DebugComp->bDrawTileBorder ? TEXT("ENABLED") : TEXT("DISABLED"));
-                return;
-            }
-        }
-        
-        UE_LOG(LogTemp, Warning, TEXT("No GridDebugDrawComponent found in the world"));
-    })
-);
 
 // grid.debug.cell
 static FAutoConsoleCommand GCmdGridDebugCell(
@@ -201,21 +164,97 @@ static FAutoConsoleCommand GCmdGridDebugCapacity(
         UWorld* World = GEngine->GetWorld();
         if (!World) return;
         
-        // Usar TArray para encontrar actores con el componente
-        TArray<AActor*> Actors;
-        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
-        
-        for (AActor* Actor : Actors)
+        // Buscar específicamente el actor BP_GridDebugManager
+        AActor* DebugActor = FindObject<AActor>(nullptr, TEXT("/Game/BP_GridDebugManager.BP_GridDebugManager_C"));
+        if (!DebugActor)
         {
-            if (UGridDebugDrawComponent* DebugComp = Actor->FindComponentByClass<UGridDebugDrawComponent>())
+            // Si no lo encuentra por ruta, intentar encontrarlo en el mundo
+            TArray<AActor*> Actors;
+            UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
+            for (AActor* Actor : Actors)
+            {
+                if (Actor->GetName().StartsWith(TEXT("BP_GridDebugManager")))
+                {
+                    DebugActor = Actor;
+                    break;
+                }
+            }
+        }
+
+        if (DebugActor)
+        {
+            if (UGridDebugDrawComponent* DebugComp = DebugActor->FindComponentByClass<UGridDebugDrawComponent>())
             {
                 DebugComp->bDrawCapacity = (bEnable != 0);
-                UE_LOG(LogTemp, Log, TEXT("Capacity drawing %s"), 
-                    DebugComp->bDrawCapacity ? TEXT("ENABLED") : TEXT("DISABLED"));
+                UE_LOG(LogTemp, Log, TEXT("Capacity drawing %s on %s"), 
+                    DebugComp->bDrawCapacity ? TEXT("ENABLED") : TEXT("DISABLED"),
+                    *DebugActor->GetName());
                 return;
             }
         }
         
-        UE_LOG(LogTemp, Warning, TEXT("No GridDebugDrawComponent found in the world"));
+        UE_LOG(LogTemp, Warning, TEXT("BP_GridDebugManager or GridDebugDrawComponent not found in the world"));
+    })
+);
+
+// grid.debug.tileborder
+static FAutoConsoleCommand GCmdGridDebugTileBorder(
+    TEXT("grid.debug.tileborder"),
+    TEXT("Toggle drawing of tile borders: grid.debug.tileborder <0|1>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 1) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.debug.tileborder <0|1>")); 
+            return; 
+        }
+        
+        int32 bEnable = 0;
+        LexFromString(bEnable, *Args[0]);
+        
+        // Obtener el mundo actual
+        UWorld* World = GEngine->GetWorld();
+        if (!World) 
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No valid world found"));
+            return;
+        }
+        
+        // Buscar específicamente el actor BP_GridDebugManager
+        AActor* DebugActor = FindObject<AActor>(nullptr, TEXT("/Game/BP_GridDebugManager.BP_GridDebugManager_C"));
+        if (!DebugActor)
+        {
+            // Si no lo encuentra por ruta, intentar encontrarlo en el mundo
+            TArray<AActor*> Actors;
+            UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
+            for (AActor* Actor : Actors)
+            {
+                if (Actor->GetName().StartsWith(TEXT("BP_GridDebugManager")))
+                {
+                    DebugActor = Actor;
+                    break;
+                }
+            }
+        }
+
+        if (DebugActor)
+        {
+            if (UGridDebugDrawComponent* DebugComp = DebugActor->FindComponentByClass<UGridDebugDrawComponent>())
+            {
+                DebugComp->bDrawTileBorder = (bEnable != 0);
+                UE_LOG(LogTemp, Log, TEXT("Tile border drawing %s on %s"), 
+                    DebugComp->bDrawTileBorder ? TEXT("ENABLED") : TEXT("DISABLED"),
+                    *DebugActor->GetName());
+                return;
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("GridDebugDrawComponent not found on %s"), *DebugActor->GetName());
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("BP_GridDebugManager not found in the world"));
+        }
     })
 );
