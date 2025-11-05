@@ -17,6 +17,13 @@ UGridDebugDrawComponent::UGridDebugDrawComponent()
 void UGridDebugDrawComponent::InitializeComponent()
 {
 	Super::InitializeComponent();
+	UE_LOG(LogTemp, Log, TEXT("GridDebugDrawComponent inicializado. bDrawTileBorder = %s"), 
+        bDrawTileBorder ? TEXT("true") : TEXT("false"));
+}
+
+void UGridDebugDrawComponent::SetDebugCell(int32 X, int32 Y)
+{
+    DebugCell = FIntPoint(X, Y);
 }
 
 void UGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -24,64 +31,147 @@ void UGridDebugDrawComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	if (!GetWorld()) return;
-	// Sanidad
-	GridStep = FMath::Max(1, GridStep);
 
-	if (bDrawCapacity)
-	{
-		DrawCapacity();
-	}
+    // Dibujar según los flags activos
+    if (bDrawCapacity)
+    {
+        DrawCapacity();
+    }
+    
+    if (bDrawTileBorder)
+    {
+        DrawTileBorder();
+    }
+    
+    if (DebugCell.X != INDEX_NONE && DebugCell.Y != INDEX_NONE)
+    {
+        DrawDebugCell(DebugCell);
+    }
+}
 
+void UGridDebugDrawComponent::DrawTileBorder()
+{
+    if (!GetWorld())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No valid world in DrawTileBorder"));
+        return;
+    }
+
+    const FIntPoint TileXY(0, 0); // Tile (0,0) por ahora
+    
+    // Obtener los límites del tile en celdas
+    FIntPoint MinCell, MaxCell;
+    GridWorld::TileBoundsInCells(TileXY, MinCell, MaxCell);
+    
+    // Convertir las coordenadas de celda a mundo
+    const FVector2D MinWorld = GridWorld::CellToWorldCenterXY(MinCell) - FVector2D(GridConfig::CellSizeUU * 0.5f);
+    const FVector2D MaxWorld = GridWorld::CellToWorldCenterXY(MaxCell) + FVector2D(GridConfig::CellSizeUU * 0.5f);
+    
+    const float Z = GridWorld::GetOriginWS().Z + 10.0f; // Pequeño offset Z para evitar z-fighting
+    
+    // Calcular las esquinas del tile
+    const FVector BottomLeft(MinWorld.X, MinWorld.Y, Z);
+    const FVector BottomRight(MaxWorld.X, MinWorld.Y, Z);
+    const FVector TopLeft(MinWorld.X, MaxWorld.Y, Z);
+    const FVector TopRight(MaxWorld.X, MaxWorld.Y, Z);
+    
+    // Dibujar las 4 líneas del borde con un color más visible
+    const FColor BorderColor = FColor::Green;
+    const float LineThickness = 5.0f;
+    
+    DrawDebugLine(GetWorld(), BottomLeft, BottomRight, BorderColor, false, -1.0f, 0, LineThickness);
+    DrawDebugLine(GetWorld(), BottomRight, TopRight, BorderColor, false, -1.0f, 0, LineThickness);
+    DrawDebugLine(GetWorld(), TopRight, TopLeft, BorderColor, false, -1.0f, 0, LineThickness);
+    DrawDebugLine(GetWorld(), TopLeft, BottomLeft, BorderColor, false, -1.0f, 0, LineThickness);
+    
+    // Dibujar una pequeña cruz en el centro del tile
+    const FVector Center = (BottomLeft + TopRight) * 0.5f;
+    const float CrossSize = 50.0f; // Tamaño de la cruz en unidades del mundo
+    
+    DrawDebugLine(GetWorld(), 
+                 Center - FVector(CrossSize, 0, 0), 
+                 Center + FVector(CrossSize, 0, 0), 
+                 FColor::Red, false, -1.0f, 0, LineThickness);
+    
+    DrawDebugLine(GetWorld(), 
+                 Center - FVector(0, CrossSize, 0), 
+                 Center + FVector(0, CrossSize, 0), 
+                 FColor::Red, false, -1.0f, 0, LineThickness);
+    
+    // Etiqueta del tile con información de depuración
+    const FString TileLabel = FString::Printf(TEXT("Tile (%d,%d)\nCells: (%d,%d)-(%d,%d)"), 
+        TileXY.X, TileXY.Y, 
+        MinCell.X, MinCell.Y, MaxCell.X, MaxCell.Y);
+        
+    DrawDebugString(GetWorld(), 
+                   Center + FVector(0, 0, 100.0f), 
+                   TileLabel, 
+                   nullptr, 
+                   FColor::Yellow, 
+                   0.0f,  // Tiempo de vida (0 = un solo frame)
+                   true,  // bDrawShadow
+                   1.5f); // Tamaño de la fuente
+    
+    UE_LOG(LogTemp, Log, TEXT("Drawing tile border at (%.2f,%.2f) to (%.2f,%.2f)"), 
+           BottomLeft.X, BottomLeft.Y, TopRight.X, TopRight.Y);
+}
+
+void UGridDebugDrawComponent::DrawDebugCell(const FIntPoint& CellXY)
+{
+    const int32 Base = Grid::Capacity::GetBaseCapacity(CellXY);
+    const int32 Count = Grid::Capacity::GetCurrentCount(CellXY);
+
+    // Centro en mundo de la celda
+    const FVector2D Center2D = GridWorld::CellToWorldCenterXY(CellXY);
+    const float Z = GridWorld::GetOriginWS().Z;
+    const FVector Center(Center2D.X, Center2D.Y, Z);
+
+    // Color según capacidad
+    const bool bOver = (Base > 0) && (Count > Base);
+    const FColor Color = bOver ? FColor::Red : FColor::Green;
+
+    // Dibujar caja de la celda
+    const float HalfCell = GridConfig::CellSizeUU * 0.5f;
+    const float Margin = HalfCell * 0.10f;
+    const FVector Extent(HalfCell - Margin, HalfCell - Margin, 2.f);
+    
+    DrawDebugBox(GetWorld(), Center, Extent, FQuat::Identity, Color, false, -1.0f, 0, 2.0f);
+    
+    // Mostrar información de la celda
+    const FString Info = FString::Printf(TEXT("(%d,%d)\n%d/%d"), 
+        CellXY.X, CellXY.Y, Count, Base);
+    DrawDebugString(GetWorld(), Center + FVector(0, 0, TextZOffset), Info, nullptr, FColor::White, 0.f, true, 1.0f);
 }
 
 void UGridDebugDrawComponent::DrawCapacity()
 {
-    // Por simplicidad inicial, iteramos el tile (0,0). Luego: tiles visibles o definidos por CVar.
+    // Por simplicidad, solo dibujamos el tile (0,0)
     const FIntPoint TileXY(0, 0);
-
-    // Determinar bounds del tile en coords de celda [min,max] (incluyentes)
     FIntPoint MinCell, MaxCell;
     GridWorld::TileBoundsInCells(TileXY, MinCell, MaxCell);
-
-    // Dibuja el contorno del tile completo (64x64 celdas) para verificar tamaño
-    {
-        const FVector2D TileOrigin2D = GridWorld::TileToWorldOriginXY(TileXY);
-        const float TileSizeUU = GridConfig::TileDim * GridConfig::CellSizeUU;
-        const FVector TileCenter(TileOrigin2D.X + TileSizeUU * 0.5f, TileOrigin2D.Y + TileSizeUU * 0.5f, GridWorld::GetOriginWS().Z);
-        const FVector TileExtent(TileSizeUU * 0.5f, TileSizeUU * 0.5f, 2.f);
-        DrawDebugBox(GetWorld(), TileCenter, TileExtent, FQuat::Identity, FColor(0, 255, 0, 64), /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, /*Thickness*/ 2.f);
-    }
 
     for (int32 y = MinCell.Y; y <= MaxCell.Y; ++y)
     {
         for (int32 x = MinCell.X; x <= MaxCell.X; ++x)
         {
             const FIntPoint CellXY(x, y);
-
             const int32 Base = Grid::Capacity::GetBaseCapacity(CellXY);
             const int32 Count = Grid::Capacity::GetCurrentCount(CellXY);
 
-            // Centro en mundo de la celda: GridWorld da XY como FVector2D
-            const FVector2D Center2D = GridWorld::CellToWorldCenterXY(CellXY);
-            const float Z = GridWorld::GetOriginWS().Z;
-            const FVector Center(Center2D.X, Center2D.Y, Z);
-
-			const bool bOver = (Base > 0) && (Count > Base);
-			const FColor Color = bOver ? FColor::Red : FColor::Green;
-
-            // Ajuste al tamaño real de celda (1 m = 100 uu) con margen visual
-            const float HalfCell = GridConfig::CellSizeUU * 0.5f;
-            const float Margin = HalfCell * 0.10f; // 10% de margen
-            const FVector Extent(HalfCell - Margin, HalfCell - Margin, 2.f);
-            DrawDebugBox(GetWorld(), Center, Extent, FQuat::Identity, Color, /*bPersistentLines*/ false, /*LifeTime*/ 0.f, /*DepthPriority*/ 0, /*Thickness*/ 1.f);
-
-            // Mostrar texto solo si hay datos distintos de 0/0 y respetando GridStep para densidad
-            const bool bTextCell = ((x % GridStep) == 0) && ((y % GridStep) == 0);
-            if (bTextCell && (Base > 0 || Count > 0))
+            // Solo dibujar celdas con datos
+            if (Base > 0 || Count > 0)
             {
-                const FString Txt = FString::Printf(TEXT("%d/%d"), Count, Base);
-                DrawDebugString(GetWorld(), Center + FVector(0, 0, TextZOffset), Txt, nullptr, FColor::White, 0.f, false);
+                const FVector2D Center2D = GridWorld::CellToWorldCenterXY(CellXY);
+                const float Z = GridWorld::GetOriginWS().Z;
+                const FVector Center(Center2D.X, Center2D.Y, Z);
+
+                const bool bOver = (Base > 0) && (Count > Base);
+                const FColor Color = bOver ? FColor::Red : FColor::Green;
+
+                const float HalfCell = GridConfig::CellSizeUU * 0.5f;
+                const FVector Extent(HalfCell * 0.9f, HalfCell * 0.9f, 1.0f);
+                DrawDebugBox(GetWorld(), Center, Extent, FQuat::Identity, Color, false, -1.0f, 0, 1.0f);
             }
-		}
-	}
+        }
+    }
 }

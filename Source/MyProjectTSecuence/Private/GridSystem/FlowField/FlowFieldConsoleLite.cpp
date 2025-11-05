@@ -1,8 +1,13 @@
 #include "CoreMinimal.h"
+#include "Engine/World.h"
+#include "Engine/Engine.h"
+#include "GameFramework/Actor.h"
+#include "Kismet/GameplayStatics.h"
 #include "GridSystem/FlowField/FlowFieldRebuilder.h" // MarkTileDirty
 #include "GridSystem/Core/GridWorld.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
 #include "GridSystem/Occupancy/CapacityGrid.h"
+#include "GridSystem/Debug/GridDebugDrawComponent.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -90,5 +95,127 @@ static FAutoConsoleCommand GCmdGridOccClear(
     {
         Grid::ClearAll();
         UE_LOG(LogTemp, Log, TEXT("Occupancy cleared"));
+    })
+);
+
+// grid.debug.tile_border
+static FAutoConsoleCommand GCmdGridDebugTileBorder(
+    TEXT("grid.debug.tile_border"),
+    TEXT("Toggle drawing of tile borders: grid.debug.tile_border <0|1>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 1) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.debug.tile_border <0|1>")); 
+            return; 
+        }
+        
+        int32 bEnable = 0;
+        LexFromString(bEnable, *Args[0]);
+        
+        // Encontrar el componente de debug en el mundo
+        UWorld* World = GEngine->GetWorld();
+        if (!World) return;
+        
+        // Usar TArray para encontrar actores con el componente
+        TArray<AActor*> Actors;
+        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
+        
+        for (AActor* Actor : Actors)
+        {
+            if (UGridDebugDrawComponent* DebugComp = Actor->FindComponentByClass<UGridDebugDrawComponent>())
+            {
+                DebugComp->bDrawTileBorder = (bEnable != 0);
+                UE_LOG(LogTemp, Log, TEXT("Tile border drawing %s"), 
+                    DebugComp->bDrawTileBorder ? TEXT("ENABLED") : TEXT("DISABLED"));
+                return;
+            }
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("No GridDebugDrawComponent found in the world"));
+    })
+);
+
+// grid.debug.cell
+static FAutoConsoleCommand GCmdGridDebugCell(
+    TEXT("grid.debug.cell"),
+    TEXT("Debug a specific cell: grid.debug.cell <x> <y> (use -1 -1 to disable)"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.debug.cell <x> <y>")); 
+            return; 
+        }
+        
+        int32 X = 0, Y = 0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        
+        // Encontrar el componente de debug en el mundo
+        UWorld* World = GEngine->GetWorld();
+        if (!World) return;
+        
+        // Usar TArray para encontrar actores con el componente
+        TArray<AActor*> Actors;
+        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
+        
+        for (AActor* Actor : Actors)
+        {
+            if (UGridDebugDrawComponent* DebugComp = Actor->FindComponentByClass<UGridDebugDrawComponent>())
+            {
+                if (X >= 0 && Y >= 0)
+                {
+                    DebugComp->SetDebugCell(X, Y);
+                    UE_LOG(LogTemp, Log, TEXT("Debugging cell (%d, %d)"), X, Y);
+                }
+                else
+                {
+                    DebugComp->SetDebugCell(INDEX_NONE, INDEX_NONE);
+                    UE_LOG(LogTemp, Log, TEXT("Cell debugging disabled"));
+                }
+                return;
+            }
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("No GridDebugDrawComponent found in the world"));
+    })
+);
+
+// grid.debug.capacity
+static FAutoConsoleCommand GCmdGridDebugCapacity(
+    TEXT("grid.debug.capacity"),
+    TEXT("Toggle drawing of capacity grid: grid.debug.capacity <0|1>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 1) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.debug.capacity <0|1>")); 
+            return; 
+        }
+        
+        int32 bEnable = 0;
+        LexFromString(bEnable, *Args[0]);
+        
+        // Encontrar el componente de debug en el mundo
+        UWorld* World = GEngine->GetWorld();
+        if (!World) return;
+        
+        // Usar TArray para encontrar actores con el componente
+        TArray<AActor*> Actors;
+        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), Actors);
+        
+        for (AActor* Actor : Actors)
+        {
+            if (UGridDebugDrawComponent* DebugComp = Actor->FindComponentByClass<UGridDebugDrawComponent>())
+            {
+                DebugComp->bDrawCapacity = (bEnable != 0);
+                UE_LOG(LogTemp, Log, TEXT("Capacity drawing %s"), 
+                    DebugComp->bDrawCapacity ? TEXT("ENABLED") : TEXT("DISABLED"));
+                return;
+            }
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("No GridDebugDrawComponent found in the world"));
     })
 );
