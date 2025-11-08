@@ -6,10 +6,12 @@
 #include "GridSystem/Core/GridEpoch.h"
 #include "GridSystem/Core/GridWorld.h"
 #include "DrawDebugHelpers.h"
-// Forward declarations to resolve circular dependencies
-class UWidgetGridDebugDrawComponent;
+#include "Delegates/Delegate.h"
 
 #include "GridDebugSubsystem.generated.h"
+
+// Forward declarations
+class UGridDebugWidgetBase;
 
 /**
  * Estructura que contiene la información del área de debug
@@ -107,53 +109,60 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void ClearDebugArea();
-
-    /** Register/Unregister widget debug components */
-    void RegisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
-    void UnregisterWidgetDebugComponent(UWidgetGridDebugDrawComponent* Component);
-
-    /** Update all registered debug components */
-    void UpdateAllDebugComponents();
     
-    /** 
-     * Update the debug area for all widget debug components
-     * @param CenterWorldLocation World location of the center cell
-     * @param GridSize Size of each grid cell
-     * @param Radius Number of cells to show in each direction from center
+    /**
+     * Actualiza todos los componentes de depuración con la nueva ubicación de la cámara
+     * @param CenterWorldLocation Ubicación central en el mundo
+     * @param GridSize Tamaño de la cuadrícula
+     * @param Radius Radio de visualización
      */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
-    void UpdateWidgetDebugArea(const FVector& CenterWorldLocation, float GridSize, int32 Radius);
-    
-    /** Clear all widget debug areas */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug|Widget")
-    void ClearWidgetDebugAreas();
-
-    /** Update all debug components with new parameters */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void UpdateAllDebugComponents(const FVector& CenterWorldLocation, float GridSize, int32 Radius);
 
-    // Debug Drawing Settings
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
+    // Delegates para notificar cambios a los widgets suscritos
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDebugModeChanged, bool, bIsEnabled);
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPauseStateChanged, bool, bIsPaused);
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDebugAreaUpdated, const FGridDebugArea&, DebugArea);
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDebugAreaCleared);
+    
+    /** Evento que se dispara cuando cambia el estado del modo de depuración */
+    UPROPERTY(BlueprintAssignable, Category = "Grid|Debug|Events")
+    FOnDebugModeChanged OnDebugModeChanged;
+    
+    /** Evento que se dispara cuando cambia el estado de pausa */
+    UPROPERTY(BlueprintAssignable, Category = "Grid|Debug|Events")
+    FOnPauseStateChanged OnPauseStateChanged;
+    
+    /** Evento que se dispara cuando se actualiza el área de depuración */
+    UPROPERTY(BlueprintAssignable, Category = "Grid|Debug|Events")
+    FOnDebugAreaUpdated OnDebugAreaUpdated;
+    
+    /** Evento que se dispara cuando se limpia el área de depuración */
+    UPROPERTY(BlueprintAssignable, Category = "Grid|Debug|Events")
+    FOnDebugAreaCleared OnDebugAreaCleared;
+
+    // Configuración de depuración
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
     bool bEnableDebugDrawing = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
-    bool bDrawCapacity = true;
+    /**
+     * Registra un objeto para recibir actualizaciones de depuración
+     * @param Subscriber Objeto que se suscribirá a las actualizaciones
+     */
+    template<typename T>
+    void RegisterDebugSubscriber(T* Subscriber);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
-    bool bDrawTileOutline = true;
+    /**
+     * Elimina un objeto de la lista de suscriptores
+     * @param Subscriber Objeto que ya no desea recibir actualizaciones
+     */
+    template<typename T>
+    void UnregisterDebugSubscriber(T* Subscriber);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual", meta = (ClampMin = "1", UIMin = "1"))
-    int32 GridStep = 2;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
-    float BoxExtent = 30.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug|Visual")
-    float TextZOffset = 30.0f;
-
-    // Usar el sistema de coordenadas de GridWorld
-    UPROPERTY(EditAnywhere, Category = "Grid|Debug")
-    bool bUseGridWorldOrigin = true;
+private:
+    // Lista de objetos suscritos a las actualizaciones de depuración
+    UPROPERTY(Transient)
+    TArray<TWeakObjectPtr<UObject>> DebugSubscribers;
 
 protected:
     // Callback para el tick del epoch
@@ -167,9 +176,6 @@ private:
     FGridDebugArea CurrentDebugArea;
     bool bHasDebugArea = false;
     
-    // Active debug components
-    TArray<TWeakObjectPtr<UWidgetGridDebugDrawComponent>> WidgetDebugComponents;
-
     // Estado de pausa
     bool bIsPaused = false;
     

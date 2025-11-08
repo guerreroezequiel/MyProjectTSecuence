@@ -5,6 +5,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Engine/CanvasRenderTarget2D.h"
 #include "Math/IntPoint.h"
+#include "GridSystem/Core/GridWorld.h"
 #include "GridDebugWidgetBase.generated.h"
 
 class UImage;
@@ -54,17 +55,13 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void UpdateGridVisualization();
 
-    /** Obtiene las coordenadas del mundo de la grilla para una coordenada de widget */
+    /** Actualiza la posición central del grid basada en una posición del mundo */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
-    FIntPoint GetWorldGridPosition(const FIntPoint& WidgetGridPosition) const;
+    void UpdateFromWorldPosition(const FVector& WorldPosition);
 
-    /** Obtiene las coordenadas del widget para una coordenada del mundo de la grilla */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
-    FIntPoint GetWidgetGridPosition(const FIntPoint& WorldGridPosition) const;
-
-    /** Tamaño de la celda en píxeles */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
-    float CellSize = 50.0f;
+    /** Tamaño de la celda en píxeles (debe coincidir con GridConfig::CellSizeUU) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "1.0"))
+    float CellSize = 100.0f;
 
     /** Radio de la grilla (0 = solo la celda central, 1 = 3x3, 2 = 5x5, etc.) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "0", ClampMax = "31", UIMin = "0", UIMax = "31"))

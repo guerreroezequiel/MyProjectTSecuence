@@ -77,25 +77,30 @@ FIntPoint UGridDebugWidgetBase::GetGridDimensions_Implementation() const
     return FIntPoint(GridSize, GridSize);
 }
 
-FIntPoint UGridDebugWidgetBase::GetWorldGridPosition(const FIntPoint& WidgetGridPosition) const
+void UGridDebugWidgetBase::UpdateFromWorldPosition(const FVector& WorldPosition)
 {
-    // Convierte de coordenadas de widget a coordenadas del mundo
-    const int32 WorldX = CenterCellX + (WidgetGridPosition.X - GridRadius);
-    const int32 WorldY = CenterCellY + (WidgetGridPosition.Y - GridRadius);
-    return FIntPoint(WorldX, WorldY);
-}
-
-FIntPoint UGridDebugWidgetBase::GetWidgetGridPosition(const FIntPoint& WorldGridPosition) const
-{
-    // Convierte de coordenadas del mundo a coordenadas de widget
-    const int32 WidgetX = GridRadius + (WorldGridPosition.X - CenterCellX);
-    const int32 WidgetY = GridRadius + (WorldGridPosition.Y - CenterCellY);
-    return FIntPoint(WidgetX, WidgetY);
+    // Actualiza la celda central basada en la posición del mundo
+    const FIntPoint NewCenterCell = GridWorld::WorldToCellXY(WorldPosition);
+    if (NewCenterCell.X != CenterCellX || NewCenterCell.Y != CenterCellY)
+    {
+        CenterCellX = NewCenterCell.X;
+        CenterCellY = NewCenterCell.Y;
+        UpdateGridVisualization();
+    }
 }
 
 FLinearColor UGridDebugWidgetBase::GetCellColor_Implementation(const FIntPoint& CellCoord) const
 {
-    // Implementación por defecto: alternar colores para celdas pares/impares
+    // Usar GridWorld para convertir las coordenadas si es necesario
+    // En este caso, CellCoord ya está en coordenadas de mundo
+    
+    // Resaltar la celda central
+    if (CellCoord.X == CenterCellX && CellCoord.Y == CenterCellY)
+    {
+        return FLinearColor::Green;
+    }
+    
+    // Alternar colores para mejor visualización
     return (CellCoord.X + CellCoord.Y) % 2 == 0 ? 
         FLinearColor(0.1f, 0.1f, 0.1f, 0.3f) : 
         FLinearColor(0.2f, 0.2f, 0.2f, 0.3f);
@@ -116,15 +121,13 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
     {
         for (int32 X = 0; X < GridDims.X; ++X)
         {
-            // Convertir coordenadas de widget a coordenadas del mundo
-            const FIntPoint WorldGridPos = GetWorldGridPosition(FIntPoint(X, Y));
-            FLinearColor CellColor = GetCellColor(WorldGridPos);
+            // Calcular coordenadas de mundo para esta celda de la interfaz
+            const int32 WorldX = CenterCellX + (X - GridRadius);
+            const int32 WorldY = CenterCellY + (Y - GridRadius);
+            const FIntPoint WorldGridPos(WorldX, WorldY);
             
-            // Resaltar la celda central
-            if (X == GridRadius && Y == GridRadius)
-            {
-                CellColor = FLinearColor::Green;
-            }
+            // Obtener el color de la celda
+            FLinearColor CellColor = GetCellColor(WorldGridPos);
             
             FCanvasTileItem TileItem(
                 FVector2D(X * CellWidth, Y * CellHeight),
@@ -168,8 +171,8 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
     // Coordenadas X (inferior)
     for (int32 X = 0; X < GridDims.X; X += LabelStep)
     {
-        FIntPoint WorldPos = GetWorldGridPosition(FIntPoint(X, 0));
-        FString Text = FString::Printf(TEXT("%d"), WorldPos.X);
+        const int32 WorldX = CenterCellX + (X - GridRadius);
+        FString Text = FString::Printf(TEXT("%d"), WorldX);
         FVector2D Position(X * CellWidth + 2.0f, Height - 20.0f);
         
         FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
@@ -181,8 +184,8 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
     // Coordenadas Y (izquierda)
     for (int32 Y = 0; Y < GridDims.Y; Y += LabelStep)
     {
-        FIntPoint WorldPos = GetWorldGridPosition(FIntPoint(0, Y));
-        FString Text = FString::Printf(TEXT("%d"), WorldPos.Y);
+        const int32 WorldY = CenterCellY + (Y - GridRadius);
+        FString Text = FString::Printf(TEXT("%d"), WorldY);
         FVector2D Position(2.0f, Y * CellHeight + 2.0f);
         
         FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
