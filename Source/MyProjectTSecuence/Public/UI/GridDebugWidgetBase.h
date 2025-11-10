@@ -26,10 +26,6 @@ public:
     virtual void NativeDestruct() override;
     //~ End UEditorUtilityWidget Interface
 
-    /** Obtiene el color de una celda específica */
-    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Grid|Debug")
-    FLinearColor GetCellColor(const FIntPoint& CellCoord) const;
-
 protected:
     /** Referencia al Render Target */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
@@ -51,19 +47,10 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void UpdateGridVisualization();
 
-    /** Tamaño de la celda en píxeles (debe coincidir con GridConfig::CellSizeUU) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "1.0"))
-    float CellSize = 100.0f;
-
-    /** Coordenada X de la celda central */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
-    int32 CenterCellX = 0;
-
-    /** Coordenada Y de la celda central */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
-    int32 CenterCellY = 0;
-
 private:
+    /** Obtiene el color de una celda específica */
+    FLinearColor GetCellColor_Implementation(const FIntPoint& CellCoord) const;
+    
     /** Renderiza una grilla en el canvas proporcionado */
     void RenderGrid(UCanvas* Canvas, const FVector2D& ImageSize, int32 InCellSize, const FLinearColor& LineColor);
     
