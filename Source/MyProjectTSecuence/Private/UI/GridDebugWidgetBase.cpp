@@ -49,14 +49,14 @@ void UGridDebugWidgetBase::CreateGridRenderTarget()
             
             GridRenderTarget->OnCanvasRenderTargetUpdate.AddDynamic(this, &UGridDebugWidgetBase::OnRenderTargetUpdate);
             
-            if (GridImage)
+            if (GridImage_GridWorld)
             {
                 FSlateBrush Brush;
                 Brush.SetResourceObject(GridRenderTarget);
                 Brush.ImageSize = FVector2D(RTWidth, RTHeight);
                 Brush.DrawAs = ESlateBrushDrawType::Image;
                 Brush.TintColor = FSlateColor(FLinearColor::White);
-                GridImage->SetBrush(Brush);
+                GridImage_GridWorld->SetBrush(Brush);
             }
             
             UpdateGridVisualization();
@@ -74,10 +74,10 @@ void UGridDebugWidgetBase::UpdateGridVisualization()
 
 void UGridDebugWidgetBase::RenderWorldGrid()
 {
-    if (!GridRenderTarget || !GridImage) return;
+    if (!GridRenderTarget || !GridImage_GridWorld) return;
     
     // Obtener el tamaño de la imagen
-    FVector2D ImageSize = GridImage->GetDesiredSize();
+    FVector2D ImageSize = GridImage_GridWorld->GetDesiredSize();
     if (ImageSize.IsNearlyZero())
     {
         // Tamaño por defecto si no se puede obtener el tamaño de la imagen

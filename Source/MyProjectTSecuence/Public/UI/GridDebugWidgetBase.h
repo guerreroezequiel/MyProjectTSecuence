@@ -47,9 +47,9 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
     FLinearColor GridLineColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.3f);
 
-    /** Referencia al Image que mostrará la grilla */
+    /** Referencia al Image que mostrará la grilla del mundo */
     UPROPERTY(BlueprintReadOnly, Category = "Grid|Debug", meta = (BindWidget))
-    TObjectPtr<UImage> GridImage;
+    TObjectPtr<UImage> GridImage_GridWorld;
 
     /** Crea el render target */
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
