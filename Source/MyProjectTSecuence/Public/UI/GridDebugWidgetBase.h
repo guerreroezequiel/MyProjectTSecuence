@@ -35,6 +35,10 @@ public:
     FLinearColor GetCellColor(const FIntPoint& CellCoord) const;
 
 protected:
+    /** Renderiza la grilla del mundo usando las dimensiones de GridWorld */
+    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
+    void RenderWorldGrid();
+
     /** Referencia al Render Target */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
     TObjectPtr<UCanvasRenderTarget2D> GridRenderTarget;
