@@ -31,10 +31,6 @@ public:
     FLinearColor GetCellColor(const FIntPoint& CellCoord) const;
 
 protected:
-    /** Renderiza la grilla del mundo usando las dimensiones de GridWorld */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
-    void RenderWorldGrid();
-
     /** Referencia al Render Target */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")
     TObjectPtr<UCanvasRenderTarget2D> GridRenderTarget;
@@ -55,10 +51,6 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void UpdateGridVisualization();
 
-    /** Actualiza la posición central del grid basada en una posición del mundo */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
-    void UpdateFromWorldPosition(const FVector& WorldPosition);
-
     /** Tamaño de la celda en píxeles (debe coincidir con GridConfig::CellSizeUU) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "1.0"))
     float CellSize = 100.0f;
@@ -72,7 +64,10 @@ protected:
     int32 CenterCellY = 0;
 
 private:
-    /** Delegado para actualizar el render target */
+    /** Renderiza una grilla en el canvas proporcionado */
+    void RenderGrid(UCanvas* Canvas, const FVector2D& ImageSize, int32 InCellSize, const FLinearColor& LineColor);
+    
+    /** Maneja la actualización del render target */
     UFUNCTION()
     void OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, int32 Height);
 };
