@@ -26,10 +26,6 @@ public:
     virtual void NativeDestruct() override;
     //~ End UEditorUtilityWidget Interface
 
-    /** Obtiene las dimensiones de la grilla */
-    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Grid|Debug")
-    FIntPoint GetGridDimensions() const;
-
     /** Obtiene el color de una celda específica */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Grid|Debug")
     FLinearColor GetCellColor(const FIntPoint& CellCoord) const;
@@ -66,10 +62,6 @@ protected:
     /** Tamaño de la celda en píxeles (debe coincidir con GridConfig::CellSizeUU) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "1.0"))
     float CellSize = 100.0f;
-
-    /** Radio de la grilla (0 = solo la celda central, 1 = 3x3, 2 = 5x5, etc.) */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug", meta = (ClampMin = "0", ClampMax = "31", UIMin = "0", UIMax = "31"))
-    int32 GridRadius = 0;
 
     /** Coordenada X de la celda central */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Debug")

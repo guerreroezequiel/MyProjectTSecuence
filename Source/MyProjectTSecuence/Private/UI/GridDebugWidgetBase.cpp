@@ -1,9 +1,9 @@
 // GridDebugWidgetBase.cpp
 #include "UI/GridDebugWidgetBase.h"
+#include "Components/Image.h"
 #include "CanvasItem.h"
 #include "CanvasTypes.h"
 #include "Engine/Canvas.h"
-#include "Components/Image.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Math/UnrealMathUtility.h"
@@ -49,7 +49,7 @@ void UGridDebugWidgetBase::CreateGridRenderTarget()
             
             GridRenderTarget->OnCanvasRenderTargetUpdate.AddDynamic(this, &UGridDebugWidgetBase::OnRenderTargetUpdate);
             
-            if (GridImage_GridWorld)
+            if (IsValid(GridImage_GridWorld))
             {
                 FSlateBrush Brush;
                 Brush.SetResourceObject(GridRenderTarget);
@@ -74,10 +74,10 @@ void UGridDebugWidgetBase::UpdateGridVisualization()
 
 void UGridDebugWidgetBase::RenderWorldGrid()
 {
-    if (!GridRenderTarget || !GridImage_GridWorld) return;
+    if (!IsValid(GridRenderTarget) || !IsValid(GridImage_GridWorld)) return;
     
     // Obtener el tamaño de la imagen
-    FVector2D ImageSize = GridImage_GridWorld->GetDesiredSize();
+    FVector2D ImageSize = GridImage_GridWorld->GetCachedGeometry().GetLocalSize();
     if (ImageSize.IsNearlyZero())
     {
         // Tamaño por defecto si no se puede obtener el tamaño de la imagen
@@ -111,12 +111,6 @@ void UGridDebugWidgetBase::RenderWorldGrid()
     GridRenderTarget->UpdateResource();
 }
 
-FIntPoint UGridDebugWidgetBase::GetGridDimensions_Implementation() const
-{
-    // Tamaño de la grilla basado en el radio (radio*2 + 1)
-    const int32 GridSize = (GridRadius * 2) + 1;
-    return FIntPoint(GridSize, GridSize);
-}
 
 void UGridDebugWidgetBase::UpdateFromWorldPosition(const FVector& WorldPosition)
 {
@@ -151,215 +145,73 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
 {
     if (!Canvas) return;
 
-    // Limpiar el render target
+    // Clear the render target
     FCanvasTileItem ClearItem(FVector2D(0, 0), FVector2D(Width, Height), FLinearColor::Transparent);
     ClearItem.BlendMode = SE_BLEND_Opaque;
     Canvas->DrawItem(ClearItem);
     
-    // Dibujar la grilla del mundo
-    // Calcular la relación píxeles/unidad basada en el tamaño de celda calculado
+    // Get the grid origin in world space
+    const FVector2D GridOriginWS = FVector2D(GridWorld::GetOriginWS());
+    
+    // Calculate pixels per unit based on cell size
     const float PixelsPerUnit = static_cast<float>(CellSize) / ::GridConfig::CellSizeUU;
     
-    // Obtener el origen del mundo en píxeles
-    const FVector2D OriginWorld = FVector2D(GridWorld::GetOriginWS());
+    // Calculate the origin position on screen (bottom-left corner)
     const FVector2D OriginScreen = FVector2D(
-        (Width * 0.5f) + (OriginWorld.X * PixelsPerUnit),
-        (Height * 0.5f) + (OriginWorld.Y * PixelsPerUnit)
+        -GridOriginWS.X * PixelsPerUnit,  // X: from left
+        Height + (GridOriginWS.Y * PixelsPerUnit)  // Y: from bottom (invert Y)
     );
     
-    // Dibujar líneas de la grilla
+    // Draw grid lines
     const float GridLineThickness = 1.0f;
     const FLinearColor GridColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.3f);
     
-    // Líneas verticales
-    for (float X = OriginScreen.X; X < Width; X += CellSize)
-    {
-        FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
-        LineItem.SetColor(GridColor);
-        LineItem.LineThickness = GridLineThickness;
-        Canvas->DrawItem(LineItem);
-    }
-    for (float X = OriginScreen.X - CellSize; X >= 0; X -= CellSize)
-    {
-        FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
-        LineItem.SetColor(GridColor);
-        LineItem.LineThickness = GridLineThickness;
-        Canvas->DrawItem(LineItem);
-    }
+    // Calculate how many cells fit in width and height
+    const int32 NumCellsX = FMath::CeilToInt(Width / CellSize) + 1;
+    const int32 NumCellsY = FMath::CeilToInt(Height / CellSize) + 1;
     
-    // Líneas horizontales
-    for (float Y = OriginScreen.Y; Y < Height; Y += CellSize)
+    // Draw vertical lines (from bottom to top)
+    for (int32 i = 0; i < NumCellsX; ++i)
     {
-        FCanvasLineItem LineItem(FVector2D(0, Y), FVector2D(Width, Y));
-        LineItem.SetColor(GridColor);
-        LineItem.LineThickness = GridLineThickness;
-        Canvas->DrawItem(LineItem);
-    }
-    for (float Y = OriginScreen.Y - CellSize; Y >= 0; Y -= CellSize)
-    {
-        FCanvasLineItem LineItem(FVector2D(0, Y), FVector2D(Width, Y));
-        LineItem.SetColor(GridColor);
-        LineItem.LineThickness = GridLineThickness;
-        Canvas->DrawItem(LineItem);
-    }
-    
-    // Dibujar el origen
-    const float OriginMarkerSize = 5.0f;
-    FCanvasBoxItem OriginBox(
-        FVector2D(OriginScreen.X - OriginMarkerSize, OriginScreen.Y - OriginMarkerSize),
-        FVector2D(OriginMarkerSize * 2, OriginMarkerSize * 2)
-    );
-    OriginBox.SetColor(FLinearColor::Red);
-    Canvas->DrawItem(OriginBox);
-
-    // Dibujar coordenadas - usar la fuente ya declarada
-    if (UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr)
-    {
-        const FLinearColor TextColor = FLinearColor::White;
-        const float TextScale = 0.5f;
-        const int32 LabelStep = FMath::Max(1, FMath::FloorToInt(100.0f / CellSize)); // Una etiqueta cada 100 unidades
-        const float TextOffset = 5.0f;
-
-        // Coordenadas X (eje horizontal) - abajo
-        for (float X = OriginScreen.X; X < Width; X += CellSize * LabelStep)
+        const float X = OriginScreen.X + (i * CellSize);
+        if (X >= 0 && X <= Width)
         {
-            int32 WorldX = FMath::RoundToInt((X - OriginScreen.X) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), WorldX);
-            FVector2D TextSize = FVector2D(10, 10); // Tamaño aproximado
-            FVector2D Position(X - (TextSize.X * 0.5f), OriginScreen.Y + TextOffset);
-            
-            FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-            TextItem.Scale = FVector2D(TextScale, TextScale);
-            Canvas->DrawItem(TextItem);
-        }
-        for (float X = OriginScreen.X - CellSize; X >= 0; X -= CellSize * LabelStep)
-        {
-            int32 WorldX = FMath::RoundToInt((X - OriginScreen.X) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), WorldX);
-            FVector2D TextSize = FVector2D(10, 10);
-            FVector2D Position(X - (TextSize.X * 0.5f), OriginScreen.Y + TextOffset);
-            
-            FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-            TextItem.Scale = FVector2D(TextScale, TextScale);
-            Canvas->DrawItem(TextItem);
-        }
-
-        // Coordenadas Y (eje vertical) - izquierda (invertidas porque Y crece hacia abajo en pantalla)
-        for (float Y = OriginScreen.Y; Y < Height; Y += CellSize * LabelStep)
-        {
-            int32 WorldY = FMath::RoundToInt((Y - OriginScreen.Y) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), -WorldY); // Invertir Y para que crezca hacia arriba
-            FVector2D TextSize = FVector2D(10, 10);
-            FVector2D Position(OriginScreen.X - TextSize.X - TextOffset, Y - (TextSize.Y * 0.5f));
-            
-            FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-            TextItem.Scale = FVector2D(TextScale, TextScale);
-            Canvas->DrawItem(TextItem);
-        }
-        for (float Y = OriginScreen.Y - CellSize; Y >= 0; Y -= CellSize * LabelStep)
-        {
-            int32 WorldY = FMath::RoundToInt((Y - OriginScreen.Y) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), -WorldY); // Invertir Y para que crezca hacia arriba
-            FVector2D TextSize = FVector2D(10, 10);
-            FVector2D Position(OriginScreen.X - TextSize.X - TextOffset, Y - (TextSize.Y * 0.5f));
-            
-            FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-            TextItem.Scale = FVector2D(TextScale, TextScale);
-            Canvas->DrawItem(TextItem);
-        }
-    }
-    
-    // Resto del código existente para la cuadrícula de depuración
-    const FIntPoint GridDims = GetGridDimensions();
-    if (GridDims.X <= 0 || GridDims.Y <= 0) return;
-
-    const float CellWidth = static_cast<float>(Width) / GridDims.X;
-    const float CellHeight = static_cast<float>(Height) / GridDims.Y;
-
-    // 1. Dibujar celdas
-    for (int32 Y = 0; Y < GridDims.Y; ++Y)
-    {
-        for (int32 X = 0; X < GridDims.X; ++X)
-        {
-            // Calcular coordenadas de mundo para esta celda de la interfaz
-            const int32 WorldX = CenterCellX + (X - GridRadius);
-            const int32 WorldY = CenterCellY + (Y - GridRadius);
-            const FIntPoint WorldGridPos(WorldX, WorldY);
-            
-            // Obtener el color de la celda
-            FLinearColor CellColor = GetCellColor(WorldGridPos);
-            
-            FCanvasTileItem TileItem(
-                FVector2D(X * CellWidth, Y * CellHeight),
-                FVector2D(CellWidth, CellHeight),
-                CellColor
+            FCanvasLineItem LineItem(
+                FVector2D(X, 0), 
+                FVector2D(X, Height)
             );
-            TileItem.BlendMode = SE_BLEND_Translucent;
-            Canvas->DrawItem(TileItem);
+            LineItem.SetColor(GridColor);
+            LineItem.LineThickness = GridLineThickness;
+            Canvas->DrawItem(LineItem);
         }
     }
-
-    // 2. Dibujar bordes
-    const float LineThickness = 1.0f;
-    // Bordes verticales
-    for (int32 X = 0; X <= GridDims.X; ++X)
-    {
-        float XPos = X * CellWidth;
-        FCanvasLineItem LineItem(FVector2D(XPos, 0.0f), FVector2D(XPos, Height));
-        LineItem.SetColor(GridLineColor);
-        LineItem.LineThickness = LineThickness;
-        Canvas->DrawItem(LineItem);
-    }
-    // Bordes horizontales
-    for (int32 Y = 0; Y <= GridDims.Y; ++Y)
-    {
-        float YPos = Y * CellHeight;
-        FCanvasLineItem LineItem(FVector2D(0.0f, YPos), FVector2D(Width, YPos));
-        LineItem.SetColor(GridLineColor);
-        LineItem.LineThickness = LineThickness;
-        Canvas->DrawItem(LineItem);
-    }
-
-    // 3. Dibujar coordenadas
-    UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr;
-    if (!Font) return;
     
-    const FLinearColor TextColor = FLinearColor::White;
-    const float TextScale = 0.5f;
-    const int32 LabelStep = FMath::Max(1, GridDims.X / 10);
-
-    // Coordenadas X (inferior)
-    for (int32 X = 0; X < GridDims.X; X += LabelStep)
+    // Draw horizontal lines (from left to right)
+    for (int32 i = 0; i < NumCellsY; ++i)
     {
-        const int32 WorldX = CenterCellX + (X - GridRadius);
-        FString Text = FString::Printf(TEXT("%d"), WorldX);
-        FVector2D Position(X * CellWidth + 2.0f, Height - 20.0f);
-        
-        FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-        TextItem.Scale = FVector2D(TextScale, TextScale);
-        TextItem.EnableShadow(FLinearColor::Black);
-        Canvas->DrawItem(TextItem);
-    }
-
-    // Coordenadas Y (izquierda)
-    for (int32 Y = 0; Y < GridDims.Y; Y += LabelStep)
-    {
-        const int32 WorldY = CenterCellY + (Y - GridRadius);
-        FString Text = FString::Printf(TEXT("%d"), WorldY);
-        FVector2D Position(2.0f, Y * CellHeight + 2.0f);
-        
-        FCanvasTextItem TextItem(Position, FText::FromString(Text), Font, TextColor);
-        TextItem.Scale = FVector2D(TextScale, TextScale);
-        TextItem.EnableShadow(FLinearColor::Black);
-        Canvas->DrawItem(TextItem);
+        const float Y = OriginScreen.Y - (i * CellSize); // Subtract because Y grows downward
+        if (Y >= 0 && Y <= Height)
+        {
+            FCanvasLineItem LineItem(
+                FVector2D(0, Y), 
+                FVector2D(Width, Y)
+            );
+            LineItem.SetColor(GridColor);
+            LineItem.LineThickness = GridLineThickness;
+            Canvas->DrawItem(LineItem);
+        }
     }
     
-    // Dibujar coordenadas de la celda central
-    FString CenterText = FString::Printf(TEXT("(%d,%d)"), CenterCellX, CenterCellY);
-    FVector2D CenterPosition((GridDims.X * 0.5f) * CellWidth, (GridDims.Y * 0.5f) * CellHeight);
-    FCanvasTextItem CenterTextItem(CenterPosition, FText::FromString(CenterText), Font, FLinearColor::Black);
-    CenterTextItem.Scale = FVector2D(1.0f, 1.0f);
-    CenterTextItem.bCentreX = true;
-    CenterTextItem.bCentreY = true;
-    Canvas->DrawItem(CenterTextItem);
+    // Draw origin (bottom-left corner)
+    const float OriginMarkerSize = 5.0f;
+    if (OriginScreen.X >= 0 && OriginScreen.X <= Width && 
+        OriginScreen.Y >= 0 && OriginScreen.Y <= Height)
+    {
+        FCanvasBoxItem OriginBox(
+            FVector2D(OriginScreen.X - OriginMarkerSize, OriginScreen.Y - OriginMarkerSize),
+            FVector2D(OriginMarkerSize * 2, OriginMarkerSize * 2)
+        );
+        OriginBox.SetColor(FLinearColor::Red);
+        Canvas->DrawItem(OriginBox);
+    }
 }
