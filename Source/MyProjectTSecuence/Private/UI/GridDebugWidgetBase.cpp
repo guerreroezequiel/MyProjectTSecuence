@@ -220,7 +220,7 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
         const int32 LabelStep = FMath::Max(1, FMath::FloorToInt(100.0f / CellSize)); // Una etiqueta cada 100 unidades
         const float TextOffset = 5.0f;
 
-        // Coordenadas X (abajo)
+        // Coordenadas X (eje horizontal) - abajo
         for (float X = OriginScreen.X; X < Width; X += CellSize * LabelStep)
         {
             int32 WorldX = FMath::RoundToInt((X - OriginScreen.X) / PixelsPerUnit);
@@ -244,11 +244,11 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
             Canvas->DrawItem(TextItem);
         }
 
-        // Coordenadas Y (izquierda)
+        // Coordenadas Y (eje vertical) - izquierda (invertidas porque Y crece hacia abajo en pantalla)
         for (float Y = OriginScreen.Y; Y < Height; Y += CellSize * LabelStep)
         {
-            int32 WorldY = FMath::RoundToInt((OriginScreen.Y - Y) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), WorldY);
+            int32 WorldY = FMath::RoundToInt((Y - OriginScreen.Y) / PixelsPerUnit);
+            FString Text = FString::Printf(TEXT("%d"), -WorldY); // Invertir Y para que crezca hacia arriba
             FVector2D TextSize = FVector2D(10, 10);
             FVector2D Position(OriginScreen.X - TextSize.X - TextOffset, Y - (TextSize.Y * 0.5f));
             
@@ -258,8 +258,8 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
         }
         for (float Y = OriginScreen.Y - CellSize; Y >= 0; Y -= CellSize * LabelStep)
         {
-            int32 WorldY = FMath::RoundToInt((OriginScreen.Y - Y) / PixelsPerUnit);
-            FString Text = FString::Printf(TEXT("%d"), WorldY);
+            int32 WorldY = FMath::RoundToInt((Y - OriginScreen.Y) / PixelsPerUnit);
+            FString Text = FString::Printf(TEXT("%d"), -WorldY); // Invertir Y para que crezca hacia arriba
             FVector2D TextSize = FVector2D(10, 10);
             FVector2D Position(OriginScreen.X - TextSize.X - TextOffset, Y - (TextSize.Y * 0.5f));
             
