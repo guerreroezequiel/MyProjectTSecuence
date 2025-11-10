@@ -45,8 +45,8 @@ void UGridDebugWidgetBase::CreateGridRenderTarget()
             // Updated InitCustomFormat call for UE 5.5
             GridRenderTarget->InitAutoFormat(RTWidth, RTHeight);
             GridRenderTarget->ClearColor = FLinearColor::Transparent;
-            GridRenderTarget->UpdateResource();
             
+            // Set up the render target update delegate
             GridRenderTarget->OnCanvasRenderTargetUpdate.AddDynamic(this, &UGridDebugWidgetBase::OnRenderTargetUpdate);
             
             if (IsValid(GridImage_GridWorld))
@@ -59,40 +59,10 @@ void UGridDebugWidgetBase::CreateGridRenderTarget()
                 GridImage_GridWorld->SetBrush(Brush);
             }
             
-            UpdateGridVisualization();
+            // Force initial render
+            GridRenderTarget->UpdateResource();
         }
     }
-}
-
-void UGridDebugWidgetBase::UpdateGridVisualization()
-{
-    if (!IsValid(GridRenderTarget) || !IsValid(GridImage_GridWorld)) return;
-    
-    // Get image size
-    FVector2D ImageSize = GridImage_GridWorld->GetCachedGeometry().GetLocalSize();
-    if (ImageSize.IsNearlyZero())
-    {
-        // Default size if we can't get the image size
-        ImageSize = FVector2D(512, 512);
-    }
-
-    // Calculate grid dimensions and cell size
-    const FIntPoint GridDimensions(::GridConfig::TileDim, ::GridConfig::TileDim);
-    const float CellWidth = ImageSize.X / GridDimensions.X;
-    const float CellHeight = ImageSize.Y / GridDimensions.Y;
-    const int32 CellSize = FMath::Max(1, FMath::FloorToInt(FMath::Min(CellWidth, CellHeight)));
-    
-    // Update render target size if needed
-    const int32 TargetWidth = GridDimensions.X * CellSize;
-    const int32 TargetHeight = GridDimensions.Y * CellSize;
-    
-    if (GridRenderTarget->SizeX != TargetWidth || GridRenderTarget->SizeY != TargetHeight)
-    {
-        GridRenderTarget->ResizeTarget(TargetWidth, TargetHeight);
-    }
-
-    // Force render target update
-    GridRenderTarget->UpdateResource();
 }
 
 

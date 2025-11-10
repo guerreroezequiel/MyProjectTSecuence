@@ -43,9 +43,6 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
     void CreateGridRenderTarget();
 
-    /** Actualiza la visualización de la grilla */
-    UFUNCTION(BlueprintCallable, Category = "Grid|Debug")
-    void UpdateGridVisualization();
 
 private:
     /** Renderiza una grilla en el canvas proporcionado */
