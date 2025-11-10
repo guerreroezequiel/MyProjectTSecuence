@@ -48,9 +48,6 @@ protected:
     void UpdateGridVisualization();
 
 private:
-    /** Obtiene el color de una celda específica */
-    FLinearColor GetCellColor_Implementation(const FIntPoint& CellCoord) const;
-    
     /** Renderiza una grilla en el canvas proporcionado */
     void RenderGrid(UCanvas* Canvas, const FVector2D& ImageSize, int32 InCellSize, const FLinearColor& LineColor);
     

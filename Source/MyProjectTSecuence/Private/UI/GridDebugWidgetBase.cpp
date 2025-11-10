@@ -80,7 +80,7 @@ void UGridDebugWidgetBase::UpdateGridVisualization()
     const FIntPoint GridDimensions(::GridConfig::TileDim, ::GridConfig::TileDim);
     const float CellWidth = ImageSize.X / GridDimensions.X;
     const float CellHeight = ImageSize.Y / GridDimensions.Y;
-    CellSize = FMath::Max(1, FMath::FloorToInt(FMath::Min(CellWidth, CellHeight)));
+    const int32 CellSize = FMath::Max(1, FMath::FloorToInt(FMath::Min(CellWidth, CellHeight)));
     
     // Update render target size if needed
     const int32 TargetWidth = GridDimensions.X * CellSize;
@@ -96,22 +96,6 @@ void UGridDebugWidgetBase::UpdateGridVisualization()
 }
 
 
-FLinearColor UGridDebugWidgetBase::GetCellColor_Implementation(const FIntPoint& CellCoord) const
-{
-    // Usar GridWorld para convertir las coordenadas si es necesario
-    // En este caso, CellCoord ya está en coordenadas de mundo
-    
-    // Resaltar la celda central
-    if (CellCoord.X == CenterCellX && CellCoord.Y == CenterCellY)
-    {
-        return FLinearColor::Green;
-    }
-    
-    // Alternar colores para mejor visualización
-    return (CellCoord.X + CellCoord.Y) % 2 == 0 ? 
-        FLinearColor(0.1f, 0.1f, 0.1f, 0.3f) : 
-        FLinearColor(0.2f, 0.2f, 0.2f, 0.3f);
-}
 
 void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSize, int32 InCellSize, const FLinearColor& LineColor)
 {
@@ -187,6 +171,10 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
     FCanvasTileItem ClearItem(FVector2D(0, 0), FVector2D(Width, Height), FLinearColor::Transparent);
     ClearItem.BlendMode = SE_BLEND_Opaque;
     Canvas->DrawItem(ClearItem);
+    
+    // Calculate cell size based on grid dimensions
+    const FIntPoint GridDimensions(::GridConfig::TileDim, ::GridConfig::TileDim);
+    const int32 CellSize = FMath::Max(1, FMath::Min(Width / GridDimensions.X, Height / GridDimensions.Y));
     
     // Render the main grid
     RenderGrid(Canvas, FVector2D(Width, Height), CellSize, GridLineColor);
