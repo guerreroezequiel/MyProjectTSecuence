@@ -210,18 +210,7 @@ static FAutoConsoleCommand GCmdGridFlowReset(
                 // Limpiar metas
                 Subsystem->Goals.GoalCells.Empty();
                 
-                // Limpiar el storage del FlowField para eliminar direcciones obsoletas
-                Grid::Flow::GStorage.Empty();
-                
-                // Limpiar tiles sucios para forzar recálculo completo
-                Grid::Flow::GDirtyTiles.Empty();
-                while (!Grid::Flow::GDirtyQueue.IsEmpty())
-                {
-                    FIntPoint Dummy;
-                    Grid::Flow::GDirtyQueue.Dequeue(Dummy);
-                }
-                
-                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared all goals and flow field data"));
+                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared goals"));
             }
             else
             {

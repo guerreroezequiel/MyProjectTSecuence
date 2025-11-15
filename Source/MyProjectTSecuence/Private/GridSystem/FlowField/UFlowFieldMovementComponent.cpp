@@ -101,8 +101,8 @@ void UFlowFieldMovementComponent::ApplyFlowMovement(float DeltaTime)
         return;
     }
 
-    // Convertir a 3D (asumimos movimiento en plano XZ)
-    const FVector FlowDirection3D = FVector(FlowDirection2D.X, 0.0f, FlowDirection2D.Y);
+    // Convertir a 3D (Grid X→World X, Grid Y→World Y, Z=altura)
+    const FVector FlowDirection3D = FVector(FlowDirection2D.X, FlowDirection2D.Y, 0.0f);
     
     // Calcular desplazamiento
     const FVector MovementDelta = FlowDirection3D.GetSafeNormal() * MovementSpeed * DeltaTime;
@@ -124,7 +124,7 @@ void UFlowFieldMovementComponent::DrawDebugInfo() const
     
     if (!FlowDirection2D.IsNearlyZero())
     {
-        const FVector FlowDirection3D = FVector(FlowDirection2D.X, 0.0f, FlowDirection2D.Y);
+        const FVector FlowDirection3D = FVector(FlowDirection2D.X, FlowDirection2D.Y, 0.0f);
         const FVector EndPoint = CurrentLocation + (FlowDirection3D.GetSafeNormal() * 100.0f);
         
         // Dibujar línea de dirección
