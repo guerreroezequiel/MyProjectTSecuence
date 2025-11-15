@@ -31,6 +31,9 @@ public:
 	// Si se quiere forzar una pasada de rebuild en el siguiente epoch
 	void RequestDirtyRebuildAll();
 
+	// Acceso público a las metas para componentes externos
+	Grid::Flow::FGoalSet Goals;
+
 private:
 	double LastTimeSeconds = 0.0;
 	uint32 LastEpochIndex = 0u;
@@ -39,7 +42,6 @@ private:
 	Grid::Flow::FRebuildBudget Budget;
 
 	// Parámetros básicos del solver; en un futuro, configurar desde fuera
-	Grid::Flow::FGoalSet Goals;
 	Grid::Flow::FSolverParams SolverParams;
 
 	// Handle del ticker
