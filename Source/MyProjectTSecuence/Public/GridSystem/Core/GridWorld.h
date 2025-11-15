@@ -32,7 +32,7 @@ namespace GridWorld
 
 	FORCEINLINE FIntPoint WorldToCellXY(const FVector& WorldPosUU)
 	{
-		const FVector2D local = FVector2D(WorldPosUU.Y - OriginWS.Y, WorldPosUU.X - OriginWS.X);
+		const FVector2D local = FVector2D(WorldPosUU.X - OriginWS.X, WorldPosUU.Y - OriginWS.Y);
 		return FIntPoint(
 			FMath::FloorToInt(local.X / GridConfig::CellSizeUU),
 			FMath::FloorToInt(local.Y / GridConfig::CellSizeUU)
@@ -42,8 +42,8 @@ namespace GridWorld
 	FORCEINLINE FVector2D CellToWorldCenterXY(const FIntPoint& CellXY)
 	{
 		return FVector2D(
-			OriginWS.Y + (CellXY.X + 0.5f) * GridConfig::CellSizeUU,
-			OriginWS.X + (CellXY.Y + 0.5f) * GridConfig::CellSizeUU
+			OriginWS.X + (CellXY.X + 0.5f) * GridConfig::CellSizeUU,
+			OriginWS.Y + (CellXY.Y + 0.5f) * GridConfig::CellSizeUU
 		);
 	}
 
@@ -70,8 +70,8 @@ namespace GridWorld
 	FORCEINLINE FVector2D TileToWorldOriginXY(const FIntPoint& TileXY)
 	{
 		return FVector2D(
-			OriginWS.Y + TileXY.X * GridConfig::TileDim * GridConfig::CellSizeUU,
-			OriginWS.X + TileXY.Y * GridConfig::TileDim * GridConfig::CellSizeUU
+			OriginWS.X + TileXY.X * GridConfig::TileDim * GridConfig::CellSizeUU,
+			OriginWS.Y + TileXY.Y * GridConfig::TileDim * GridConfig::CellSizeUU
 		);
 	}
 

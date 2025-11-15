@@ -1,8 +1,13 @@
 #include "CoreMinimal.h"
 #include "GridSystem/FlowField/FlowFieldRebuilder.h" // MarkTileDirty
-#include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/Core/GridEpochSubsystem.h"
+#include "GridSystem/FlowField/AFlowFieldDebugActor.h"
+#include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
 #include "GridSystem/Occupancy/CapacityGrid.h"
+#include "Engine/GameInstance.h"
+#include "Engine/Engine.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -90,5 +95,142 @@ static FAutoConsoleCommand GCmdGridOccClear(
     {
         Grid::ClearAll();
         UE_LOG(LogTemp, Log, TEXT("Occupancy cleared"));
+    })
+);
+
+// ===== FLOW FIELD CONSOLE COMMANDS =====
+
+// grid.flow.set_goal x y
+static FAutoConsoleCommand GCmdGridFlowSetGoal(
+    TEXT("grid.flow.set_goal"),
+    TEXT("Set flow field goal: grid.flow.set_goal <x> <y>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.flow.set_goal <x> <y>")); 
+            return; 
+        }
+        
+        int32 X = 0, Y = 0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        
+        // Obtener el mundo actual
+        if (GWorld)
+        {
+            UGridEpochSubsystem* Subsystem = GWorld->GetSubsystem<UGridEpochSubsystem>();
+            if (Subsystem)
+            {
+                // Limpiar metas anteriores y establecer nueva meta
+                Subsystem->Goals.GoalCells.Empty();
+                Subsystem->Goals.GoalCells.Add(FIntPoint(X, Y));
+                
+                // Marcar tiles cercanos como sucios para recalcular
+                const FIntPoint TileXY = GridWorld::CellToTileXY(FIntPoint(X, Y));
+                Grid::Flow::MarkTileDirty(TileXY);
+                
+                UE_LOG(LogTemp, Log, TEXT("FlowField goal set at cell (%d,%d); marked tile (%d,%d) dirty"), 
+                    X, Y, TileXY.X, TileXY.Y);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to get UGridEpochSubsystem"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
+    })
+);
+
+// grid.flow.spawn x y
+static FAutoConsoleCommand GCmdGridFlowSpawn(
+    TEXT("grid.flow.spawn"),
+    TEXT("Spawn FlowField debug actor: grid.flow.spawn <x> <y>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.flow.spawn <x> <y>")); 
+            return; 
+        }
+        
+        int32 X = 0, Y = 0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        
+        // Obtener el mundo actual
+        if (GWorld)
+        {
+            // Convertir coordenadas de celda a mundo
+            const FVector2D WorldPos2D = GridWorld::CellToWorldCenterXY(FIntPoint(X, Y));
+            const FVector WorldPosition = FVector(WorldPos2D.X, WorldPos2D.Y, 0.0f);
+            
+            // Spawnear el debug actor
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            
+            AFlowFieldDebugActor* DebugActor = GWorld->SpawnActor<AFlowFieldDebugActor>(
+                AFlowFieldDebugActor::StaticClass(), 
+                WorldPosition, 
+                FRotator::ZeroRotator, 
+                SpawnParams
+            );
+            
+            if (DebugActor)
+            {
+                UE_LOG(LogTemp, Log, TEXT("FlowField debug actor spawned at cell (%d,%d) -> world (%.1f, %.1f, %.1f)"), 
+                    X, Y, WorldPosition.X, WorldPosition.Y, WorldPosition.Z);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to spawn FlowField debug actor"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
+    })
+);
+
+// grid.flow.reset
+static FAutoConsoleCommand GCmdGridFlowReset(
+    TEXT("grid.flow.reset"),
+    TEXT("Reset FlowField goals and clear flow field data"),
+    FConsoleCommandDelegate::CreateStatic([]()
+    {
+        if (GWorld)
+        {
+            UGridEpochSubsystem* Subsystem = GWorld->GetSubsystem<UGridEpochSubsystem>();
+            if (Subsystem)
+            {
+                // Limpiar metas
+                Subsystem->Goals.GoalCells.Empty();
+                
+                // Limpiar el storage del FlowField para eliminar direcciones obsoletas
+                Grid::Flow::GStorage.Empty();
+                
+                // Limpiar tiles sucios para forzar recálculo completo
+                Grid::Flow::GDirtyTiles.Empty();
+                while (!Grid::Flow::GDirtyQueue.IsEmpty())
+                {
+                    FIntPoint Dummy;
+                    Grid::Flow::GDirtyQueue.Dequeue(Dummy);
+                }
+                
+                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared all goals and flow field data"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to get UGridEpochSubsystem"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
     })
 );

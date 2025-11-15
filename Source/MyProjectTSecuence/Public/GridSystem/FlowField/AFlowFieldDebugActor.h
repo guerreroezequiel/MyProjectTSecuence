@@ -6,6 +6,7 @@
 
 class UFlowFieldMovementComponent;
 class UStaticMeshComponent;
+class UTextRenderComponent;
 
 UCLASS()
 class MYPROJECTTSECUENCE_API AFlowFieldDebugActor : public AActor
@@ -29,6 +30,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* MeshComponent;
 
+    // Texto para mostrar coordenadas del mundo
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UTextRenderComponent* TextRenderComponent;
+
     // Velocidad de movimiento configurable
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlowField")
     float MovementSpeed = 200.0f;
@@ -39,5 +44,6 @@ public:
 
 private:
     void SetupMesh();
+    void SetupTextRender();
     void SetupMovementComponent();
 };
