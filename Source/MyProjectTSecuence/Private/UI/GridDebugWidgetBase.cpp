@@ -88,6 +88,23 @@ void UGridDebugWidgetBase::CreateGridRenderTarget()
 void UGridDebugWidgetBase::UpdatePlayerPosition(const FVector& WorldLocation)
 {
     const FIntPoint NewCell = GridWorld::WorldToCellXY(WorldLocation);
+    
+    // Debug: Mostrar coordenadas para verificar conversión
+    UE_LOG(LogTemp, Warning, TEXT("World: (%.1f,%.1f,%.1f) -> GridCell: (%d,%d)"), 
+        WorldLocation.X, WorldLocation.Y, WorldLocation.Z, NewCell.X, NewCell.Y);
+    
+    // Debug adicional: mostrar límites de celda y posición relativa
+    const float CellMinX = NewCell.X * GridConfig::CellSizeUU;
+    const float CellMaxX = (NewCell.X + 1) * GridConfig::CellSizeUU;
+    const float CellMinY = NewCell.Y * GridConfig::CellSizeUU;
+    const float CellMaxY = (NewCell.Y + 1) * GridConfig::CellSizeUU;
+    
+    const float RelX = WorldLocation.X - CellMinX;
+    const float RelY = WorldLocation.Y - CellMinY;
+    
+    UE_LOG(LogTemp, Warning, TEXT("Cell[%d,%d] Bounds: X[%.0f,%.0f] Y[%.0f,%.0f] PlayerRel: (%.1f,%.1f)"), 
+        NewCell.X, NewCell.Y, CellMinX, CellMaxX, CellMinY, CellMaxY, RelX, RelY);
+    
     if (NewCell != CachedPlayerCell)
     {
         CachedPlayerCell = NewCell;
@@ -109,23 +126,44 @@ void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSiz
 {
     if (!Canvas) return;
     
-    const FVector2D WorldOrigin = FVector2D(GridWorld::GetOriginWS());
-    const float PixelsPerUnit = static_cast<float>(InCellSize) / ::GridConfig::CellSizeUU;
     const float Width = ImageSize.X;
     const float Height = ImageSize.Y;
     
-    const FVector2D OriginScreen = FVector2D(
-        -WorldOrigin.X * PixelsPerUnit,
-        Height + (WorldOrigin.Y * PixelsPerUnit)
-    );
+    // GridSystem: Origen en esquina inferior izquierda (0,0)
+    // Canvas: Origen en esquina superior izquierda (0,0)
+    // Visualización intuitiva: World Right → Screen Right, World Forward → Screen Up
     
-    const int32 NumCellsX = FMath::CeilToInt(Width / InCellSize) + 1;
-    const int32 NumCellsY = FMath::CeilToInt(Height / InCellSize) + 1;
+    // IMPORTANTE: Usar dimensiones exactas del GridSystem (64x64)
+    // No calcular basado en canvas size, usar TileDim
+    const int32 NumCellsX = ::GridConfig::TileDim;  // 64 celdas en X
+    const int32 NumCellsY = ::GridConfig::TileDim;  // 64 celdas en Y
     
-    // Draw vertical lines
+    // Debug: Mostrar información del grid
+    UE_LOG(LogTemp, Warning, TEXT("Grid Debug: Size(%.0f,%.0f) CellSize=%d Cells(%d,%d) [TileDim=%d]"), 
+        Width, Height, InCellSize, NumCellsX, NumCellsY, ::GridConfig::TileDim);
+    
+    // Draw vertical lines (World Right = Screen X)
+    // Estas líneas representan coordenadas Y del GridSystem
+    // IMPORTANTE: Las líneas deben corresponder a las coordenadas de celda válidas
     for (int32 i = 0; i < NumCellsX; ++i)
     {
-        const float X = OriginScreen.X + (i * InCellSize);
+        // Calcular X basado en coordenada de celda, no índice de línea
+        const float X = i * InCellSize;  // Grid.Y → Screen.X (i representa coordenada Y)
+        
+        // Debug: Comparar posición de línea con player cell
+        if (i == CachedPlayerCell.Y)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Vertical line for Grid.Y=%d at X=%.1f (player Y=%d) CellSize=%d"), 
+                i, X, CachedPlayerCell.Y, InCellSize);
+        }
+        
+        // Debug adicional para primeras líneas
+        if (i <= 3)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Vertical line[%d] X=%.1f (represents Grid.Y=%d)"), 
+                i, X, i);
+        }
+        
         if (X >= 0 && X <= Width)
         {
             FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
@@ -135,13 +173,23 @@ void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSiz
         }
     }
     
-    // Draw horizontal lines
+    // Draw horizontal lines (World Forward = Screen Y invertido)
+    // Estas líneas representan coordenadas X del GridSystem
     for (int32 i = 0; i < NumCellsY; ++i)
     {
-        const float Y = OriginScreen.Y - (i * InCellSize);
-        if (Y >= 0 && Y <= Height)
+        const float GridX = i * InCellSize;        // Grid.X
+        const float CanvasY = Height - GridX;      // Grid.X → Screen.Y (invertido)
+        
+        // Debug: Comparar posición de línea con player cell
+        if (i == CachedPlayerCell.X)
         {
-            FCanvasLineItem LineItem(FVector2D(0, Y), FVector2D(Width, Y));
+            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Horizontal line %d at Y=%.1f (player X=%d) CellSize=%d"), 
+                i, CanvasY, CachedPlayerCell.X, InCellSize);
+        }
+        
+        if (CanvasY >= 0 && CanvasY <= Height)
+        {
+            FCanvasLineItem LineItem(FVector2D(0, CanvasY), FVector2D(Width, CanvasY));
             LineItem.SetColor(LineColor);
             LineItem.LineThickness = 1.0f;
             Canvas->DrawItem(LineItem);
@@ -154,23 +202,21 @@ void UGridDebugWidgetBase::RenderTileBounds(UCanvas* Canvas, const FVector2D& Im
     if (!Canvas) return;
     
     const int32 TileSize = CellSize * ::GridConfig::TileDim;
-    const FVector2D WorldOrigin = FVector2D(GridWorld::GetOriginWS());
-    const float PixelsPerUnit = static_cast<float>(CellSize) / ::GridConfig::CellSizeUU;
     const float Width = ImageSize.X;
     const float Height = ImageSize.Y;
     
-    const FVector2D OriginScreen = FVector2D(
-        -WorldOrigin.X * PixelsPerUnit,
-        Height + (WorldOrigin.Y * PixelsPerUnit)
-    );
+    // GridSystem: Origen en esquina inferior izquierda (0,0)
+    // Canvas: Origen en esquina superior izquierda (0,0)
+    // Visualización intuitiva: World Right → Screen Right, World Forward → Screen Up
     
     const int32 NumTilesX = FMath::CeilToInt(Width / TileSize) + 1;
     const int32 NumTilesY = FMath::CeilToInt(Height / TileSize) + 1;
     
-    // Draw tile bounds
-    for (int32 i = 0; i <= NumTilesX; ++i)
+    // Draw vertical tile boundaries (World Right = Screen X)
+    // Estas líneas representan coordenadas Y del GridSystem
+    for (int32 i = 0; i < NumTilesX; ++i)
     {
-        const float X = OriginScreen.X + (i * TileSize);
+        const float X = i * TileSize;  // Grid.Y → Screen.X
         if (X >= 0 && X <= Width)
         {
             FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
@@ -180,12 +226,16 @@ void UGridDebugWidgetBase::RenderTileBounds(UCanvas* Canvas, const FVector2D& Im
         }
     }
     
-    for (int32 i = 0; i <= NumTilesY; ++i)
+    // Draw horizontal tile boundaries (World Forward = Screen Y invertido)
+    // Estas líneas representan coordenadas X del GridSystem
+    for (int32 i = 0; i < NumTilesY; ++i)
     {
-        const float Y = OriginScreen.Y - (i * TileSize);
-        if (Y >= 0 && Y <= Height)
+        const float GridX = i * TileSize;        // Grid.X
+        const float CanvasY = Height - GridX;    // Grid.X → Screen.Y (invertido)
+        
+        if (CanvasY >= 0 && CanvasY <= Height)
         {
-            FCanvasLineItem LineItem(FVector2D(0, Y), FVector2D(Width, Y));
+            FCanvasLineItem LineItem(FVector2D(0, CanvasY), FVector2D(Width, CanvasY));
             LineItem.SetColor(LineColor);
             LineItem.LineThickness = 2.0f;
             Canvas->DrawItem(LineItem);
@@ -197,48 +247,21 @@ void UGridDebugWidgetBase::RenderPlayerCell(UCanvas* Canvas, int32 CellSize)
 {
     if (!Canvas) return;
     
-    const FVector2D WorldOrigin = FVector2D(GridWorld::GetOriginWS());
-    const float PixelsPerUnit = static_cast<float>(CellSize) / ::GridConfig::CellSizeUU;
     const float Width = Canvas->SizeX;
     const float Height = Canvas->SizeY;
     
-    // Calculate screen position of the player's cell
-    const FVector2D CellScreenPos = FVector2D(
-        -WorldOrigin.X * PixelsPerUnit + CachedPlayerCell.X * CellSize,
-        Height + (WorldOrigin.Y * PixelsPerUnit) - (CachedPlayerCell.Y + 1) * CellSize
-    );
+    // Calcular posición de la celda del jugador
+    const float ExpectedX = CachedPlayerCell.Y * CellSize;        // Grid.Y → Screen.X
+    const float ExpectedY = Height - (CachedPlayerCell.X * CellSize); // Grid.X → Screen.Y (invertido)
     
-    // Draw player cell highlight
-    FCanvasTileItem PlayerCellTile(
-        CellScreenPos,
-        FVector2D(CellSize, CellSize),
-        DebugSettings.PlayerCellColor.CopyWithNewOpacity(DebugSettings.PlayerCellOpacity)
-    );
-    PlayerCellTile.BlendMode = SE_BLEND_Translucent;
-    Canvas->DrawItem(PlayerCellTile);
+    // Posición de la celda - alinear con bordes del grid
+    const FVector2D CellScreenPos = FVector2D(ExpectedX, ExpectedY);
     
-    // Draw cell border
-    FCanvasBoxItem BorderBox(
-        FVector2D(CellScreenPos.X - 1, CellScreenPos.Y - 1),
-        FVector2D(CellSize + 2, CellSize + 2)
-    );
+    // Solo dibujar el borde de la celda del jugador
+    FCanvasBoxItem BorderBox(CellScreenPos, FVector2D(CellSize, CellSize));
     BorderBox.SetColor(DebugSettings.PlayerCellColor);
     BorderBox.BlendMode = SE_BLEND_Translucent;
     Canvas->DrawItem(BorderBox);
-    
-    // Draw cell coordinates
-    if (GEngine && GEngine->GetSmallFont())
-    {
-        const FString CellText = FString::Printf(TEXT("(%d,%d)"), CachedPlayerCell.X, CachedPlayerCell.Y);
-        const FVector2D TextPos = FVector2D(
-            CellScreenPos.X + 5,
-            CellScreenPos.Y + 5
-        );
-        
-        FCanvasTextItem TextItem(TextPos, FText::FromString(CellText), GEngine->GetSmallFont(), FLinearColor::White);
-        TextItem.EnableShadow(FLinearColor::Black);
-        Canvas->DrawItem(TextItem);
-    }
 }
 
 void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, int32 Height)
@@ -250,9 +273,10 @@ void UGridDebugWidgetBase::OnRenderTargetUpdate(UCanvas* Canvas, int32 Width, in
     ClearItem.BlendMode = SE_BLEND_Opaque;
     Canvas->DrawItem(ClearItem);
     
-    // Calculate cell size based on grid dimensions
-    const FIntPoint GridDimensions(::GridConfig::TileDim * 2, ::GridConfig::TileDim * 2);
-    const int32 CellSize = FMath::Max(10, FMath::Min(Width / GridDimensions.X, Height / GridDimensions.Y));
+    // Calculate cell size based on actual grid dimensions from GridConfig
+    // Usar dimensiones basadas en TileDim para representar el GridSystem
+    const int32 GridCellsToShow = ::GridConfig::TileDim; // Un tile = 64x64 celdas
+    const int32 CellSize = FMath::Max(5, FMath::Min(Width / GridCellsToShow, Height / GridCellsToShow));
     LastCellSize = CellSize;
     
     // Draw tile bounds if enabled
