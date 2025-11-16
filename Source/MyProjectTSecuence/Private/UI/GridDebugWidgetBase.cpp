@@ -129,41 +129,18 @@ void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSiz
     const float Width = ImageSize.X;
     const float Height = ImageSize.Y;
     
-    // GridSystem: Origen en esquina inferior izquierda (0,0)
-    // Canvas: Origen en esquina superior izquierda (0,0)
-    // Visualización intuitiva: World Right → Screen Right, World Forward → Screen Up
+    // Grid de 64x64 celdas + bordes externos = 65x65 líneas
+    const int32 NumCellsX = ::GridConfig::TileDim;  // 64 celdas
+    const int32 NumCellsY = ::GridConfig::TileDim;  // 64 celdas
     
-    // IMPORTANTE: Usar dimensiones exactas del GridSystem (64x64)
-    // No calcular basado en canvas size, usar TileDim
-    const int32 NumCellsX = ::GridConfig::TileDim;  // 64 celdas en X
-    const int32 NumCellsY = ::GridConfig::TileDim;  // 64 celdas en Y
+    UE_LOG(LogTemp, Warning, TEXT("Grid Debug: Size(%.0f,%.0f) CellSize=%d Cells(%d,%d)"), 
+        Width, Height, InCellSize, NumCellsX, NumCellsY);
     
-    // Debug: Mostrar información del grid
-    UE_LOG(LogTemp, Warning, TEXT("Grid Debug: Size(%.0f,%.0f) CellSize=%d Cells(%d,%d) [TileDim=%d]"), 
-        Width, Height, InCellSize, NumCellsX, NumCellsY, ::GridConfig::TileDim);
-    
-    // Draw vertical lines (World Right = Screen X)
-    // Estas líneas representan coordenadas Y del GridSystem
-    // IMPORTANTE: Las líneas deben corresponder a las coordenadas de celda válidas
-    for (int32 i = 0; i < NumCellsX; ++i)
+    // Draw vertical lines (Grid.Y → Screen.X de izquierda a derecha)
+    // i = 0,1,2,...,64 (65 líneas para 64 celdas + borde derecho)
+    for (int32 i = 0; i <= NumCellsX; ++i)
     {
-        // Calcular X basado en coordenada de celda, no índice de línea
-        const float X = i * InCellSize;  // Grid.Y → Screen.X (i representa coordenada Y)
-        
-        // Debug: Comparar posición de línea con player cell
-        if (i == CachedPlayerCell.Y)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Vertical line for Grid.Y=%d at X=%.1f (player Y=%d) CellSize=%d"), 
-                i, X, CachedPlayerCell.Y, InCellSize);
-        }
-        
-        // Debug adicional para primeras líneas
-        if (i <= 3)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Vertical line[%d] X=%.1f (represents Grid.Y=%d)"), 
-                i, X, i);
-        }
-        
+        const float X = i * InCellSize;  // X = 0,16,32,...,1024
         if (X >= 0 && X <= Width)
         {
             FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
@@ -173,20 +150,14 @@ void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSiz
         }
     }
     
-    // Draw horizontal lines (World Forward = Screen Y invertido)
-    // Estas líneas representan coordenadas X del GridSystem
-    for (int32 i = 0; i < NumCellsY; ++i)
+    // Draw horizontal lines (Grid.X → Screen.Y de abajo hacia arriba)
+    // i = 0,1,2,...,64 (65 líneas para 64 celdas + borde superior)
+    // GridWorld: Origen en esquina inferior izquierda, X=forward, Y=right
+    // Canvas: Origen en esquina superior izquierda, necesitamos invertir Y
+    for (int32 i = 0; i <= NumCellsY; ++i)
     {
-        const float GridX = i * InCellSize;        // Grid.X
-        const float CanvasY = Height - GridX;      // Grid.X → Screen.Y (invertido)
-        
-        // Debug: Comparar posición de línea con player cell
-        if (i == CachedPlayerCell.X)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("RENDER GRID: Horizontal line %d at Y=%.1f (player X=%d) CellSize=%d"), 
-                i, CanvasY, CachedPlayerCell.X, InCellSize);
-        }
-        
+        const float GridX = i * InCellSize;              // Grid.X (de abajo hacia arriba)
+        const float CanvasY = Height - GridX;            // Canvas.Y (invertido para coincidir)
         if (CanvasY >= 0 && CanvasY <= Height)
         {
             FCanvasLineItem LineItem(FVector2D(0, CanvasY), FVector2D(Width, CanvasY));
@@ -199,48 +170,8 @@ void UGridDebugWidgetBase::RenderGrid(UCanvas* Canvas, const FVector2D& ImageSiz
 
 void UGridDebugWidgetBase::RenderTileBounds(UCanvas* Canvas, const FVector2D& ImageSize, int32 CellSize, const FLinearColor& LineColor)
 {
-    if (!Canvas) return;
-    
-    const int32 TileSize = CellSize * ::GridConfig::TileDim;
-    const float Width = ImageSize.X;
-    const float Height = ImageSize.Y;
-    
-    // GridSystem: Origen en esquina inferior izquierda (0,0)
-    // Canvas: Origen en esquina superior izquierda (0,0)
-    // Visualización intuitiva: World Right → Screen Right, World Forward → Screen Up
-    
-    const int32 NumTilesX = FMath::CeilToInt(Width / TileSize) + 1;
-    const int32 NumTilesY = FMath::CeilToInt(Height / TileSize) + 1;
-    
-    // Draw vertical tile boundaries (World Right = Screen X)
-    // Estas líneas representan coordenadas Y del GridSystem
-    for (int32 i = 0; i < NumTilesX; ++i)
-    {
-        const float X = i * TileSize;  // Grid.Y → Screen.X
-        if (X >= 0 && X <= Width)
-        {
-            FCanvasLineItem LineItem(FVector2D(X, 0), FVector2D(X, Height));
-            LineItem.SetColor(LineColor);
-            LineItem.LineThickness = 2.0f;
-            Canvas->DrawItem(LineItem);
-        }
-    }
-    
-    // Draw horizontal tile boundaries (World Forward = Screen Y invertido)
-    // Estas líneas representan coordenadas X del GridSystem
-    for (int32 i = 0; i < NumTilesY; ++i)
-    {
-        const float GridX = i * TileSize;        // Grid.X
-        const float CanvasY = Height - GridX;    // Grid.X → Screen.Y (invertido)
-        
-        if (CanvasY >= 0 && CanvasY <= Height)
-        {
-            FCanvasLineItem LineItem(FVector2D(0, CanvasY), FVector2D(Width, CanvasY));
-            LineItem.SetColor(LineColor);
-            LineItem.LineThickness = 2.0f;
-            Canvas->DrawItem(LineItem);
-        }
-    }
+    // No dibujar bordes de tiles, solo las celdas del grid
+    // Esta función puede quedar vacía o eliminarse si no se necesita
 }
 
 void UGridDebugWidgetBase::RenderPlayerCell(UCanvas* Canvas, int32 CellSize)
@@ -251,11 +182,13 @@ void UGridDebugWidgetBase::RenderPlayerCell(UCanvas* Canvas, int32 CellSize)
     const float Height = Canvas->SizeY;
     
     // Calcular posición de la celda del jugador
-    const float ExpectedX = CachedPlayerCell.Y * CellSize;        // Grid.Y → Screen.X
-    const float ExpectedY = Height - (CachedPlayerCell.X * CellSize); // Grid.X → Screen.Y (invertido)
+    // GridWorld: Origen en esquina inferior izquierda, X=forward, Y=right
+    // Canvas: Origen en esquina superior izquierda, necesitamos invertir Y para X
+    const float ExpectedX = CachedPlayerCell.Y * CellSize;        // Grid.Y → Screen.X (izquierda a derecha)
+    const float ExpectedY = Height - (CachedPlayerCell.X * CellSize); // Grid.X → Screen.Y (invertido, abajo hacia arriba)
     
     // Posición de la celda - alinear con bordes del grid
-    const FVector2D CellScreenPos = FVector2D(ExpectedX, ExpectedY);
+    const FVector2D CellScreenPos = FVector2D(ExpectedX , ExpectedY);
     
     // Solo dibujar el borde de la celda del jugador
     FCanvasBoxItem BorderBox(CellScreenPos, FVector2D(CellSize, CellSize));
