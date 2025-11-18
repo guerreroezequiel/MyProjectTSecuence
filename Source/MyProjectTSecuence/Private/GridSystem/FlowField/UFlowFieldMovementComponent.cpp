@@ -107,9 +107,9 @@ void UFlowFieldMovementComponent::ApplyFlowMovement(float DeltaTime)
     // Calcular desplazamiento
     const FVector MovementDelta = FlowDirection3D.GetSafeNormal() * MovementSpeed * DeltaTime;
     
-    // Aplicar movimiento
+    // Aplicar movimiento sin sweep: la evitación es lógica por flowfield
     const FVector NewLocation = CurrentLocation + MovementDelta;
-    GetOwner()->SetActorLocation(NewLocation);
+    GetOwner()->SetActorLocation(NewLocation, false);
 }
 
 void UFlowFieldMovementComponent::DrawDebugInfo() const

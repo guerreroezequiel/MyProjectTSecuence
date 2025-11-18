@@ -108,13 +108,47 @@ namespace Grid
 						if (d < bestDist) { bestDist = d; bestIdx = gi; }
 					}
 					WriteDist(c, bestDist);
-					// Dir: hacia la meta más cercana
+					// Dir: hacia la meta más cercana, evitando paso inmediato a vecinos bloqueados
 					FVector2D dir = FVector2D::ZeroVector;
-					if (bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
+					if (!Grid::IsBlocked(c) && bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
 					{
 						const FVector2D toGoal = (GoalCenters[bestIdx] - cCenter);
 						const float len = toGoal.Size();
-						dir = (len > KINDA_SMALL_NUMBER) ? (toGoal / len) : FVector2D::ZeroVector;
+						if (len > KINDA_SMALL_NUMBER)
+						{
+							const FVector2D desired = toGoal / len;
+							// Elegir el vecino de 8-direcciones más alineado con 'desired'
+							int bestK = 0; float bestDot = -1e9f;
+							for (int k = 0; k < 8; ++k)
+							{
+								const float dot = FVector2D::DotProduct(desired, Grid::Neigh8Dir[k]);
+								if (dot > bestDot)
+								{
+									bestDot = dot; bestK = k;
+								}
+							}
+							// Si el vecino directo está bloqueado, buscar alternativas alrededor
+							auto neighborOf = [&](int k)->FIntPoint { return FIntPoint(c.X + Grid::Neigh8[k].X, c.Y + Grid::Neigh8[k].Y); };
+							int chosenK = bestK;
+							if (Grid::IsBlocked(neighborOf(bestK)))
+							{
+								const int offsets[8] = {1,-1,2,-2,3,-3,4,-4};
+								bool found = false;
+								for (int i = 0; i < 8; ++i)
+								{
+									const int k2 = (bestK + offsets[i] + 8) % 8;
+									if (!Grid::IsBlocked(neighborOf(k2))) { chosenK = k2; found = true; break; }
+								}
+								if (!found)
+								{
+									chosenK = -1; // rodeado; dejar dir = (0,0)
+								}
+							}
+							if (chosenK >= 0)
+							{
+								dir = Grid::Neigh8Dir[chosenK];
+							}
+						}
 					}
 					WriteDir(c, dir);
 					Stats.VisitedCells++;
@@ -125,7 +159,6 @@ namespace Grid
 		}
 
 		// Dijkstra multi-fuente por tile con costos: moveCost + Alphaheat*heat + BetaCapacity*Pressure(placeholder)
-		// Limita la expansión a [MinCell..MaxCell]. Si no hay metas dentro del tile, opcionalmente cae al solver euclidiano.
 		FORCEINLINE FSolveStats SolveTileDijkstra(const FIntPoint& MinCell, const FIntPoint& MaxCell, const FGoalSet& Goals, const FSolverParams& Params)
 		{
 			FSolveStats Stats;
@@ -186,6 +219,18 @@ namespace Grid
 					const FIntPoint n(curr.C.X + Grid::Neigh8[k].X, curr.C.Y + Grid::Neigh8[k].Y);
 					if (!InBounds(n)) { continue; }
 					if (Grid::IsBlocked(n)) { continue; }
+
+					// Regla anti corner-cut: para diagonales, ambos ortogonales deben estar libres
+					const bool diag = (Grid::Neigh8[k].X != 0) && (Grid::Neigh8[k].Y != 0);
+					if (diag)
+					{
+						const FIntPoint ortho1(curr.C.X + Grid::Neigh8[k].X, curr.C.Y);
+						const FIntPoint ortho2(curr.C.X, curr.C.Y + Grid::Neigh8[k].Y);
+						if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+						{
+							continue;
+						}
+					}
 					const int32 ni = LocalIdx(n);
 					const float moveCost = GridMath::MoveCost8(k);
 					const float heat = Grid::Density::GetHeat(n);
@@ -218,6 +263,18 @@ namespace Grid
 					{
 						const FIntPoint n(c.X + Grid::Neigh8[k].X, c.Y + Grid::Neigh8[k].Y);
 						if (!InBounds(n)) { deltas[k] = 1e6f; continue; }
+						// Aplicar la misma regla anti corner-cut al estimar dirección
+						const bool diag = (Grid::Neigh8[k].X != 0) && (Grid::Neigh8[k].Y != 0);
+						if (diag)
+						{
+							const FIntPoint ortho1(c.X + Grid::Neigh8[k].X, c.Y);
+							const FIntPoint ortho2(c.X, c.Y + Grid::Neigh8[k].Y);
+							if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+							{
+								deltas[k] = 1e6f; // desalentar diagonal por corner-cut
+								continue;
+							}
+						}
 						const float nd = Dist[LocalIdx(n)];
 						deltas[k] = nd - dHere;
 					}

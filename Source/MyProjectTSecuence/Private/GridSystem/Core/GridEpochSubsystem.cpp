@@ -3,6 +3,7 @@
 #include "Containers/Ticker.h" // FTSTicker
 #include "GridSystem/Core/GridConfig.h"
 #include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/Density/DensityHeatGrid.h"
 
 #include "HAL/IConsoleManager.h"
 
@@ -36,55 +37,74 @@ void UGridEpochSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
-	LastTimeSeconds = 0.0;
-	LastEpochIndex = 0u;
+    LastTimeSeconds = 0.0;
+    LastEpochIndex = 0u;
 
-	// Registrar ticker en el core ticker (thread-safe). Tick cada frame, nosotros gateamos por epoch.
-	FTickerDelegate TickDelegate = FTickerDelegate::CreateUObject(this, &UGridEpochSubsystem::TickInternal);
-	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(TickDelegate);
+    // Asegurar estado limpio por sesión de mundo/PIE: limpiar metas, storage y colas sucias
+    Goals.GoalCells.Empty();
+    Grid::Flow::ClearAll();
+    Grid::Flow::GDirtyTiles.Reset();
+    {
+        FIntPoint Tmp; while (Grid::Flow::GDirtyQueue.Dequeue(Tmp)) {}
+    }
+
+    // Registrar ticker en el core ticker (thread-safe). Tick cada frame, nosotros gateamos por epoch.
+    FTickerDelegate TickDelegate = FTickerDelegate::CreateUObject(this, &UGridEpochSubsystem::TickInternal);
+    TickerHandle = FTSTicker::GetCoreTicker().AddTicker(TickDelegate);
 }
 
 void UGridEpochSubsystem::Deinitialize()
 {
-	if (TickerHandle.IsValid())
-	{
-		FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
-		TickerHandle.Reset();
-	}
+    if (TickerHandle.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
+        TickerHandle.Reset();
+    }
 
-	Super::Deinitialize();
+    // Limpieza final para evitar persistencias entre mundos/PIE
+    Goals.GoalCells.Empty();
+    Grid::Flow::ClearAll();
+    Grid::Flow::GDirtyTiles.Reset();
+    {
+        FIntPoint Tmp; while (Grid::Flow::GDirtyQueue.Dequeue(Tmp)) {}
+    }
+
+    Super::Deinitialize();
 }
 
 bool UGridEpochSubsystem::TickInternal(float DeltaSeconds)
 {
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return true; // Seguir intentando en siguientes frames
-	}
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return true; // Seguir intentando en siguientes frames
+    }
 
-	const double CurrTimeSeconds = World->GetTimeSeconds();
+    const double CurrTimeSeconds = World->GetTimeSeconds();
 
-	// Primera pasada: inicializar índices
-	if (LastTimeSeconds <= 0.0)
-	{
-		LastTimeSeconds = CurrTimeSeconds;
-		LastEpochIndex = GridEpoch::EpochIndexFromTimeSeconds(CurrTimeSeconds);
-		return true;
-	}
+    // Primera pasada: inicializar índices
+    if (LastTimeSeconds <= 0.0)
+    {
+        LastTimeSeconds = CurrTimeSeconds;
+        LastEpochIndex = GridEpoch::EpochIndexFromTimeSeconds(CurrTimeSeconds);
+        return true;
+    }
 
-	// Gate por epoch: solo ejecutar si avanzó
-	if (GridEpoch::HasEpochAdvanced(LastTimeSeconds, CurrTimeSeconds))
-	{
-		// Ejecutar trabajo de rebuild con presupuesto actual
-		Grid::Flow::RebuildStep(Budget, Goals, SolverParams);
+    // Gate por epoch: solo ejecutar si avanzó
+    if (GridEpoch::HasEpochAdvanced(LastTimeSeconds, CurrTimeSeconds))
+    {
+        // Decaimiento de Heat/Density por epoch
+        Grid::Density::Decay(static_cast<float>(CurrTimeSeconds - LastTimeSeconds));
 
-		// Actualizar estado
-		LastTimeSeconds = CurrTimeSeconds;
-		LastEpochIndex = GridEpoch::EpochIndexFromTimeSeconds(CurrTimeSeconds);
-	}
+        // Ejecutar trabajo de rebuild con presupuesto actual
+        Grid::Flow::RebuildStep(Budget, Goals, SolverParams);
 
-	return true; // Mantener el ticker activo
+        // Actualizar estado
+        LastTimeSeconds = CurrTimeSeconds;
+        LastEpochIndex = GridEpoch::EpochIndexFromTimeSeconds(CurrTimeSeconds);
+    }
+
+    return true; // Mantener el ticker activo
 }
 
 void UGridEpochSubsystem::Tick(float DeltaSeconds)

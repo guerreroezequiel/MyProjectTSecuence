@@ -2,10 +2,12 @@
 #include "GridSystem/FlowField/FlowFieldRebuilder.h" // MarkTileDirty
 #include "GridSystem/Core/GridEpochSubsystem.h"
 #include "GridSystem/FlowField/AFlowFieldDebugActor.h"
+#include "GridSystem/FlowField/GridFlowArrowActor.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
 #include "GridSystem/Occupancy/CapacityGrid.h"
+#include "GridSystem/Occupancy/GridObstaclePlate.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
 
@@ -33,6 +35,55 @@ static FAutoConsoleCommand GCmdGridCapSetBase(
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
         Grid::Flow::MarkTileDirty(TileXY);
         UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
+    })
+);
+
+// grid.flow.arrow.spawn x y
+static FAutoConsoleCommand GCmdGridFlowArrowSpawn(
+    TEXT("grid.flow.arrow.spawn"),
+    TEXT("Spawn a flow arrow actor at cell center to visualize real-time direction: grid.flow.arrow.spawn <x> <y>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.flow.arrow.spawn <x> <y>"));
+            return;
+        }
+
+        int32 X = 0, Y = 0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+
+        if (GWorld)
+        {
+            const FIntPoint Cell(X, Y);
+            const FVector2D WorldPos2D = GridWorld::CellToWorldCenterXY(Cell);
+            const FVector WorldPosition(WorldPos2D.X, WorldPos2D.Y, 20.0f);
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+            AGridFlowArrowActor* Arrow = GWorld->SpawnActor<AGridFlowArrowActor>(
+                AGridFlowArrowActor::StaticClass(),
+                WorldPosition,
+                FRotator::ZeroRotator,
+                SpawnParams
+            );
+
+            if (Arrow)
+            {
+                Arrow->SetCell(Cell);
+                UE_LOG(LogTemp, Log, TEXT("Flow arrow spawned at cell (%d,%d)"), X, Y);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to spawn GridFlowArrowActor"));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
     })
 );
 
@@ -95,6 +146,70 @@ static FAutoConsoleCommand GCmdGridOccClear(
     {
         Grid::ClearAll();
         UE_LOG(LogTemp, Log, TEXT("Occupancy cleared"));
+    })
+);
+
+// grid.occ.spawn x y state
+static FAutoConsoleCommand GCmdGridOccSpawn(
+    TEXT("grid.occ.spawn"),
+    TEXT("Spawn obstacle plate and set occupancy: grid.occ.spawn <x> <y> <state:0|1|2> (0=Empty,1=Obstacle,2=Portal)"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 3)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.occ.spawn <x> <y> <state:0|1|2>"));
+            return;
+        }
+
+        int32 X=0, Y=0, S=0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        LexFromString(S, *Args[2]);
+        S = FMath::Clamp(S, 0, 2);
+        Grid::ECellState State = static_cast<Grid::ECellState>(S);
+
+        const FIntPoint Cell(X, Y);
+        Grid::SetCellState(Cell, State);
+        const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
+        Grid::Flow::MarkTileDirty(TileXY);
+
+        if (GWorld)
+        {
+            const FVector2D WorldPos2D = GridWorld::CellToWorldCenterXY(Cell);
+            const FVector WorldPosition(WorldPos2D.X, WorldPos2D.Y, 5.0f);
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+            if (State == Grid::ECellState::Obstacle)
+            {
+                AGridObstaclePlate* Plate = GWorld->SpawnActor<AGridObstaclePlate>(
+                    AGridObstaclePlate::StaticClass(),
+                    WorldPosition,
+                    FRotator::ZeroRotator,
+                    SpawnParams
+                );
+
+                if (Plate)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; spawned plate at (%.1f, %.1f, %.1f); marked tile (%d,%d) dirty"),
+                        X, Y, S, WorldPosition.X, WorldPosition.Y, WorldPosition.Z, TileXY.X, TileXY.Y);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("Failed to spawn GridObstaclePlate"));
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; no plate spawned; marked tile (%d,%d) dirty"),
+                    X, Y, S, TileXY.X, TileXY.Y);
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
     })
 );
 
@@ -209,8 +324,16 @@ static FAutoConsoleCommand GCmdGridFlowReset(
             {
                 // Limpiar metas
                 Subsystem->Goals.GoalCells.Empty();
-                
-                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared goals"));
+
+                // Limpiar almacenamiento del flow (dist/dir)
+                Grid::Flow::ClearAll();
+
+                // Limpiar colas/conjuntos de tiles sucios
+                Grid::Flow::GDirtyTiles.Reset();
+                FIntPoint Tmp;
+                while (Grid::Flow::GDirtyQueue.Dequeue(Tmp)) {}
+
+                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared goals, storage and dirty queues"));
             }
             else
             {
