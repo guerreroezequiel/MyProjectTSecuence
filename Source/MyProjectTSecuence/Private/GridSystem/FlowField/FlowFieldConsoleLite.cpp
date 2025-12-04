@@ -10,6 +10,7 @@
 #include "GridSystem/Occupancy/GridObstaclePlate.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
+#include "GridSystem/Core/GridWorld.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -84,6 +85,54 @@ static FAutoConsoleCommand GCmdGridFlowArrowSpawn(
         {
             UE_LOG(LogTemp, Error, TEXT("No valid world context"));
         }
+    })
+);
+
+// grid.flow.arrows.show
+static FAutoConsoleCommand GCmdGridFlowShowArrows(
+    TEXT("grid.flow.arrows.show"),
+    TEXT("Show flow arrows for one tile (16x16 cells) starting from (0,0)"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (!GWorld)
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+            return;
+        }
+
+        const FIntPoint MinCell(0, 0);
+        const FIntPoint MaxCell(GridConfig::TileDim - 1, GridConfig::TileDim - 1);
+        
+        int32 ArrowCount = 0;
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+        // Iterate through all cells in the grid
+        for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+        {
+            for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+            {
+                const FIntPoint Cell(X, Y);
+                const FVector2D WorldPos2D = GridWorld::CellToWorldCenterXY(Cell);
+                const FVector WorldPosition(WorldPos2D.X, WorldPos2D.Y, 20.0f);
+
+                AGridFlowArrowActor* Arrow = GWorld->SpawnActor<AGridFlowArrowActor>(
+                    AGridFlowArrowActor::StaticClass(),
+                    WorldPosition,
+                    FRotator::ZeroRotator,
+                    SpawnParams
+                );
+
+                if (Arrow)
+                {
+                    Arrow->SetCell(Cell);
+                    ArrowCount++;
+                }
+            }
+        }
+
+        UE_LOG(LogTemp, Log, TEXT("Spawned %d flow arrows in a %dx%d grid starting from (0,0)"), 
+            ArrowCount, GridConfig::TileDim, GridConfig::TileDim);
     })
 );
 
