@@ -9,7 +9,7 @@
 UFlowFieldMovementComponent::UFlowFieldMovementComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    MovementSpeed = 25.0f;
+    MovementSpeed = 10.0f;
     GoalThreshold = 50.0f;
     bStopAtGoal = true;
     bShowDebugDirection = false;
