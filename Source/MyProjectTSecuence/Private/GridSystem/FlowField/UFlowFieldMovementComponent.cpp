@@ -29,7 +29,7 @@ void UFlowFieldMovementComponent::TickComponent(float DeltaTime, ELevelTick Tick
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if (!GetOwner() || !GetWorld())
+    if (!GetOwner() || !GetWorld() || !bIsMovementEnabled)
     {
         return;
     }
@@ -195,4 +195,21 @@ bool UFlowFieldMovementComponent::HasReachedGoal() const
     }
 
     return false;
+}
+
+void UFlowFieldMovementComponent::SetMovementEnabled(bool bEnabled)
+{
+    bIsMovementEnabled = bEnabled;
+    
+    if (bEnabled)
+    {
+        // Reset the last position to force a direction update when movement is re-enabled
+        LastWorldPosition = FVector(FLT_MAX, FLT_MAX, FLT_MAX);
+        LastDirectionCheckTime = 0.0;
+        UE_LOG(LogTemp, Log, TEXT("Movement enabled for %s"), *GetOwner()->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("Movement disabled for %s"), *GetOwner()->GetName());
+    }
 }

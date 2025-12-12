@@ -26,6 +26,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
     bool bStopAtGoal = true;
 
+    // Si el movimiento está habilitado
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+    bool bIsMovementEnabled = false;
+
     // Si debe mostrar debug de dirección
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebugDirection = false;
@@ -33,6 +37,14 @@ public:
     // Color de línea de debug
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     FLinearColor DebugLineColor = FLinearColor::Red;
+
+    // Habilitar/deshabilitar movimiento
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void SetMovementEnabled(bool bEnabled);
+
+    // Verificar si el movimiento está habilitado
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    bool IsMovementEnabled() const { return bIsMovementEnabled; }
 
 protected:
     virtual void BeginPlay() override;

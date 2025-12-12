@@ -3,6 +3,7 @@
 #include "GridSystem/Core/GridEpochSubsystem.h"
 #include "GridSystem/FlowField/AFlowFieldDebugActor.h"
 #include "GridSystem/FlowField/GridFlowArrowActor.h"
+#include "GridSystem/FlowField/UFlowFieldMovementComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
@@ -309,10 +310,13 @@ static FAutoConsoleCommand GCmdGridFlowSetGoal(
     })
 );
 
+// Array para mantener un seguimiento de los actores de depuración generados
+TArray<TWeakObjectPtr<AFlowFieldDebugActor>> GDebugActors;
+
 // grid.flow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowSpawn(
     TEXT("grid.flow.spawn"),
-    TEXT("Spawn FlowField debug actor: grid.flow.spawn <x> <y>"),
+    TEXT("Spawn FlowField debug actor (without auto-movement): grid.flow.spawn <x> <y>"),
     FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
     {
         if (Args.Num() < 2) 
@@ -345,8 +349,19 @@ static FAutoConsoleCommand GCmdGridFlowSpawn(
             
             if (DebugActor)
             {
-                UE_LOG(LogTemp, Log, TEXT("FlowField debug actor spawned at cell (%d,%d) -> world (%.1f, %.1f, %.1f)"), 
+                // Deshabilitar el movimiento por defecto
+                UFlowFieldMovementComponent* MovementComp = DebugActor->FindComponentByClass<UFlowFieldMovementComponent>();
+                if (MovementComp)
+                {
+                    MovementComp->SetMovementEnabled(false);
+                }
+                
+                // Agregar a la lista de actores
+                GDebugActors.Add(DebugActor);
+                
+                UE_LOG(LogTemp, Log, TEXT("FlowField debug actor spawned at cell (%d,%d) -> world (%.1f, %.1f, %.1f). Movement is disabled by default."), 
                     X, Y, WorldPosition.X, WorldPosition.Y, WorldPosition.Z);
+                UE_LOG(LogTemp, Log, TEXT("Use 'grid.flow.start' to start movement and 'grid.flow.stop' to stop it."));
             }
             else
             {
@@ -357,6 +372,68 @@ static FAutoConsoleCommand GCmdGridFlowSpawn(
         {
             UE_LOG(LogTemp, Error, TEXT("No valid world context"));
         }
+    })
+);
+
+// grid.flow.start
+static FAutoConsoleCommand GCmdGridFlowStartMovement(
+    TEXT("grid.flow.start"),
+    TEXT("Start movement for all spawned FlowField debug actors: grid.flow.start"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        int32 EnabledCount = 0;
+        
+        // Eliminar actores nulos
+        GDebugActors.RemoveAll([](const TWeakObjectPtr<AFlowFieldDebugActor>& Actor) {
+            return !Actor.IsValid();
+        });
+        
+        // Habilitar movimiento para todos los actores
+        for (const auto& ActorPtr : GDebugActors)
+        {
+            if (ActorPtr.IsValid())
+            {
+                UFlowFieldMovementComponent* MovementComp = ActorPtr->FindComponentByClass<UFlowFieldMovementComponent>();
+                if (MovementComp)
+                {
+                    MovementComp->SetMovementEnabled(true);
+                    EnabledCount++;
+                }
+            }
+        }
+        
+        UE_LOG(LogTemp, Log, TEXT("Enabled movement for %d FlowField debug actors"), EnabledCount);
+    })
+);
+
+// grid.flow.stop
+static FAutoConsoleCommand GCmdGridFlowStopMovement(
+    TEXT("grid.flow.stop"),
+    TEXT("Stop movement for all spawned FlowField debug actors: grid.flow.stop"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        int32 DisabledCount = 0;
+        
+        // Eliminar actores nulos
+        GDebugActors.RemoveAll([](const TWeakObjectPtr<AFlowFieldDebugActor>& Actor) {
+            return !Actor.IsValid();
+        });
+        
+        // Deshabilitar movimiento para todos los actores
+        for (const auto& ActorPtr : GDebugActors)
+        {
+            if (ActorPtr.IsValid())
+            {
+                UFlowFieldMovementComponent* MovementComp = ActorPtr->FindComponentByClass<UFlowFieldMovementComponent>();
+                if (MovementComp)
+                {
+                    MovementComp->SetMovementEnabled(false);
+                    DisabledCount++;
+                }
+            }
+        }
+        
+        UE_LOG(LogTemp, Log, TEXT("Disabled movement for %d FlowField debug actors"), DisabledCount);
     })
 );
 
