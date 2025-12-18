@@ -313,6 +313,34 @@ static FAutoConsoleCommand GCmdGridFlowSetGoal(
 // Array para mantener un seguimiento de los actores de depuración generados
 TArray<TWeakObjectPtr<AFlowFieldDebugActor>> GDebugActors;
 
+// Función para obtener todos los actores en una celda específica
+TArray<AFlowFieldDebugActor*> GetActorsInCell(const FIntPoint& CellCoord)
+{
+    TArray<AFlowFieldDebugActor*> ActorsInCell;
+    
+    // Eliminar actores nulos primero
+    GDebugActors.RemoveAll([](const TWeakObjectPtr<AFlowFieldDebugActor>& Actor) {
+        return !Actor.IsValid();
+    });
+    
+    // Encontrar actores en la celda especificada
+    for (const auto& ActorPtr : GDebugActors)
+    {
+        if (ActorPtr.IsValid())
+        {
+            const FVector ActorLocation = ActorPtr->GetActorLocation();
+            const FIntPoint ActorCell = GridWorld::WorldToCellXY(ActorLocation);
+            
+            if (ActorCell == CellCoord)
+            {
+                ActorsInCell.Add(ActorPtr.Get());
+            }
+        }
+    }
+    
+    return ActorsInCell;
+}
+
 // grid.flow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowSpawn(
     TEXT("grid.flow.spawn"),
@@ -434,6 +462,140 @@ static FAutoConsoleCommand GCmdGridFlowStopMovement(
         }
         
         UE_LOG(LogTemp, Log, TEXT("Disabled movement for %d FlowField debug actors"), DisabledCount);
+    })
+);
+
+// grid.flow.spawn.multiple x y count
+static FAutoConsoleCommand GCmdGridFlowSpawnMultiple(
+    TEXT("grid.flow.spawn.multiple"),
+    TEXT("Spawn multiple FlowField debug actors in a cell: grid.flow.spawn.multiple <x> <y> <count> [spacing=50.0]"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 3) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.flow.spawn.multiple <x> <y> <count> [spacing=50.0]")); 
+            return; 
+        }
+        
+        int32 X = 0, Y = 0, Count = 1;
+        float Spacing = 50.0f;
+        
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        LexFromString(Count, *Args[2]);
+        
+        if (Args.Num() > 3)
+        {
+            LexFromString(Spacing, *Args[3]);
+        }
+        
+        // Limitar el número máximo de actores a generar
+        Count = FMath::Clamp(Count, 1, 100);
+        
+        // Obtener el mundo actual
+        if (GWorld)
+        {
+            // Convertir coordenadas de celda a mundo
+            const FVector2D CenterWorldPos2D = GridWorld::CellToWorldCenterXY(FIntPoint(X, Y));
+            const FVector CenterWorldPosition = FVector(CenterWorldPos2D.X, CenterWorldPos2D.Y, 0.0f);
+            
+            // Calcular el desplazamiento total basado en el conteo y el espaciado
+            const int32 GridSize = FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Count)));
+            const float StartOffset = -((GridSize - 1) * Spacing) / 2.0f;
+            
+            int32 SpawnedCount = 0;
+            
+            // Generar actores en un patrón de cuadrícula
+            for (int32 i = 0; i < GridSize && SpawnedCount < Count; i++)
+            {
+                for (int32 j = 0; j < GridSize && SpawnedCount < Count; j++, SpawnedCount++)
+                {
+                    // Calcular posición relativa
+                    const float OffsetX = StartOffset + (i * Spacing);
+                    const float OffsetY = StartOffset + (j * Spacing);
+                    
+                    const FVector SpawnPosition = CenterWorldPosition + FVector(OffsetX, OffsetY, 0.0f);
+                    
+                    // Spawnear el debug actor
+                    FActorSpawnParameters SpawnParams;
+                    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+                    
+                    AFlowFieldDebugActor* DebugActor = GWorld->SpawnActor<AFlowFieldDebugActor>(
+                        AFlowFieldDebugActor::StaticClass(), 
+                        SpawnPosition, 
+                        FRotator::ZeroRotator, 
+                        SpawnParams
+                    );
+                    
+                    if (DebugActor)
+                    {
+                        // Deshabilitar el movimiento por defecto
+                        UFlowFieldMovementComponent* MovementComp = DebugActor->FindComponentByClass<UFlowFieldMovementComponent>();
+                        if (MovementComp)
+                        {
+                            MovementComp->SetMovementEnabled(false);
+                        }
+                        
+                        // Agregar a la lista de actores
+                        GDebugActors.Add(DebugActor);
+                    }
+                }
+            }
+            
+            UE_LOG(LogTemp, Log, TEXT("Spawned %d FlowField debug actors in cell (%d,%d) with %.1f spacing"), 
+                SpawnedCount, X, Y, Spacing);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
+    })
+);
+
+// grid.flow.clear.cell x y
+static FAutoConsoleCommand GCmdGridFlowClearCell(
+    TEXT("grid.flow.clear.cell"),
+    TEXT("Remove all FlowField debug actors from a cell: grid.flow.clear.cell <x> <y>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.flow.clear.cell <x> <y>")); 
+            return; 
+        }
+        
+        int32 X = 0, Y = 0;
+        LexFromString(X, *Args[0]);
+        LexFromString(Y, *Args[1]);
+        
+        const FIntPoint TargetCell(X, Y);
+        
+        // Obtener el mundo actual
+        if (GWorld)
+        {
+            // Obtener actores en la celda
+            TArray<AFlowFieldDebugActor*> ActorsToRemove = GetActorsInCell(TargetCell);
+            
+            // Eliminar actores
+            for (AFlowFieldDebugActor* Actor : ActorsToRemove)
+            {
+                if (Actor)
+                {
+                    // Eliminar de la lista global
+                    GDebugActors.Remove(Actor);
+                    
+                    // Destruir el actor
+                    Actor->Destroy();
+                }
+            }
+            
+            UE_LOG(LogTemp, Log, TEXT("Removed %d FlowField debug actors from cell (%d,%d)"), 
+                ActorsToRemove.Num(), X, Y);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("No valid world context"));
+        }
     })
 );
 
