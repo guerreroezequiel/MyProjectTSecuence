@@ -9,11 +9,11 @@
 UFlowFieldMovementComponent::UFlowFieldMovementComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    MovementSpeed = 10.0f;
-    GoalThreshold = 50.0f;
-    bStopAtGoal = true;
-    bShowDebugDirection = false;
-    DebugLineColor = FLinearColor::Red;
+    
+    // Inicialización de propiedades que no están en UPROPERTY
+    LastWorldPosition = FVector::ZeroVector;
+    CachedFlowDirection = FVector2D::ZeroVector;
+    LastDirectionCheckTime = 0.0;
 }
 
 void UFlowFieldMovementComponent::BeginPlay()
