@@ -7,7 +7,6 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
-#include "GridSystem/Occupancy/CapacityGrid.h"
 #include "GridSystem/Occupancy/GridObstaclePlate.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
@@ -33,10 +32,10 @@ static FAutoConsoleCommand GCmdGridCapSetBase(
         LexFromString(Y, *Args[1]);
         LexFromString(V, *Args[2]);
         const FIntPoint Cell(X,Y);
-        Grid::Capacity::SetBaseCapacity(Cell, V);
-        const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        Grid::Flow::MarkTileDirty(TileXY);
-        UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
+        const int32 baseCap = Grid::GetBaseCapacity(Cell);
+        const int32 currCnt = Grid::GetCurrentCount(Cell);
+        Grid::Flow::MarkTileDirty(GridWorld::CellToTileXY(Cell));
+        UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, GridWorld::CellToTileXY(Cell).X, GridWorld::CellToTileXY(Cell).Y);
     })
 );
 
@@ -149,7 +148,7 @@ static FAutoConsoleCommand GCmdGridCapSetCount(
         LexFromString(Y, *Args[1]);
         LexFromString(V, *Args[2]);
         const FIntPoint Cell(X,Y);
-        Grid::Capacity::SetCurrentCount(Cell, V);
+        Grid::SetCurrentCount(Cell, V);
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
         Grid::Flow::MarkTileDirty(TileXY);
         UE_LOG(LogTemp, Log, TEXT("Capacity count set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
@@ -162,7 +161,7 @@ static FAutoConsoleCommand GCmdGridCapClear(
     TEXT("Clear entire capacity grid"),
     FConsoleCommandDelegate::CreateStatic([]()
     {
-        Grid::Capacity::ClearAll();
+        Grid::ClearAll();
         UE_LOG(LogTemp, Log, TEXT("Capacity cleared"));
     })
 );
