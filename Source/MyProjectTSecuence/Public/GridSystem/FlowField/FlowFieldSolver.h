@@ -5,6 +5,7 @@
 #include "GridSystem/Core/GridTypes.h"
 #include "GridSystem/Core/GridMath.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
+#include "GridSystem/Occupancy/CapacityGrid.h"
 #include "GridSystem/Density/DensityHeatGrid.h"
 #include "GridSystem/Core/GridWorld.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
@@ -233,8 +234,8 @@ namespace Grid
 					const int32 ni = LocalIdx(n);
 					const float moveCost = GridMath::MoveCost8(k);
 					const float heat = Grid::Density::GetHeat(n);
-					const int32 baseCap = Grid::GetBaseCapacity(n);
-					const int32 currCnt = Grid::GetCurrentCount(n);
+					const int32 baseCap = Grid::Capacity::GetBaseCapacity(n);
+					const int32 currCnt = Grid::Capacity::GetCurrentCount(n);
 					const float capInfl = Grid::Capacity::CostInflationFactor(currCnt, baseCap);
 					const float stepCost = moveCost + Params.AlphaHeat * heat + Params.BetaCapacity * (capInfl - 1.0f);
 					const float newCost = bestD + stepCost;

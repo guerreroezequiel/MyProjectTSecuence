@@ -16,7 +16,7 @@ public:
 
     // Velocidad de movimiento en unidades/segundo
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float MovementSpeed = 30.0f;
+    float MovementSpeed = 200.0f;
 
     // Distancia mínima a la meta para considerar llegada
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
