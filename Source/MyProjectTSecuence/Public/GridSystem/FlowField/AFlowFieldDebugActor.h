@@ -36,7 +36,7 @@ public:
 
     // Velocidad de movimiento configurable
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlowField")
-    float MovementSpeed = 200.0f;
+    float MovementSpeed = 30.0f;
 
     // Color para debug visual
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlowField")
