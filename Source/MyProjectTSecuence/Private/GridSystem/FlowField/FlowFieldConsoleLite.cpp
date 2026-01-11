@@ -16,6 +16,7 @@
 #include "GridSystem/Systems/FlowFieldSystem/FlowFieldSystem.h"
 #include "GridSystem/TileContext/TileContext.h"
 #include "GridSystem/FlowField/FlowField.h"
+#include "GridSystem/FlowField/FlowFieldRegistry.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -174,21 +175,44 @@ static FAutoConsoleCommand GCmdGridCapClear(
 // grid.occ.set x y state
 static FAutoConsoleCommand GCmdGridOccSet(
     TEXT("grid.occ.set"),
-    TEXT("Set occupancy state: grid.occ.set <x> <y> <state:0|1|2> (0=Empty,1=Obstacle,2=Portal)"),
+    TEXT("Set occupancy state: grid.occ.set <x> <y> <state:0|1|2> OR grid.occ.set <tileX> <tileY> <cellX> <cellY> <state>"),
     FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
     {
-        if (Args.Num() < 3) { UE_LOG(LogTemp, Warning, TEXT("Usage: grid.occ.set <x> <y> <state:0|1|2>")); return; }
-        int32 X=0, Y=0, S=0;
-        LexFromString(X, *Args[0]);
-        LexFromString(Y, *Args[1]);
-        LexFromString(S, *Args[2]);
+        if (Args.Num() != 3 && Args.Num() != 5) { UE_LOG(LogTemp, Warning, TEXT("Usage: grid.occ.set <x> <y> <state> OR grid.occ.set <tileX> <tileY> <cellX> <cellY> <state>")); return; }
+
+        int32 S = 0;
+        int32 X = 0, Y = 0;
+        if (Args.Num() == 3)
+        {
+            LexFromString(X, *Args[0]);
+            LexFromString(Y, *Args[1]);
+            LexFromString(S, *Args[2]);
+        }
+        else
+        {
+            int32 TX=0, TY=0, CX=0, CY=0;
+            LexFromString(TX, *Args[0]);
+            LexFromString(TY, *Args[1]);
+            LexFromString(CX, *Args[2]);
+            LexFromString(CY, *Args[3]);
+            LexFromString(S,  *Args[4]);
+            CX = FMath::Clamp(CX, 0, GridConfig::TileDim - 1);
+            CY = FMath::Clamp(CY, 0, GridConfig::TileDim - 1);
+            X = TX * GridConfig::TileDim + CX;
+            Y = TY * GridConfig::TileDim + CY;
+        }
+
         S = FMath::Clamp(S, 0, 2);
         Grid::ECellState State = static_cast<Grid::ECellState>(S);
         const FIntPoint Cell(X,Y);
         Grid::SetCellState(Cell, State);
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        Grid::Flow::MarkTileDirty(TileXY);
-        UE_LOG(LogTemp, Log, TEXT("Occupancy set cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, S, TileXY.X, TileXY.Y);
+        // Marca explícita para el nuevo pipeline
+        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::EnsureTileContext(TileXY); Ctx.IsValid())
+        {
+            Ctx->MarkStaticCostDirty();
+        }
+        UE_LOG(LogTemp, Log, TEXT("Occupancy set cell (%d,%d) = %d; tile (%d,%d) flagged StaticCostDirty"), X, Y, S, TileXY.X, TileXY.Y);
     })
 );
 
@@ -206,26 +230,42 @@ static FAutoConsoleCommand GCmdGridOccClear(
 // grid.occ.spawn x y state
 static FAutoConsoleCommand GCmdGridOccSpawn(
     TEXT("grid.occ.spawn"),
-    TEXT("Spawn obstacle plate and set occupancy: grid.occ.spawn <x> <y> <state:0|1|2> (0=Empty,1=Obstacle,2=Portal)"),
+    TEXT("Spawn obstacle plate and set occupancy: grid.occ.spawn <x> <y> <state> OR grid.occ.spawn <tileX> <tileY> <cellX> <cellY> <state>"),
     FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
     {
-        if (Args.Num() < 3)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Usage: grid.occ.spawn <x> <y> <state:0|1|2>"));
-            return;
-        }
+        if (Args.Num() != 3 && Args.Num() != 5) { UE_LOG(LogTemp, Warning, TEXT("Usage: grid.occ.spawn <x> <y> <state> OR grid.occ.spawn <tileX> <tileY> <cellX> <cellY> <state>")); return; }
 
-        int32 X=0, Y=0, S=0;
-        LexFromString(X, *Args[0]);
-        LexFromString(Y, *Args[1]);
-        LexFromString(S, *Args[2]);
+        int32 S=0; int32 X=0, Y=0;
+        if (Args.Num() == 3)
+        {
+            LexFromString(X, *Args[0]);
+            LexFromString(Y, *Args[1]);
+            LexFromString(S, *Args[2]);
+        }
+        else
+        {
+            int32 TX=0, TY=0, CX=0, CY=0;
+            LexFromString(TX, *Args[0]);
+            LexFromString(TY, *Args[1]);
+            LexFromString(CX, *Args[2]);
+            LexFromString(CY, *Args[3]);
+            LexFromString(S,  *Args[4]);
+            CX = FMath::Clamp(CX, 0, GridConfig::TileDim - 1);
+            CY = FMath::Clamp(CY, 0, GridConfig::TileDim - 1);
+            X = TX * GridConfig::TileDim + CX;
+            Y = TY * GridConfig::TileDim + CY;
+        }
         S = FMath::Clamp(S, 0, 2);
         Grid::ECellState State = static_cast<Grid::ECellState>(S);
 
         const FIntPoint Cell(X, Y);
         Grid::SetCellState(Cell, State);
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        Grid::Flow::MarkTileDirty(TileXY);
+        // Marca explícita para el nuevo pipeline
+        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::EnsureTileContext(TileXY); Ctx.IsValid())
+        {
+            Ctx->MarkStaticCostDirty();
+        }
 
         if (GWorld)
         {
@@ -246,7 +286,7 @@ static FAutoConsoleCommand GCmdGridOccSpawn(
 
                 if (Plate)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; spawned plate at (%.1f, %.1f, %.1f); marked tile (%d,%d) dirty"),
+                    UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; spawned plate at (%.1f, %.1f, %.1f); tile (%d,%d) flagged StaticCostDirty"),
                         X, Y, S, WorldPosition.X, WorldPosition.Y, WorldPosition.Z, TileXY.X, TileXY.Y);
                 }
                 else
@@ -256,7 +296,7 @@ static FAutoConsoleCommand GCmdGridOccSpawn(
             }
             else
             {
-                UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; no plate spawned; marked tile (%d,%d) dirty"),
+                UE_LOG(LogTemp, Log, TEXT("OccSpawn: cell (%d,%d) state=%d; no plate spawned; tile (%d,%d) flagged StaticCostDirty"),
                     X, Y, S, TileXY.X, TileXY.Y);
             }
         }
@@ -387,9 +427,9 @@ static FAutoConsoleCommand GCmdTileInfo(
         int32 GoalsEpoch = TileContext->GetGoalsEpoch(CurrentIntent);
         int32 FlowEpoch = TileContext->GetFlowEpoch(CurrentIntent);
         
-        // Check dirty flags
+        // Check dirty flags (respetando el pipeline: usamos IsDirty del TileContext)
         bool bIsDirty = TileContext->IsDirty();
-        bool bStaticCostDirty = TileContext->GetStaticCostEpoch() < 0; // Assuming -1 means dirty
+        bool bStaticCostDirty = bIsDirty; // en MVP, dirty proviene de StaticCost
         
         // Log the information
         UE_LOG(LogTemp, Display, TEXT("=== Tile Info (%d,%d) ==="), TX, TY);
@@ -442,10 +482,7 @@ static FAutoConsoleCommand GCmdFFValid(
         
         // Log the result
         UE_LOG(LogTemp, Display, TEXT("=== FlowField Validity (%d,%d) ==="), TX, TY);
-        UE_LOG(LogTemp, Display, TEXT("Intent: %s"), 
-            CurrentIntent == EFlowIntent::Players ? TEXT("Players") : 
-            CurrentIntent == EFlowIntent::Enemies ? TEXT("Enemies") : 
-            TEXT("Unknown"));
+        UE_LOG(LogTemp, Display, TEXT("Intent: Players"));
         UE_LOG(LogTemp, Display, TEXT("Is Valid: %s"), bIsValid ? TEXT("YES") : TEXT("NO"));
         
         // Get epochs for more context
@@ -456,7 +493,7 @@ static FAutoConsoleCommand GCmdFFValid(
         UE_LOG(LogTemp, Display, TEXT("Current Epochs - StaticCost: %d, Goals: %d, Flow: %d"), 
             StaticCostEpoch, GoalsEpoch, FlowEpoch);
         
-        UE_LOG(LogTemp, Display, "================================");
+        UE_LOG(LogTemp, Display, TEXT("================================"));
     })
 );
 

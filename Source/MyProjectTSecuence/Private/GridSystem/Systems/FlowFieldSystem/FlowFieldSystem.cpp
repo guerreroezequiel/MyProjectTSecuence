@@ -3,6 +3,12 @@
 #include "GridSystem/Systems/FlowFieldSystem/FlowFieldSystem.h"
 #include "GridSystem/TileContext/TileContext.h"
 #include "GridSystem/FlowField/FlowField.h"
+#include "GridSystem/FlowField/StaticCostBaker.h"
+#include "GridSystem/Core/TileRegistry.h"
+#include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/Core/GridConfig.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 
 UFlowFieldSystem::UFlowFieldSystem()
 {
@@ -14,8 +20,8 @@ void UFlowFieldSystem::BeginPlay()
 {
     Super::BeginPlay();
     
-    // Inicialización básica
-    // TODO: Inicializar la grilla de tiles y flowfields
+    // Inicialización de la grilla de tiles
+    InitializeWorldTiles();
 }
 
 void UFlowFieldSystem::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -24,28 +30,35 @@ void UFlowFieldSystem::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 
     if (bAutoUpdate)
     {
-        // Actualizar todos los tiles
-        for (auto& Tile : Tiles)
+        // Actualizar HOT/WARM a partir de la posición del jugador y derivar ActiveTiles
+        UpdateHotWarmFromPlayer();
+
+        // Actualizar solo tiles activos (HOT ∪ WARM)
+        for (const FIntPoint& TileXY : ActiveTiles)
         {
+            TSharedPtr<FTileContext> Tile = Grid::Tiles::GetTileContext(TileXY);
+            if (!Tile.IsValid()) { continue; }
+            // Pipeline: UpdateEpochs -> (si cambió StaticCostEpoch) Bake -> luego IsValid/Rebuild
+            const int32 PrevStaticCostEpoch = Tile->GetStaticCostEpoch();
             if (Tile->IsDirty())
-            Tile->UpdateEpochs();
+                Tile->UpdateEpochs();
 
-            // Verificar y reconstruir FlowFields si es necesario
-            for (int32 i = 0; i < static_cast<int32>(EFlowIntent::MAX); ++i)
+            const int32 CurrStaticCostEpoch = Tile->GetStaticCostEpoch();
+            if (CurrStaticCostEpoch != PrevStaticCostEpoch)
             {
-                EFlowIntent CurrentIntent = static_cast<EFlowIntent>(i);
-                
-                // Asegurarse de que existe el FlowField para este Intent
-                if (!FlowFields.Contains(CurrentIntent))
-                {
-                    FlowFields.Add(CurrentIntent, MakeShared<FFlowField>());
-                }
+                const FIntPoint TileXYCtx = Tile->GetTileXY();
+                Grid::StaticCost::BakeFinalCostStatic(TileXYCtx, *Tile);
+            }
 
-                // Verificar validez y reconstruir si es necesario
-                if (!FlowFields[CurrentIntent]->IsValid(*Tile, CurrentIntent))
-                {
-                    RebuildFlowField(Tile, CurrentIntent);
-                }
+            // Verificar y reconstruir FlowField para MVP (solo Players)
+            const EFlowIntent CurrentIntent = EFlowIntent::Players;
+            if (!FlowFields.Contains(CurrentIntent))
+            {
+                FlowFields.Add(CurrentIntent, MakeShared<FFlowField>());
+            }
+            if (!FlowFields[CurrentIntent]->IsValid(*Tile, CurrentIntent))
+            {
+                RebuildFlowField(Tile, CurrentIntent);
             }
         }
     }
@@ -80,7 +93,84 @@ void UFlowFieldSystem::RebuildFlowField(const TSharedPtr<FTileContext>& Tile, EF
     // - Disparar eventos
     // - Actualizar visualización
     
-    UE_LOG(LogTemp, Log, TEXT("FlowField reconstruido para Intent: %d"), static_cast<int32>(Intent));
+    UE_LOG(LogTemp, Verbose, TEXT("FlowField reconstruido para Intent: %d"), static_cast<int32>(Intent));
+}
+
+void UFlowFieldSystem::InitializeWorldTiles()
+{
+    const int32 Dim = GridConfig::WorldDim;
+    for (int32 ty = 0; ty < Dim; ++ty)
+    {
+        for (int32 tx = 0; tx < Dim; ++tx)
+        {
+            const FIntPoint TileXY(tx, ty);
+            TSharedPtr<FTileContext> Ctx = Grid::Tiles::EnsureTileContext(TileXY);
+            if (Ctx.IsValid())
+            {
+                Grid::Tiles::SetTileState(TileXY, Grid::Tiles::ETileState::Cold);
+            }
+        }
+    }
+}
+
+void UFlowFieldSystem::UpdateHotWarmFromPlayer()
+{
+    const UWorld* World = GetWorld();
+    if (!World) { return; }
+
+    const APlayerController* PC = World->GetFirstPlayerController();
+    const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+    if (!Pawn) { return; }
+
+    const FVector PlayerPos = Pawn->GetActorLocation();
+    FIntPoint NewHot = GridWorld::WorldToTileXY(PlayerPos);
+
+    NewHot.X = FMath::Clamp(NewHot.X, 0, GridConfig::WorldDim - 1);
+    NewHot.Y = FMath::Clamp(NewHot.Y, 0, GridConfig::WorldDim - 1);
+
+    if (NewHot == CurrentHotTileXY)
+    {
+        return;
+    }
+
+    CurrentHotTileXY = NewHot;
+    RecomputeWarmAroundHot(NewHot);
+}
+
+void UFlowFieldSystem::RecomputeWarmAroundHot(const FIntPoint& NewHot)
+{
+    for (const FIntPoint& XY : HotTiles)
+    {
+        Grid::Tiles::SetTileState(XY, Grid::Tiles::ETileState::Cold);
+    }
+    for (const FIntPoint& XY : WarmTiles)
+    {
+        Grid::Tiles::SetTileState(XY, Grid::Tiles::ETileState::Cold);
+    }
+    HotTiles.Reset();
+    WarmTiles.Reset();
+    ActiveTiles.Reset();
+
+    HotTiles.Add(NewHot);
+    Grid::Tiles::SetTileState(NewHot, Grid::Tiles::ETileState::Hot);
+
+    const int32 Dim = GridConfig::WorldDim;
+    for (int32 dy = -1; dy <= 1; ++dy)
+    {
+        for (int32 dx = -1; dx <= 1; ++dx)
+        {
+            if (dx == 0 && dy == 0) { continue; }
+            const int32 nx = NewHot.X + dx;
+            const int32 ny = NewHot.Y + dy;
+            if (nx < 0 || ny < 0 || nx >= Dim || ny >= Dim) { continue; }
+            const FIntPoint NXY(nx, ny);
+            WarmTiles.Add(NXY);
+            Grid::Tiles::SetTileState(NXY, Grid::Tiles::ETileState::Warm);
+        }
+    }
+
+    ActiveTiles = WarmTiles;
+    ActiveTiles.Append(HotTiles);
 }
 
 void UFlowFieldSystem::DrawDebugInfo() const

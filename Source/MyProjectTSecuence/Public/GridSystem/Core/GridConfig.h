@@ -7,8 +7,9 @@
 namespace GridConfig
 {
 	// Resolución base y tiling (GRID_SYSTEM.md: Capas del Grid → Celda Base)
+	inline constexpr int32  WorldDim     = 16;         // tiles por level
 	inline constexpr float CellSizeUU = 100.0f;      // 1 m por celda
-	inline constexpr int32  TileDim     = 16;         // 64x64 celdas por tile
+	inline constexpr int32  TileDim     = 16;         //  celdas por tile
 
 	// Epoch global (GRID_SYSTEM.md: Temporización y Epoch global)
 	inline constexpr float EpochMs = 200.0f;          // 5 Hz

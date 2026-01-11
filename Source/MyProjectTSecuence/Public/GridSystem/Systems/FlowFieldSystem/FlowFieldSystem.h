@@ -42,7 +42,13 @@ private:
     UPROPERTY(EditAnywhere, Category = "FlowField|Debug")
     bool bDebugVisualization = false;
 
-    // Métodos internos
     void RebuildFlowField(const TSharedPtr<FTileContext>& Tile, EFlowIntent Intent);
     void DrawDebugInfo() const;
+    void InitializeWorldTiles();
+    void UpdateHotWarmFromPlayer();
+    void RecomputeWarmAroundHot(const FIntPoint& NewHot);
+    FIntPoint CurrentHotTileXY = FIntPoint(-1, -1);
+    TSet<FIntPoint> HotTiles;
+    TSet<FIntPoint> WarmTiles;
+    TSet<FIntPoint> ActiveTiles;
 };

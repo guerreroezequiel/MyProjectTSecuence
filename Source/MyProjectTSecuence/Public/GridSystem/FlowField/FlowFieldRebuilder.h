@@ -7,6 +7,7 @@
 #include "GridSystem/FlowField/FlowFieldSolver.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
 #include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/Core/TileRegistry.h"
 
 // FlowFieldRebuilder: gestiona dirty tiles y presupuesto por frame.
 // Referencia: FLOWFIELD_CORE.md → Rebuild parcial
@@ -29,6 +30,9 @@ namespace Grid
 		// Marca un tile como sucio
 		FORCEINLINE void MarkTileDirty(const FIntPoint& TileXY)
 		{
+			// Asegurar que exista el TileContext con su TileXY seteado
+			Grid::Tiles::EnsureTileContext(TileXY);
+
 			if (!GDirtyTiles.Contains(TileXY))
 			{
 				GDirtyTiles.Add(TileXY);

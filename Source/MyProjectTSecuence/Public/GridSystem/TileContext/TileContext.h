@@ -10,6 +10,10 @@ class MYPROJECTTSECUENCE_API FTileContext
 public:
     FTileContext();
 
+    // Identidad
+    const FIntPoint& GetTileXY() const { return TileXY; }
+    void SetTileXY(const FIntPoint& InTileXY) { TileXY = InTileXY; }
+
     // Epochs
     int32 GetStaticCostEpoch() const { return StaticCostEpoch; }
     int32 GetGoalsEpoch(EFlowIntent Intent) const;
@@ -25,6 +29,9 @@ public:
 
 private:
 private:
+    // Identidad del tile
+    FIntPoint TileXY = FIntPoint::ZeroValue;
+
     // Epochs
     int32 StaticCostEpoch = 0;
     TMap<EFlowIntent, int32> GoalsEpochs;

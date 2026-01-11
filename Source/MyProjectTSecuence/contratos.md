@@ -13,13 +13,19 @@ El objetivo es soportar bake de costos estáticos, rebuild por epochs y solver d
 
 ---
 
-## 1. GridConfig (fuente de verdad)
+## 0. GridConfig (fuente de verdad)
 - `GridConfig::TileDim` define el tamaño del tile en celdas.
 - Todos los buffers tile-local usan:
   - `NumCells = TileDim * TileDim`
 - El indexing es **tile-space**, nunca grid-space.
 
 ---
+## 1. Owner de tiles (TileRegistry)
+Un sistema de nivel Grid (GridWorld / GridEpochSubsystem / TileRegistry) es el único responsable de:
+- crear tiles
+- definir tiles activos (HOT/WARM/COLD)
+- setear TileXY en cada FTileContext
+- exponer acceso estable a FTileContext por TileXY
 
 ## 2. TileContext.h / .cpp
 **Rol:** Metadatos del tile (epochs y dirty flags).
