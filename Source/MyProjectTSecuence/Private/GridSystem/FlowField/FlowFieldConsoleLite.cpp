@@ -12,6 +12,10 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
 #include "GridSystem/Core/GridWorld.h"
+#include "GridSystem/TileContext/TileContext.h"
+#include "GridSystem/Systems/FlowFieldSystem/FlowFieldSystem.h"
+#include "GridSystem/TileContext/TileContext.h"
+#include "GridSystem/FlowField/FlowField.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -340,6 +344,121 @@ TArray<AFlowFieldDebugActor*> GetActorsInCell(const FIntPoint& CellCoord)
     
     return ActorsInCell;
 }
+
+// tile.info tx ty
+static FAutoConsoleCommand GCmdTileInfo(
+    TEXT("tile.info"),
+    TEXT("Show tile information: tile.info <tx> <ty>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: tile.info <tx> <ty>")); 
+            return; 
+        }
+
+        int32 TX = 0, TY = 0;
+        LexFromString(TX, *Args[0]);
+        LexFromString(TY, *Args[1]);
+
+        const FIntPoint TileCoord(TX, TY);
+        
+        // Get TileContext
+        FTileContext* TileContext = Grid::Flow::GetTileContext(TileCoord);
+        if (!TileContext)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No TileContext found for tile (%d,%d)"), TX, TY);
+            return;
+        }
+
+        // Get FlowField
+        FFlowField* FlowField = Grid::Flow::GetFlowField(TileCoord);
+        if (!FlowField)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No FlowField found for tile (%d,%d)"), TX, TY);
+            return;
+        }
+
+        // Get current intent (assuming Players as default for debug)
+        EFlowIntent CurrentIntent = EFlowIntent::Players;
+        
+        // Get epochs
+        int32 StaticCostEpoch = TileContext->GetStaticCostEpoch();
+        int32 GoalsEpoch = TileContext->GetGoalsEpoch(CurrentIntent);
+        int32 FlowEpoch = TileContext->GetFlowEpoch(CurrentIntent);
+        
+        // Check dirty flags
+        bool bIsDirty = TileContext->IsDirty();
+        bool bStaticCostDirty = TileContext->GetStaticCostEpoch() < 0; // Assuming -1 means dirty
+        
+        // Log the information
+        UE_LOG(LogTemp, Display, TEXT("=== Tile Info (%d,%d) ==="), TX, TY);
+        UE_LOG(LogTemp, Display, TEXT("Epochs - StaticCost: %d, Goals: %d, Flow: %d"), 
+            StaticCostEpoch, GoalsEpoch, FlowEpoch);
+        UE_LOG(LogTemp, Display, TEXT("Dirty - Overall: %s, StaticCost: %s"), 
+            bIsDirty ? TEXT("YES") : TEXT("NO"),
+            bStaticCostDirty ? TEXT("YES") : TEXT("NO"));
+        UE_LOG(LogTemp, Display, TEXT("========================"));
+    })
+);
+
+// ff.valid tx ty
+static FAutoConsoleCommand GCmdFFValid(
+    TEXT("ff.valid"),
+    TEXT("Check if flow field is valid for tile: ff.valid <tx> <ty>"),
+    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
+    {
+        if (Args.Num() < 2) 
+        { 
+            UE_LOG(LogTemp, Warning, TEXT("Usage: ff.valid <tx> <ty>")); 
+            return; 
+        }
+
+        int32 TX = 0, TY = 0;
+        LexFromString(TX, *Args[0]);
+        LexFromString(TY, *Args[1]);
+
+        const FIntPoint TileCoord(TX, TY);
+        
+        // Get TileContext
+        FTileContext* TileContext = Grid::Flow::GetTileContext(TileCoord);
+        if (!TileContext)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No TileContext found for tile (%d,%d)"), TX, TY);
+            return;
+        }
+
+        // Get FlowField
+        FFlowField* FlowField = Grid::Flow::GetFlowField(TileCoord);
+        if (!FlowField)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No FlowField found for tile (%d,%d)"), TX, TY);
+            return;
+        }
+
+        // Check if valid
+        EFlowIntent CurrentIntent = EFlowIntent::Players; // Default intent for debug
+        bool bIsValid = FlowField->IsValid(*TileContext, CurrentIntent);
+        
+        // Log the result
+        UE_LOG(LogTemp, Display, TEXT("=== FlowField Validity (%d,%d) ==="), TX, TY);
+        UE_LOG(LogTemp, Display, TEXT("Intent: %s"), 
+            CurrentIntent == EFlowIntent::Players ? TEXT("Players") : 
+            CurrentIntent == EFlowIntent::Enemies ? TEXT("Enemies") : 
+            TEXT("Unknown"));
+        UE_LOG(LogTemp, Display, TEXT("Is Valid: %s"), bIsValid ? TEXT("YES") : TEXT("NO"));
+        
+        // Get epochs for more context
+        int32 StaticCostEpoch = TileContext->GetStaticCostEpoch();
+        int32 GoalsEpoch = TileContext->GetGoalsEpoch(CurrentIntent);
+        int32 FlowEpoch = TileContext->GetFlowEpoch(CurrentIntent);
+        
+        UE_LOG(LogTemp, Display, TEXT("Current Epochs - StaticCost: %d, Goals: %d, Flow: %d"), 
+            StaticCostEpoch, GoalsEpoch, FlowEpoch);
+        
+        UE_LOG(LogTemp, Display, "================================");
+    })
+);
 
 // grid.flow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowSpawn(
