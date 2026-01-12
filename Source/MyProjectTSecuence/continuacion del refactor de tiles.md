@@ -1,144 +1,171 @@
-# FlowField System — World Tiles + HOT/WARM Pipeline (PR1)
+# FlowField System — Player Integration (PR1)
 
 ## Objetivo
-Definir de forma cerrada:
-- la creación fija de tiles del mundo,
-- la clasificación dinámica HOT/WARM/COLD según el jugador,
-- y cómo esto se integra con el pipeline nuevo de FlowField
-  (UpdateEpochs → Bake → IsValid/Rebuild).
+Conectar el jugador con el FlowFieldSystem para que:
+- el sistema conozca la posición del jugador,
+- genere flowfields hacia él (intent `Players`),
+- y las entidades naveguen sin conocer al jugador directamente.
+
+El jugador no ejecuta lógica de navegación.
 
 ---
 
-## World Definition
+## Principio Fundamental
+El jugador **no conoce** el FlowField.  
+El FlowField **conoce al jugador** como una fuente de objetivos (goals).
 
-- `GridConfig::WorldDim = 16`
-- Universo de tiles del mundo:
-  - `TileXY.X ∈ [0, 15]`
-  - `TileXY.Y ∈ [0, 15]`
-- Los tiles existen **siempre**; lo que cambia es su prioridad de procesamiento.
+Esto evita acoplamientos y permite escalar a multiplayer e influencias futuras.
 
 ---
 
-## Creación de Tiles (Startup)
+## Roles y Responsabilidades
 
-### Punto de creación
-- `FlowFieldSystem::BeginPlay()`  
-  (o `InitializeWorldTiles()` llamado desde ahí)
-
-### Procedimiento
-Para cada `TileXY` válido del mundo:
-
-- Crear `FTileContext`.
-- Setear `TileXY` en el contexto.
-- Inicializar epochs y dirty flags en estado default.
-- (Opcional) crear `FTileStaticData` vacío o lazy.
-- Registrar en:
-  - `TilesByXY[TileXY]`
-  - (Opcional) `StaticByXY[TileXY]`
-
-### Resultado
-Todos los tiles del mundo existen desde el inicio y tienen identidad correcta.
-No se crean tiles dinámicamente en PR1.
+### Player (Pawn / Character)
+- Existe en el mundo y se mueve.
+- Expone su posición en coordenadas Unreal.
+- No:
+  - marca tiles dirty,
+  - crea goals,
+  - llama al FlowFieldSystem.
 
 ---
 
-## Clasificación HOT / WARM / COLD
+### FlowFieldSystem
+Es el orquestador central.
 
-### Definiciones
-- **HOT**: tile donde está el jugador actualmente (1 tile).
-- **WARM**: tiles vecinos a distancia Chebyshev 1 (hasta 8 tiles).
-- **COLD**: todos los demás tiles del mundo.
-
-### Regla WARM
-Un tile es WARM si:
-abs(dx) ≤ 1 AND abs(dy) ≤ 1 AND no es el HOT
-
----
-
-## Obtención del Tile del Jugador
-
-- `PlayerTileXY = GridWorld::WorldToTileXY(PlayerWorldPosition)`
-- Alternativa mínima:
-  - World → Cell → Tile
+Responsabilidades:
+- Obtener referencia al jugador.
+- Leer su posición.
+- Convertir posición → Cell → Tile.
+- Mantener HOT/WARM.
+- Construir el GoalSet para el intent `Players`.
+- Ejecutar el pipeline:
+  - UpdateEpochs
+  - Bake (si corresponde)
+  - IsValid / Rebuild
+- Escribir resultados en FlowFieldStorage.
 
 ---
 
-## Estado Interno del FlowFieldSystem
-
-- `CurrentHotTileXY`
-- `HotTiles` (1 tile)
-- `WarmTiles` (hasta 8 tiles)
-- `ActiveTiles = HotTiles ∪ WarmTiles`
+### Entidades (AI / crowd)
+- No conocen al jugador.
+- No conocen goals.
+- Solo leen FlowFieldStorage para decidir dirección.
 
 ---
 
-## Actualización HOT/WARM (Runtime)
+## Obtención del Jugador
 
-### Frecuencia
-- Por tick o por epoch (criterio de performance).
+### Momento
+- `FlowFieldSystem::BeginPlay()`
 
-### Algoritmo
-1. Calcular `NewHot = PlayerTileXY`.
-2. Si `NewHot == CurrentHotTileXY`:
-   - no hacer nada.
-3. Si cambió:
-   - `CurrentHotTileXY = NewHot`
-   - Recalcular WARM:
-     - vecinos `dx,dy ∈ [-1..1]`
-     - ignorar fuera de rango `[0, WorldDim-1]`
-   - Actualizar:
-     - `HOT = {NewHot}`
-     - `WARM = vecinos válidos`
-     - `ACTIVE = HOT ∪ WARM`
+### Acción
+- Obtener y cachear referencia al jugador:
+  - Player 0 (single-player MVP),
+  - o Actor con Tag `"Player"`.
+
+La referencia se usa solo para lectura de posición.
 
 ---
 
-## Pipeline de Procesamiento (Solo ACTIVE)
+## Conversión de Posición del Jugador
 
-Para cada tile en `ACTIVE`:
+### Proceso
+1. Leer `PlayerWorldPosition`.
+2. Convertir:
+   - World → Cell
+   - Cell → Tile
+3. Obtener `PlayerTileXY`.
+
+Este valor define:
+- el tile HOT,
+- el origen de los goals.
+
+---
+
+## HOT / WARM Update (ligado al jugador)
+
+### Regla
+- HOT = `PlayerTileXY`
+- WARM = vecinos Chebyshev 1 del HOT
+
+### Detección de cambio
+- Si `PlayerTileXY` cambia:
+  - actualizar HOT/WARM,
+  - marcar `GoalsDirty(Players)` en tiles ACTIVE (HOT + WARM).
+
+Esto fuerza la invalidación y rebuild del flowfield.
+
+---
+
+## Construcción del GoalSet (intent Players)
+
+### Responsable
+- FlowFieldSystem.
+
+### Contenido (PR1)
+- Un solo goal:
+  - la celda donde se encuentra el jugador.
+
+### Reglas
+- El GoalSet:
+  - no vive en el Player,
+  - no se cachea globalmente,
+  - se reconstruye cuando el jugador cambia de tile.
+
+---
+
+## Integración con el Pipeline
+
+Para cada tile ACTIVE:
 
 1. `TileContext.UpdateEpochs()`
-2. Si `StaticCostEpoch` cambió:
-   - bake de `FinalCost_Static` (tile-space)
-3. Por intent activo (PR1: solo `Players`):
+2. Si cambió `StaticCostEpoch`:
+   - bake de `FinalCost_Static`
+3. Para intent `Players`:
    - si `!FlowField.IsValid()`:
-     - ejecutar `Rebuild` (solver + storage)
+     - ejecutar `Rebuild` usando el GoalSet del jugador
 
 ---
 
-## Tiles COLD (PR1)
+## Escritura y Consumo del Resultado
 
-- No se procesan:
-  - no bake
-  - no rebuild
-- Cuando el jugador se acerca:
-  - pasan a WARM/HOT
-  - se calculan recién en ese momento.
+### Escritura
+- El resultado del solver se escribe en:
+  - `FlowFieldStorage (TileXY, Players)`
 
----
+### Consumo
+- Las entidades:
+  - convierten su posición a Cell,
+  - leen dirección desde FlowFieldStorage,
+  - aplican movimiento.
 
-## Bordes del Mundo
-
-- Tiles fuera de `[0, WorldDim-1]` se ignoran.
-
-Ejemplo:
-- HOT `(0,0)`
-- WARM válidos: `(1,0)`, `(0,1)`, `(1,1)`
+No hay comunicación directa con el jugador.
 
 ---
 
-## Checklist PR1
+## Invalidez por Movimiento del Jugador
 
-- `WorldDim` define el mundo completo.
-- Todos los tiles se crean en `BeginPlay`.
-- `FTileContext` tiene `TileXY`.
-- HOT/WARM se recalculan por movimiento del jugador.
-- Solo tiles ACTIVE entran al pipeline.
-- Pipeline: `UpdateEpochs → Bake → IsValid/Rebuild (Players)`.
+### Regla PR1
+- El flowfield se invalida cuando:
+  - el jugador cambia de tile.
+
+No se invalida por cada frame de movimiento.
 
 ---
 
-## Scope
-Este documento define completamente PR1.
-Streaming dinámico, vecinos COLD con budget, multiplayer y múltiples intents
-quedan fuera de alcance y se abordarán en PR2/PR3.
+## Checklist de Implementación (PR1)
+
+- [ ] FlowFieldSystem obtiene referencia al jugador.
+- [ ] PlayerWorldPosition → PlayerTileXY funciona.
+- [ ] HOT/WARM se recalculan al cambiar de tile.
+- [ ] GoalsDirty(Players) se marca correctamente.
+- [ ] GoalSet se arma dentro de FlowFieldSystem.
+- [ ] Pipeline ejecuta rebuild hacia el jugador.
+- [ ] Entidades navegan leyendo FlowFieldStorage.
+
+---
+
+## Alcance
+Este documento define completamente la integración jugador–flowfield para PR1.
+Multiplayer, múltiples goals, radios de influencia y prioridades se abordan en PR2/PR3.

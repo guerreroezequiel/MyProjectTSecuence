@@ -9,6 +9,7 @@
 #include "GridSystem/Core/GridConfig.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "GridSystem/Core/GridEpochSubsystem.h"
 
 UFlowFieldSystem::UFlowFieldSystem()
 {
@@ -123,18 +124,42 @@ void UFlowFieldSystem::UpdateHotWarmFromPlayer()
     if (!Pawn) { return; }
 
     const FVector PlayerPos = Pawn->GetActorLocation();
+    const FIntPoint NewPlayerCell = GridWorld::WorldToCellXY(PlayerPos);
     FIntPoint NewHot = GridWorld::WorldToTileXY(PlayerPos);
 
     NewHot.X = FMath::Clamp(NewHot.X, 0, GridConfig::WorldDim - 1);
     NewHot.Y = FMath::Clamp(NewHot.Y, 0, GridConfig::WorldDim - 1);
 
-    if (NewHot == CurrentHotTileXY)
+    const bool bHotChanged = (NewHot != CurrentHotTileXY);
+    const bool bCellChanged = (NewPlayerCell != CurrentPlayerCellXY);
+
+    if (bHotChanged)
     {
-        return;
+        CurrentHotTileXY = NewHot;
+        RecomputeWarmAroundHot(NewHot);
     }
 
-    CurrentHotTileXY = NewHot;
-    RecomputeWarmAroundHot(NewHot);
+    if (bCellChanged)
+    {
+        CurrentPlayerCellXY = NewPlayerCell;
+
+        // Construir GoalSet (Players) en el Subsystem con la celda actual del jugador
+        UGridEpochSubsystem* Subsystem = World->GetSubsystem<UGridEpochSubsystem>();
+        if (Subsystem)
+        {
+            Subsystem->Goals.GoalCells.Reset(1);
+            Subsystem->Goals.GoalCells.Add(CurrentPlayerCellXY);
+        }
+
+        // Marcar GoalsDirty(Players) en tiles activos (HOT ∪ WARM)
+        for (const FIntPoint& TileXY : ActiveTiles)
+        {
+            if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY); Ctx.IsValid())
+            {
+                Ctx->MarkGoalsDirty(EFlowIntent::Players);
+            }
+        }
+    }
 }
 
 void UFlowFieldSystem::RecomputeWarmAroundHot(const FIntPoint& NewHot)

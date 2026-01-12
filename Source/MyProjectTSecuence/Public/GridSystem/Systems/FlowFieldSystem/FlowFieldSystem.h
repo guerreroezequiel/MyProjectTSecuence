@@ -48,6 +48,7 @@ private:
     void UpdateHotWarmFromPlayer();
     void RecomputeWarmAroundHot(const FIntPoint& NewHot);
     FIntPoint CurrentHotTileXY = FIntPoint(-1, -1);
+    FIntPoint CurrentPlayerCellXY = FIntPoint(-1, -1);
     TSet<FIntPoint> HotTiles;
     TSet<FIntPoint> WarmTiles;
     TSet<FIntPoint> ActiveTiles;

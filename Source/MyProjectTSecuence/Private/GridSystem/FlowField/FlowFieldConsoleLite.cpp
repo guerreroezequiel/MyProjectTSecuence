@@ -17,6 +17,8 @@
 #include "GridSystem/TileContext/TileContext.h"
 #include "GridSystem/FlowField/FlowField.h"
 #include "GridSystem/FlowField/FlowFieldRegistry.h"
+#include "DrawDebugHelpers.h"
+#include "Containers/Ticker.h"
 
 // Minimal console: re-enable only Capacity and Occupancy commands safely.
 // Commands:
@@ -26,6 +28,237 @@
 // - grid.occ.set x y state (0=Empty,1=Obstacle,2=Portal)
 // - grid.occ.clear
 
+// Globals for tile border debug tick
+static bool GTileBordersEnabled = false;
+static FTSTicker::FDelegateHandle GTileBordersTickerHandle;
+
+static UWorld* GetDebugWorld()
+{
+    if (!GEngine) { return nullptr; }
+    const TIndirectArray<FWorldContext>& Contexts = GEngine->GetWorldContexts();
+    // Prefer PIE
+    for (const FWorldContext& Ctx : Contexts)
+    {
+        if (Ctx.World() && Ctx.WorldType == EWorldType::PIE) { return Ctx.World(); }
+    }
+    // Then Game
+    for (const FWorldContext& Ctx : Contexts)
+    {
+        if (Ctx.World() && Ctx.WorldType == EWorldType::Game) { return Ctx.World(); }
+    }
+    // Finally Editor world
+    for (const FWorldContext& Ctx : Contexts)
+    {
+        if (Ctx.World() && Ctx.WorldType == EWorldType::Editor) { return Ctx.World(); }
+    }
+    return nullptr;
+}
+
+// ===== HOT/WARM ARROWS (per-tick) =====
+static bool GTileArrowsEnabled = false;
+static FTSTicker::FDelegateHandle GTileArrowsTickerHandle;
+static TMap<FIntPoint, TWeakObjectPtr<AGridFlowArrowActor>> GCellToArrow;
+
+static bool Tick_DrawHotWarmArrows(float DeltaTime)
+{
+    UWorld* World = GetDebugWorld();
+    if (!World) { return true; }
+
+    TSet<FIntPoint> TargetCells;
+    const int32 Dim = GridConfig::WorldDim;
+    const int32 TileDim = GridConfig::TileDim;
+
+    // Compute desired cells for tiles with state Hot or Warm
+    for (int32 ty = 0; ty < Dim; ++ty)
+    {
+        for (int32 tx = 0; tx < Dim; ++tx)
+        {
+            const FIntPoint TileXY(tx, ty);
+            const auto State = Grid::Tiles::GetTileState(TileXY);
+            if (State == Grid::Tiles::ETileState::Hot || State == Grid::Tiles::ETileState::Warm)
+            {
+                for (int32 cy = 0; cy < TileDim; ++cy)
+                {
+                    for (int32 cx = 0; cx < TileDim; ++cx)
+                    {
+                        const int32 X = tx * TileDim + cx;
+                        const int32 Y = ty * TileDim + cy;
+                        TargetCells.Add(FIntPoint(X, Y));
+                    }
+                }
+            }
+        }
+    }
+
+    // Spawn missing arrows
+    for (const FIntPoint& Cell : TargetCells)
+    {
+        if (!GCellToArrow.Contains(Cell) || !GCellToArrow[Cell].IsValid())
+        {
+            const FVector2D WorldPos2D = GridWorld::CellToWorldCenterXY(Cell);
+            const FVector WorldPosition(WorldPos2D.X, WorldPos2D.Y, 20.0f);
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+            AGridFlowArrowActor* Arrow = World->SpawnActor<AGridFlowArrowActor>(
+                AGridFlowArrowActor::StaticClass(),
+                WorldPosition,
+                FRotator::ZeroRotator,
+                SpawnParams
+            );
+            if (Arrow)
+            {
+                Arrow->SetCell(Cell);
+                GCellToArrow.Add(Cell, Arrow);
+            }
+        }
+    }
+
+    // Remove arrows no longer needed
+    TArray<FIntPoint> ToRemove;
+    for (const auto& Pair : GCellToArrow)
+    {
+        if (!TargetCells.Contains(Pair.Key))
+        {
+            if (Pair.Value.IsValid())
+            {
+                Pair.Value->Destroy();
+            }
+            ToRemove.Add(Pair.Key);
+        }
+    }
+    for (const FIntPoint& Key : ToRemove)
+    {
+        GCellToArrow.Remove(Key);
+    }
+
+    return GTileArrowsEnabled;
+}
+
+static bool Tick_DrawAllTileBorders(float DeltaTime)
+{
+    UWorld* World = GetDebugWorld();
+    if (!World) { return true; }
+
+    // Clear previous persistent lines and redraw
+    FlushPersistentDebugLines(World);
+
+    const int32 Dim = GridConfig::WorldDim;
+    const float SizeUU = GridConfig::TileDim * GridConfig::CellSizeUU;
+    const float Z = 20.0f;
+
+    for (int32 ty = 0; ty < Dim; ++ty)
+    {
+        for (int32 tx = 0; tx < Dim; ++tx)
+        {
+            const FIntPoint TileXY(tx, ty);
+            const auto State = Grid::Tiles::GetTileState(TileXY);
+
+            FColor Color = FColor::Cyan;
+            if (State == Grid::Tiles::ETileState::Hot) { Color = FColor::Red; }
+            else if (State == Grid::Tiles::ETileState::Warm) { Color = FColor::Yellow; }
+
+            const FVector2D Origin2D = GridWorld::TileToWorldOriginXY(TileXY);
+            const FVector A(Origin2D.X,            Origin2D.Y,            Z);
+            const FVector B(Origin2D.X + SizeUU,   Origin2D.Y,            Z);
+            const FVector C(Origin2D.X + SizeUU,   Origin2D.Y + SizeUU,   Z);
+            const FVector D(Origin2D.X,            Origin2D.Y + SizeUU,   Z);
+
+            DrawDebugLine(World, A, B, Color, true, 0.0f, 0, 2.0f);
+            DrawDebugLine(World, B, C, Color, true, 0.0f, 0, 2.0f);
+            DrawDebugLine(World, C, D, Color, true, 0.0f, 0, 2.0f);
+            DrawDebugLine(World, D, A, Color, true, 0.0f, 0, 2.0f);
+        }
+    }
+
+    return GTileBordersEnabled; // keep ticking while enabled
+}
+
+
+
+// tile.borders.on
+static FAutoConsoleCommand GCmdTileBordersOn(
+    TEXT("tile.borders.on"),
+    TEXT("Enable per-tick drawing of tile borders for all tiles (Hot=Red, Warm=Yellow, Cold=Cyan)"),
+    FConsoleCommandDelegate::CreateStatic([]()
+    {
+        if (!GTileBordersEnabled)
+        {
+            GTileBordersEnabled = true;
+            FTickerDelegate TickDel = FTickerDelegate::CreateStatic(&Tick_DrawAllTileBorders);
+            GTileBordersTickerHandle = FTSTicker::GetCoreTicker().AddTicker(TickDel);
+        }
+        UE_LOG(LogTemp, Log, TEXT("Tile borders ON (per-tick)"));
+    })
+);
+
+// tile.borders.off
+static FAutoConsoleCommand GCmdTileBordersOff(
+    TEXT("tile.borders.off"),
+    TEXT("Clear all persistent debug lines (including tile borders)"),
+    FConsoleCommandDelegate::CreateStatic([]()
+    {
+        if (GTileBordersEnabled)
+        {
+            GTileBordersEnabled = false;
+            if (GTileBordersTickerHandle.IsValid())
+            {
+                FTSTicker::GetCoreTicker().RemoveTicker(GTileBordersTickerHandle);
+                GTileBordersTickerHandle.Reset();
+            }
+        }
+        if (UWorld* World = GetDebugWorld())
+        {
+            FlushPersistentDebugLines(World);
+        }
+        UE_LOG(LogTemp, Log, TEXT("Tile borders OFF (cleared)"));
+    })
+);
+
+// tile.arrows.on
+static FAutoConsoleCommand GCmdTileArrowsOn(
+    TEXT("tile.arrows.on"),
+    TEXT("Enable per-tick spawning of flow arrows on all cells of HOT and WARM tiles"),
+    FConsoleCommandDelegate::CreateStatic([]()
+    {
+        if (!GTileArrowsEnabled)
+        {
+            GTileArrowsEnabled = true;
+            FTickerDelegate TickDel = FTickerDelegate::CreateStatic(&Tick_DrawHotWarmArrows);
+            GTileArrowsTickerHandle = FTSTicker::GetCoreTicker().AddTicker(TickDel);
+        }
+        UE_LOG(LogTemp, Log, TEXT("Tile arrows ON (per-tick)"));
+    })
+);
+
+// tile.arrows.off
+static FAutoConsoleCommand GCmdTileArrowsOff(
+    TEXT("tile.arrows.off"),
+    TEXT("Disable per-tick arrows and destroy existing arrow actors"),
+    FConsoleCommandDelegate::CreateStatic([]()
+    {
+        if (GTileArrowsEnabled)
+        {
+            GTileArrowsEnabled = false;
+            if (GTileArrowsTickerHandle.IsValid())
+            {
+                FTSTicker::GetCoreTicker().RemoveTicker(GTileArrowsTickerHandle);
+                GTileArrowsTickerHandle.Reset();
+            }
+        }
+        // Destroy any remaining arrows
+        for (auto& Pair : GCellToArrow)
+        {
+            if (Pair.Value.IsValid())
+            {
+                Pair.Value->Destroy();
+            }
+        }
+        GCellToArrow.Empty();
+        UE_LOG(LogTemp, Log, TEXT("Tile arrows OFF (cleared)"));
+    })
+);
 // grid.cap.set_base x y v
 static FAutoConsoleCommand GCmdGridCapSetBase(
     TEXT("grid.cap.set_base"),
@@ -44,7 +277,6 @@ static FAutoConsoleCommand GCmdGridCapSetBase(
         UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
     })
 );
-
 // grid.flow.arrow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowArrowSpawn(
     TEXT("grid.flow.arrow.spawn"),
