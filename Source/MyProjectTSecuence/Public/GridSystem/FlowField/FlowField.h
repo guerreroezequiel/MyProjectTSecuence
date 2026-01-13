@@ -18,7 +18,7 @@ public:
     bool IsValid(const FTileContext& Context, EFlowIntent Intent) const;
     
     // Reconstrucción
-    void Rebuild(const FTileContext& Context, EFlowIntent Intent);
+    void Rebuild(FTileContext& Context, EFlowIntent Intent);
 
     // Debug
     FString GetDebugInfo() const;

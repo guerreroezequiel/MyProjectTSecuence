@@ -209,25 +209,23 @@ void UFlowFieldSystem::DrawDebugInfo() const
     // Mostrar epochs, dirty flags, etc.
     
     // Ejemplo de visualización básica
-    for (const auto& Tile : Tiles)
+    for (const FIntPoint& TileXY : ActiveTiles)
     {
-        if (Tile.IsValid())
+        const TSharedPtr<FTileContext> Tile = Grid::Tiles::GetTileContext(TileXY);
+        if (!Tile.IsValid()) { continue; }
+
+        for (const auto& FlowFieldPair : FlowFields)
         {
-            for (const auto& FlowFieldPair : FlowFields)
-            {
-                EFlowIntent Intent = FlowFieldPair.Key;
-                const TSharedPtr<FFlowField>& FlowField = FlowFieldPair.Value;
-                
-                if (FlowField.IsValid())
-                {
-                    FString DebugText = FString::Printf(TEXT("Intent: %d\n%s"), 
-                        static_cast<int32>(Intent), 
-                        *FlowField->GetDebugInfo());
-                    
-                    // Dibujar el texto de debug en pantalla
-                    GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::White, DebugText);
-                }
-            }
+            const EFlowIntent Intent = FlowFieldPair.Key;
+            const TSharedPtr<FFlowField>& FlowField = FlowFieldPair.Value;
+            if (!FlowField.IsValid()) { continue; }
+
+            const FString DebugText = FString::Printf(TEXT("Tile (%d,%d) Intent: %d\n%s"),
+                TileXY.X, TileXY.Y,
+                static_cast<int32>(Intent),
+                *FlowField->GetDebugInfo());
+
+            GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::White, DebugText);
         }
     }
 }

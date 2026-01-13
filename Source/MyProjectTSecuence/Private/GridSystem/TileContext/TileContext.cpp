@@ -59,8 +59,12 @@ void FTileContext::UpdateEpochs()
         if (Pair.Value)
         {
             GoalsEpochs[Pair.Key]++;
-            FlowEpochs[Pair.Key]++;  // Invalida el FlowField correspondiente
             Pair.Value = false;
         }
     }
+}
+
+void FTileContext::IncrementFlowEpoch(EFlowIntent Intent)
+{
+    FlowEpochs.FindOrAdd(Intent)++;
 }

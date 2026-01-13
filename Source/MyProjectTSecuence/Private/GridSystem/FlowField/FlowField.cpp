@@ -25,7 +25,7 @@ bool FFlowField::IsValid(const FTileContext& Context, EFlowIntent Intent) const
            (BuiltGoalsEpoch == Context.GetGoalsEpoch(Intent));
 }
 
-void FFlowField::Rebuild(const FTileContext& Context, EFlowIntent Intent)
+void FFlowField::Rebuild(FTileContext& Context, EFlowIntent Intent)
 {
     CurrentIntent = Intent;
 
@@ -59,6 +59,9 @@ void FFlowField::Rebuild(const FTileContext& Context, EFlowIntent Intent)
     // Actualizar epochs construidos tras el solve
     BuiltStaticCostEpoch = Context.GetStaticCostEpoch();
     BuiltGoalsEpoch = Context.GetGoalsEpoch(Intent);
+
+    // Incrementar FlowEpoch solo en rebuild real (telemetría/trazabilidad)
+    Context.IncrementFlowEpoch(Intent);
 }
 
 FString FFlowField::GetDebugInfo() const

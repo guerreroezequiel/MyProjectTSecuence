@@ -18,6 +18,7 @@ public:
     int32 GetStaticCostEpoch() const { return StaticCostEpoch; }
     int32 GetGoalsEpoch(EFlowIntent Intent) const;
     int32 GetFlowEpoch(EFlowIntent Intent) const;
+    void IncrementFlowEpoch(EFlowIntent Intent);
 
     // Dirty Flags
     void MarkStaticCostDirty() { bStaticCostDirty = true; }

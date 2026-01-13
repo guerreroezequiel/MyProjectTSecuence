@@ -28,9 +28,6 @@ protected:
     void ToggleDebugVisualization(bool bShow);
 
 private:
-    // Array de tiles (simplificado)
-    TArray<TSharedPtr<class FTileContext>> Tiles;
-    
     // FlowFields por intención
     TMap<EFlowIntent, TSharedPtr<class FFlowField>> FlowFields;
 
