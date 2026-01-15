@@ -21,11 +21,9 @@ public:
     void Rebuild(FTileContext& Context, EFlowIntent Intent);
 
     // Debug
-    FString GetDebugInfo() const;
+    FString GetDebugInfo(const FIntPoint& TileXY, EFlowIntent Intent) const;
 
 private:
-    int32 BuiltStaticCostEpoch = -1;
-    int32 BuiltGoalsEpoch = -1;
     EFlowIntent CurrentIntent = EFlowIntent::Players;
 
     // Métodos auxiliares

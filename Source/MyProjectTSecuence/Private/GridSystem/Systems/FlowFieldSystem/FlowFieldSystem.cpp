@@ -223,7 +223,7 @@ void UFlowFieldSystem::DrawDebugInfo() const
             const FString DebugText = FString::Printf(TEXT("Tile (%d,%d) Intent: %d\n%s"),
                 TileXY.X, TileXY.Y,
                 static_cast<int32>(Intent),
-                *FlowField->GetDebugInfo());
+                *FlowField->GetDebugInfo(TileXY, Intent));
 
             GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::White, DebugText);
         }

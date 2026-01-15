@@ -3,8 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "GridSystem/Core/GridEpoch.h"
-#include "GridSystem/FlowField/FlowFieldRebuilder.h"
-#include "GridSystem/FlowField/FlowFieldSolver.h"
+#include "GridSystem/FlowField/FlowFieldSolver.h" // For Grid::Flow::FGoalSet
 #include "GridSystem/FlowField/FlowFieldStorage.h"
 #include "GridEpochSubsystem.generated.h"
 
@@ -37,12 +36,6 @@ public:
 private:
 	double LastTimeSeconds = 0.0;
 	uint32 LastEpochIndex = 0u;
-
-	// Budget por defecto; se puede exponer más adelante
-	Grid::Flow::FRebuildBudget Budget;
-
-	// Parámetros básicos del solver; en un futuro, configurar desde fuera
-	Grid::Flow::FSolverParams SolverParams;
 
 	// Handle del ticker
 	FTSTicker::FDelegateHandle TickerHandle;

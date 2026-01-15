@@ -21,8 +21,13 @@ FFlowField::~FFlowField()
 
 bool FFlowField::IsValid(const FTileContext& Context, EFlowIntent Intent) const
 {
-    return (BuiltStaticCostEpoch == Context.GetStaticCostEpoch()) && 
-           (BuiltGoalsEpoch == Context.GetGoalsEpoch(Intent));
+    const FIntPoint TileXY = Context.GetTileXY();
+    return Grid::Flow::IsValid(
+        TileXY,
+        Intent,
+        Context.GetStaticCostEpoch(),
+        Context.GetGoalsEpoch(Intent)
+    );
 }
 
 void FFlowField::Rebuild(FTileContext& Context, EFlowIntent Intent)
@@ -54,25 +59,24 @@ void FFlowField::Rebuild(FTileContext& Context, EFlowIntent Intent)
     GridWorld::TileBoundsInCells(TileXY, MinCell, MaxCell);
 
     Grid::Flow::FSolverParams Params; // defaults
-    Grid::Flow::SolveTileDijkstra(MinCell, MaxCell, Goals, Params);
+    Grid::Flow::SolveTileDijkstraWithIntent(MinCell, MaxCell, Goals, Params, Intent);
 
-    // Actualizar epochs construidos tras el solve
-    BuiltStaticCostEpoch = Context.GetStaticCostEpoch();
-    BuiltGoalsEpoch = Context.GetGoalsEpoch(Intent);
+    // Actualizar meta en storage tras el solve
+    Grid::Flow::SetBuiltMeta(Context.GetTileXY(), Intent, Context.GetStaticCostEpoch(), Context.GetGoalsEpoch(Intent));
 
     // Incrementar FlowEpoch solo en rebuild real (telemetría/trazabilidad)
     Context.IncrementFlowEpoch(Intent);
 }
 
-FString FFlowField::GetDebugInfo() const
+FString FFlowField::GetDebugInfo(const FIntPoint& TileXY, EFlowIntent Intent) const
 {
-    return FString::Printf(TEXT("FlowField - StaticEpoch: %d, GoalsEpoch: %d, Intent: %d"), 
-        BuiltStaticCostEpoch, BuiltGoalsEpoch, (int32)CurrentIntent);
+    int32 S=-1, G=-1;
+    const bool ok = Grid::Flow::GetBuiltMeta(TileXY, Intent, S, G);
+    return FString::Printf(TEXT("FlowField[%d] Tile(%d,%d) - BuiltStatic:%d BuiltGoals:%d%s"), 
+        (int32)Intent, TileXY.X, TileXY.Y, S, G, ok?TEXT(""):TEXT(" (no data)"));
 }
 
 void FFlowField::Reset()
 {
-    BuiltStaticCostEpoch = -1;
-    BuiltGoalsEpoch = -1;
     CurrentIntent = EFlowIntent::Players;
 }

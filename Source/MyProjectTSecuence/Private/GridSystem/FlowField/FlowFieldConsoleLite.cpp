@@ -1,5 +1,6 @@
 #include "CoreMinimal.h"
-#include "GridSystem/FlowField/FlowFieldRebuilder.h" // MarkTileDirty
+#include "GridSystem/TileContext/TileContext.h"
+#include "GridSystem/Core/TileRegistry.h"
 #include "GridSystem/Core/GridEpochSubsystem.h"
 #include "GridSystem/FlowField/AFlowFieldDebugActor.h"
 #include "GridSystem/FlowField/GridFlowArrowActor.h"
@@ -273,8 +274,8 @@ static FAutoConsoleCommand GCmdGridCapSetBase(
         const FIntPoint Cell(X,Y);
         Grid::Capacity::SetBaseCapacity(Cell, V);
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        Grid::Flow::MarkTileDirty(TileXY);
-        UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
+        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY)) { Ctx->MarkStaticCostDirty(); }
+        UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) static-cost dirty"), X, Y, V, TileXY.X, TileXY.Y);
     })
 );
 // grid.flow.arrow.spawn x y
@@ -388,8 +389,8 @@ static FAutoConsoleCommand GCmdGridCapSetCount(
         const FIntPoint Cell(X,Y);
         Grid::Capacity::SetCurrentCount(Cell, V);
         const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        Grid::Flow::MarkTileDirty(TileXY);
-        UE_LOG(LogTemp, Log, TEXT("Capacity count set at cell (%d,%d) = %d; marked tile (%d,%d) dirty"), X, Y, V, TileXY.X, TileXY.Y);
+        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY)) { Ctx->MarkStaticCostDirty(); }
+        UE_LOG(LogTemp, Log, TEXT("Capacity count set at cell (%d,%d) = %d; marked tile (%d,%d) static-cost dirty"), X, Y, V, TileXY.X, TileXY.Y);
     })
 );
 
@@ -566,12 +567,12 @@ static FAutoConsoleCommand GCmdGridFlowSetGoal(
                 // Limpiar metas anteriores y establecer nueva meta
                 Subsystem->Goals.GoalCells.Empty();
                 Subsystem->Goals.GoalCells.Add(FIntPoint(X, Y));
-                
-                // Marcar tiles cercanos como sucios para recalcular
+
+                // Marcar tile del goal como dirty de goals para recalcular (intent Players)
                 const FIntPoint TileXY = GridWorld::CellToTileXY(FIntPoint(X, Y));
-                Grid::Flow::MarkTileDirty(TileXY);
-                
-                UE_LOG(LogTemp, Log, TEXT("FlowField goal set at cell (%d,%d); marked tile (%d,%d) dirty"), 
+                if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY)) { Ctx->MarkGoalsDirty(EFlowIntent::Players); }
+
+                UE_LOG(LogTemp, Log, TEXT("FlowField goal set at cell (%d,%d); marked tile (%d,%d) goals dirty"), 
                     X, Y, TileXY.X, TileXY.Y);
             }
             else
@@ -1004,12 +1005,7 @@ static FAutoConsoleCommand GCmdGridFlowReset(
                 // Limpiar almacenamiento del flow (dist/dir)
                 Grid::Flow::ClearAll();
 
-                // Limpiar colas/conjuntos de tiles sucios
-                Grid::Flow::GDirtyTiles.Reset();
-                FIntPoint Tmp;
-                while (Grid::Flow::GDirtyQueue.Dequeue(Tmp)) {}
-
-                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared goals, storage and dirty queues"));
+                UE_LOG(LogTemp, Log, TEXT("FlowField reset: cleared goals and storage"));
             }
             else
             {
