@@ -6,6 +6,8 @@
 #include "GridSystem/Core/GridEpochSubsystem.h"
 #include "GridSystem/FlowField/FlowFieldSolver.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
+#include "GridSystem/FlowField/StaticCostBaker.h"
+#include "GridSystem/FlowField/TileStaticData.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 
@@ -55,6 +57,19 @@ void FFlowField::Rebuild(FTileContext& Context, EFlowIntent Intent)
 
     // Resolver en el rectángulo de celdas del tile
     const FIntPoint TileXY = Context.GetTileXY();
+
+    // Coherencia bake -> solve: el epoch bakeado debe coincidir con el del TileContext
+    if (const FTileStaticData* Static = Grid::StaticCost::FindTile(TileXY))
+    {
+        ensureMsgf(
+            Static->BakedStaticCostEpoch == Context.GetStaticCostEpoch(),
+            TEXT("StaticCost bake epoch mismatch before solve: Baked=%d, Context=%d for Tile(%d,%d)"),
+            Static->BakedStaticCostEpoch,
+            Context.GetStaticCostEpoch(),
+            TileXY.X,
+            TileXY.Y
+        );
+    }
     FIntPoint MinCell, MaxCell;
     GridWorld::TileBoundsInCells(TileXY, MinCell, MaxCell);
 

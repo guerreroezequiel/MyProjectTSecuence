@@ -4,11 +4,10 @@
 #include "GridSystem/Core/GridConfig.h"
 #include "GridSystem/Core/GridTypes.h"
 #include "GridSystem/Core/GridMath.h"
-#include "GridSystem/Occupancy/OccupancyGrid.h"
-#include "GridSystem/Occupancy/CapacityGrid.h"
-#include "GridSystem/Density/DensityHeatGrid.h"
 #include "GridSystem/Core/GridWorld.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
+#include "GridSystem/FlowField/TileStaticData.h"
+#include "GridSystem/FlowField/StaticCostBaker.h"
 #include <limits>
 
 // FlowFieldSolver: interfaz de solver (BFS/Dijkstra multi-fuente) + dirección continua.
@@ -78,6 +77,19 @@ namespace Grid
 			return (lenSq > KINDA_SMALL_NUMBER) ? (v / FMath::Sqrt(lenSq)) : FVector2D::ZeroVector;
 		}
 
+		// Bloqueo basado en costo estático bakeado (INF => bloqueado)
+		FORCEINLINE bool IsStaticBlocked(const FIntPoint& Cell)
+		{
+			const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
+			const FIntPoint LocalXY = GridWorld::LocalCellInTile(Cell);
+			if (const FTileStaticData* Static = Grid::StaticCost::FindTile(TileXY))
+			{
+				const float Cost = Static->GetCost(LocalXY.X, LocalXY.Y);
+				return Cost >= TNumericLimits<float>::Max();
+			}
+			return true; // sin bake => tratar como bloqueado
+		}
+
 		// Solver simple por tile: distancia euclidiana hacia la meta más cercana (ignora obstáculos y heat)
 		// Escribe dist/dir en storage para el rectángulo [MinCell..MaxCell] 
 		FORCEINLINE FSolveStats SolveTileDistance(const FIntPoint& MinCell, const FIntPoint& MaxCell, const FGoalSet& Goals, const FSolverParams& Params)
@@ -110,7 +122,7 @@ namespace Grid
 					WriteDist(c, bestDist);
 					// Dir: hacia la meta más cercana, evitando paso inmediato a vecinos bloqueados
 					FVector2D dir = FVector2D::ZeroVector;
-					if (!Grid::IsBlocked(c) && bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
+					if (!IsStaticBlocked(c) && bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
 					{
 						const FVector2D toGoal = (GoalCenters[bestIdx] - cCenter);
 						const float len = toGoal.Size();
@@ -130,14 +142,14 @@ namespace Grid
 							// Si el vecino directo está bloqueado, buscar alternativas alrededor
 							auto neighborOf = [&](int k)->FIntPoint { return FIntPoint(c.X + Grid::Neigh8[k].X, c.Y + Grid::Neigh8[k].Y); };
 							int chosenK = bestK;
-							if (Grid::IsBlocked(neighborOf(bestK)))
+							if (IsStaticBlocked(neighborOf(bestK)))
 							{
 								const int offsets[8] = {1,-1,2,-2,3,-3,4,-4};
 								bool found = false;
 								for (int i = 0; i < 8; ++i)
 								{
 									const int k2 = (bestK + offsets[i] + 8) % 8;
-									if (!Grid::IsBlocked(neighborOf(k2))) { chosenK = k2; found = true; break; }
+									if (!IsStaticBlocked(neighborOf(k2))) { chosenK = k2; found = true; break; }
 								}
 								if (!found)
 								{
@@ -158,7 +170,7 @@ namespace Grid
 			return Stats;
 		}
 
-		// Dijkstra multi-fuente por tile con costos: moveCost + Alphaheat*heat + BetaCapacity*Pressure(placeholder)
+		// Dijkstra multi-fuente por tile con costos: solo movimiento (sin heat/capacity/ocupación live)
 		FORCEINLINE FSolveStats SolveTileDijkstra(const FIntPoint& MinCell, const FIntPoint& MaxCell, const FGoalSet& Goals, const FSolverParams& Params)
 		{
 			FSolveStats Stats;
@@ -185,7 +197,7 @@ namespace Grid
 			int32 Seeds = 0;
 			for (const FIntPoint& g : Goals.GoalCells)
 			{
-				if (InBounds(g) && !Grid::IsBlocked(g))
+				if (InBounds(g) && !IsStaticBlocked(g))
 				{
 					const int32 gi = LocalIdx(g);
 					Dist[gi] = 0.0f;
@@ -218,7 +230,7 @@ namespace Grid
 				{
 					const FIntPoint n(curr.C.X + Grid::Neigh8[k].X, curr.C.Y + Grid::Neigh8[k].Y);
 					if (!InBounds(n)) { continue; }
-					if (Grid::IsBlocked(n)) { continue; }
+					if (IsStaticBlocked(n)) { continue; }
 
 					// Regla anti corner-cut: para diagonales, ambos ortogonales deben estar libres
 					const bool diag = (Grid::Neigh8[k].X != 0) && (Grid::Neigh8[k].Y != 0);
@@ -226,18 +238,14 @@ namespace Grid
 					{
 						const FIntPoint ortho1(curr.C.X + Grid::Neigh8[k].X, curr.C.Y);
 						const FIntPoint ortho2(curr.C.X, curr.C.Y + Grid::Neigh8[k].Y);
-						if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+						if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || IsStaticBlocked(ortho1) || IsStaticBlocked(ortho2))
 						{
 							continue;
 						}
 					}
 					const int32 ni = LocalIdx(n);
 					const float moveCost = GridMath::MoveCost8(k);
-					const float heat = Grid::Density::GetHeat(n);
-					const int32 baseCap = Grid::Capacity::GetBaseCapacity(n);
-					const int32 currCnt = Grid::Capacity::GetCurrentCount(n);
-					const float capInfl = Grid::Capacity::CostInflationFactor(currCnt, baseCap);
-					const float stepCost = moveCost + Params.AlphaHeat * heat + Params.BetaCapacity * (capInfl - 1.0f);
+					const float stepCost = moveCost;
 					const float newCost = bestD + stepCost;
 					if (newCost < Dist[ni])
 					{
@@ -269,7 +277,7 @@ namespace Grid
 						{
 							const FIntPoint ortho1(c.X + Grid::Neigh8[k].X, c.Y);
 							const FIntPoint ortho2(c.X, c.Y + Grid::Neigh8[k].Y);
-							if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+							if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || IsStaticBlocked(ortho1) || IsStaticBlocked(ortho2))
 							{
 								deltas[k] = 1e6f; // desalentar diagonal por corner-cut
 								continue;
@@ -324,7 +332,7 @@ namespace Grid
                     WriteDist(c, Intent, bestDist);
 
                     FVector2D dir = FVector2D::ZeroVector;
-                    if (!Grid::IsBlocked(c) && bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
+                    if (!IsStaticBlocked(c) && bestIdx >= 0 && bestDist > KINDA_SMALL_NUMBER)
                     {
                         const FVector2D toGoal = (GoalCenters[bestIdx] - cCenter);
                         const float len = toGoal.Size();
@@ -339,14 +347,14 @@ namespace Grid
                             }
                             auto neighborOf = [&](int k)->FIntPoint { return FIntPoint(c.X + Grid::Neigh8[k].X, c.Y + Grid::Neigh8[k].Y); };
                             int chosenK = bestK;
-                            if (Grid::IsBlocked(neighborOf(bestK)))
+                            if (IsStaticBlocked(neighborOf(bestK)))
                             {
                                 const int offsets[8] = {1,-1,2,-2,3,-3,4,-4};
                                 bool found = false;
                                 for (int i = 0; i < 8; ++i)
                                 {
                                     const int k2 = (bestK + offsets[i] + 8) % 8;
-                                    if (!Grid::IsBlocked(neighborOf(k2))) { chosenK = k2; found = true; break; }
+                                    if (!IsStaticBlocked(neighborOf(k2))) { chosenK = k2; found = true; break; }
                                 }
                                 if (!found) { chosenK = -1; }
                             }
@@ -381,7 +389,7 @@ namespace Grid
             int32 Seeds = 0;
             for (const FIntPoint& g : Goals.GoalCells)
             {
-                if (InBounds(g) && !Grid::IsBlocked(g))
+                if (InBounds(g) && !IsStaticBlocked(g))
                 {
                     const int32 gi = LocalIdx(g);
                     Dist[gi] = 0.0f;
@@ -411,25 +419,21 @@ namespace Grid
                 {
                     const FIntPoint n(curr.C.X + Grid::Neigh8[k].X, curr.C.Y + Grid::Neigh8[k].Y);
                     if (!InBounds(n)) { continue; }
-                    if (Grid::IsBlocked(n)) { continue; }
+                    if (IsStaticBlocked(n)) { continue; }
 
                     const bool diag = (Grid::Neigh8[k].X != 0) && (Grid::Neigh8[k].Y != 0);
                     if (diag)
                     {
                         const FIntPoint ortho1(curr.C.X + Grid::Neigh8[k].X, curr.C.Y);
                         const FIntPoint ortho2(curr.C.X, curr.C.Y + Grid::Neigh8[k].Y);
-                        if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+                        if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || IsStaticBlocked(ortho1) || IsStaticBlocked(ortho2))
                         {
                             continue;
                         }
                     }
                     const int32 ni = LocalIdx(n);
                     const float moveCost = GridMath::MoveCost8(k);
-                    const float heat = Grid::Density::GetHeat(n);
-                    const int32 baseCap = Grid::Capacity::GetBaseCapacity(n);
-                    const int32 currCnt = Grid::Capacity::GetCurrentCount(n);
-                    const float capInfl = Grid::Capacity::CostInflationFactor(currCnt, baseCap);
-                    const float stepCost = moveCost + Params.AlphaHeat * heat + Params.BetaCapacity * (capInfl - 1.0f);
+                    const float stepCost = moveCost;
                     const float newCost = bestD + stepCost;
                     if (newCost < Dist[ni])
                     {
@@ -458,7 +462,7 @@ namespace Grid
                         {
                             const FIntPoint ortho1(c.X + Grid::Neigh8[k].X, c.Y);
                             const FIntPoint ortho2(c.X, c.Y + Grid::Neigh8[k].Y);
-                            if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || Grid::IsBlocked(ortho1) || Grid::IsBlocked(ortho2))
+                            if ((!InBounds(ortho1)) || (!InBounds(ortho2)) || IsStaticBlocked(ortho1) || IsStaticBlocked(ortho2))
                             {
                                 deltas[k] = 1e6f;
                                 continue;

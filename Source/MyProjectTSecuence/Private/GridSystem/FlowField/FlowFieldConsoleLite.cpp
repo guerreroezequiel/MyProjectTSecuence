@@ -8,7 +8,6 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GridSystem/Occupancy/OccupancyGrid.h"
-#include "GridSystem/Occupancy/CapacityGrid.h"
 #include "GridSystem/Occupancy/GridObstaclePlate.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
@@ -17,11 +16,11 @@
 #include "GridSystem/Systems/FlowFieldSystem/FlowFieldSystem.h"
 #include "GridSystem/TileContext/TileContext.h"
 #include "GridSystem/FlowField/FlowField.h"
-#include "GridSystem/FlowField/FlowFieldRegistry.h"
+#include "GridSystem/FlowField/FlowFieldStorage.h"
 #include "DrawDebugHelpers.h"
 #include "Containers/Ticker.h"
 
-// Minimal console: re-enable only Capacity and Occupancy commands safely.
+// Minimal console: Occupancy and Flow debug (no Capacity, no FlowFieldRegistry)
 // Commands:
 // - grid.cap.set_base x y v
 // - grid.cap.set_count x y v
@@ -261,23 +260,7 @@ static FAutoConsoleCommand GCmdTileArrowsOff(
     })
 );
 // grid.cap.set_base x y v
-static FAutoConsoleCommand GCmdGridCapSetBase(
-    TEXT("grid.cap.set_base"),
-    TEXT("Set base capacity of a cell: grid.cap.set_base <x> <y> <value>"),
-    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
-    {
-        if (Args.Num() < 3) { UE_LOG(LogTemp, Warning, TEXT("Usage: grid.cap.set_base <x> <y> <value>")); return; }
-        int32 X=0, Y=0, V=0;
-        LexFromString(X, *Args[0]);
-        LexFromString(Y, *Args[1]);
-        LexFromString(V, *Args[2]);
-        const FIntPoint Cell(X,Y);
-        Grid::Capacity::SetBaseCapacity(Cell, V);
-        const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY)) { Ctx->MarkStaticCostDirty(); }
-        UE_LOG(LogTemp, Log, TEXT("Capacity base set at cell (%d,%d) = %d; marked tile (%d,%d) static-cost dirty"), X, Y, V, TileXY.X, TileXY.Y);
-    })
-);
+// Removed capacity commands (grid.cap.*) per new pipeline
 // grid.flow.arrow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowArrowSpawn(
     TEXT("grid.flow.arrow.spawn"),
@@ -376,34 +359,10 @@ static FAutoConsoleCommand GCmdGridFlowShowArrows(
 );
 
 // grid.cap.set_count x y v
-static FAutoConsoleCommand GCmdGridCapSetCount(
-    TEXT("grid.cap.set_count"),
-    TEXT("Set current count of a cell: grid.cap.set_count <x> <y> <value>"),
-    FConsoleCommandWithArgsDelegate::CreateStatic([](const TArray<FString>& Args)
-    {
-        if (Args.Num() < 3) { UE_LOG(LogTemp, Warning, TEXT("Usage: grid.cap.set_count <x> <y> <value>")); return; }
-        int32 X=0, Y=0, V=0;
-        LexFromString(X, *Args[0]);
-        LexFromString(Y, *Args[1]);
-        LexFromString(V, *Args[2]);
-        const FIntPoint Cell(X,Y);
-        Grid::Capacity::SetCurrentCount(Cell, V);
-        const FIntPoint TileXY = GridWorld::CellToTileXY(Cell);
-        if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::GetTileContext(TileXY)) { Ctx->MarkStaticCostDirty(); }
-        UE_LOG(LogTemp, Log, TEXT("Capacity count set at cell (%d,%d) = %d; marked tile (%d,%d) static-cost dirty"), X, Y, V, TileXY.X, TileXY.Y);
-    })
-);
+// Removed capacity commands (grid.cap.*) per new pipeline
 
 // grid.cap.clear
-static FAutoConsoleCommand GCmdGridCapClear(
-    TEXT("grid.cap.clear"),
-    TEXT("Clear entire capacity grid"),
-    FConsoleCommandDelegate::CreateStatic([]()
-    {
-        Grid::Capacity::ClearAll();
-        UE_LOG(LogTemp, Log, TEXT("Capacity cleared"));
-    })
-);
+// Removed capacity commands (grid.cap.*) per new pipeline
 
 // grid.occ.set x y state
 static FAutoConsoleCommand GCmdGridOccSet(
@@ -637,18 +596,10 @@ static FAutoConsoleCommand GCmdTileInfo(
         const FIntPoint TileCoord(TX, TY);
         
         // Get TileContext
-        FTileContext* TileContext = Grid::Flow::GetTileContext(TileCoord);
-        if (!TileContext)
+        TSharedPtr<FTileContext> TileContext = Grid::Tiles::GetTileContext(TileCoord);
+        if (!TileContext.IsValid())
         {
             UE_LOG(LogTemp, Warning, TEXT("No TileContext found for tile (%d,%d)"), TX, TY);
-            return;
-        }
-
-        // Get FlowField
-        FFlowField* FlowField = Grid::Flow::GetFlowField(TileCoord);
-        if (!FlowField)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("No FlowField found for tile (%d,%d)"), TX, TY);
             return;
         }
 
@@ -664,6 +615,10 @@ static FAutoConsoleCommand GCmdTileInfo(
         bool bIsDirty = TileContext->IsDirty();
         bool bStaticCostDirty = bIsDirty; // en MVP, dirty proviene de StaticCost
         
+        // Read built meta from storage
+        int32 BuiltS = -1, BuiltG = -1;
+        const bool HasBuilt = Grid::Flow::GetBuiltMeta(TileCoord, CurrentIntent, BuiltS, BuiltG);
+
         // Log the information
         UE_LOG(LogTemp, Display, TEXT("=== Tile Info (%d,%d) ==="), TX, TY);
         UE_LOG(LogTemp, Display, TEXT("Epochs - StaticCost: %d, Goals: %d, Flow: %d"), 
@@ -671,6 +626,7 @@ static FAutoConsoleCommand GCmdTileInfo(
         UE_LOG(LogTemp, Display, TEXT("Dirty - Overall: %s, StaticCost: %s"), 
             bIsDirty ? TEXT("YES") : TEXT("NO"),
             bStaticCostDirty ? TEXT("YES") : TEXT("NO"));
+        UE_LOG(LogTemp, Display, TEXT("Storage Built - Static:%d Goals:%d%s"), BuiltS, BuiltG, HasBuilt?TEXT(""):TEXT(" (no data)"));
         UE_LOG(LogTemp, Display, TEXT("========================"));
     })
 );
@@ -694,24 +650,16 @@ static FAutoConsoleCommand GCmdFFValid(
         const FIntPoint TileCoord(TX, TY);
         
         // Get TileContext
-        FTileContext* TileContext = Grid::Flow::GetTileContext(TileCoord);
-        if (!TileContext)
+         TSharedPtr TileContext = Grid::Tiles::GetTileContext(TileCoord);
+        if (!TileContext.IsValid())
         {
             UE_LOG(LogTemp, Warning, TEXT("No TileContext found for tile (%d,%d)"), TX, TY);
             return;
         }
 
-        // Get FlowField
-        FFlowField* FlowField = Grid::Flow::GetFlowField(TileCoord);
-        if (!FlowField)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("No FlowField found for tile (%d,%d)"), TX, TY);
-            return;
-        }
-
         // Check if valid
         EFlowIntent CurrentIntent = EFlowIntent::Players; // Default intent for debug
-        bool bIsValid = FlowField->IsValid(*TileContext, CurrentIntent);
+        bool bIsValid = Grid::Flow::IsValid(TileCoord, CurrentIntent, TileContext->GetStaticCostEpoch(), TileContext->GetGoalsEpoch(CurrentIntent));
         
         // Log the result
         UE_LOG(LogTemp, Display, TEXT("=== FlowField Validity (%d,%d) ==="), TX, TY);
