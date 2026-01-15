@@ -1,162 +1,117 @@
-# Eliminación del Pipeline Viejo — Checklist Final (MVP)
+# Pendientes finales — Cierre del pipeline viejo (FlowField)
 
-Este documento resume **qué falta eliminar / ajustar** para cerrar definitivamente el *pipeline viejo* y dejar **solo el pipeline nuevo** activo, coherente con los contratos acordados:
+Este documento enumera los cambios **mínimos y necesarios** para cerrar correctamente el pipeline viejo y dejar el pipeline nuevo (epochs + dirty + storage por intent) completamente definido y estable.
 
-> **Pipeline nuevo**  
-> TileContext (epochs + dirty)  
-> → Bake de costos estáticos  
-> → Validación por epochs  
-> → Rebuild condicional de FlowFields  
-> → Solver desacoplado (consume costo final)
+No incluye refactors grandes ni cambios de arquitectura.
 
 ---
 
-## 1. FlowFieldSolver — Eliminar lógica del pipeline viejo (CRÍTICO)
+## 1. FlowField.cpp — Cerrar casos de early-return (validez)
 
-### Estado actual
-El solver todavía mezcla lógica **dinámica y legacy**:
-- Heat (`DensityHeatGrid`)
-- Capacity (`CapacityGrid`)
-- Occupancy live (`Grid::IsBlocked`)
+### Problema
+En `FFlowField::Rebuild()` existen salidas tempranas cuando:
+- No hay goals
+- El `GridWorld` / `GridEpochSubsystem` no existe
 
-Esto corresponde **100% al pipeline viejo**.
+En estos casos:
+- No se actualiza la metadata de build
+- El flowfield queda inválido permanentemente
+- El sistema intenta rebuild en cada tick/epoch
 
-### Contrato correcto (MVP)
-El solver debe:
-- ❌ NO conocer heat, capacity ni occupancy live
-- ✅ Consumir **únicamente**:
-  - `TileStaticData.FinalCost_Static`
-  - Goals del intent
-- Tratar `INF_COST` como celda no transitable
+### Cambio requerido
+Definir explícitamente que:
+- **Un flowfield sin goals es válido**
+- Aun si no se ejecuta el solver, se debe:
+  - Actualizar la metadata (`BuiltMeta`) con los epochs actuales
+  - Evitar loops infinitos de rebuild
 
-### Acciones
-- Eliminar includes:
-  - `DensityHeatGrid.h`
-  - `CapacityGrid.h`
-  - `OccupancyGrid.h`
-- Reemplazar toda lógica de bloqueo dinámico por:
-  - lectura de `FinalCost_Static`
-  - skip si el costo es infinito
-- El costo de movimiento se calcula **solo** en base al costo estático bakeado
-
-> Resultado esperado:  
-> El solver es **puro**, determinista y desacoplado del mundo live.
+> Opcional MVP: limpiar dist/dir a valores por defecto  
+> Obligatorio MVP: marcar el flowfield como construido
 
 ---
 
-## 2. FlowFieldRegistry — Eliminar compatibilidad global (LEGACY)
+## 2. FlowFieldSolver.h — Limpiar contrato del solver (pipeline nuevo)
 
-### Estado actual
-Existe un `FlowFieldRegistry` global que:
-- auto-crea `FlowField`
-- expone acceso fuera del `FlowFieldSystem`
-- existe solo por compatibilidad/consola
+### 2.1 Parámetros fuera del MVP
+`FSolverParams` todavía incluye:
+- Heat
+- Capacity
 
-Esto **rompe el contrato nuevo**.
+Pero:
+- El pipeline MVP no usa estas capas
+- El solver actual no las integra realmente
 
-### Contrato correcto
-- Owner de FlowFields: **FlowFieldSystem**
-- Runtime data: **FlowFieldStorage**
-- No existen FlowFields “globales”
+### Cambio requerido (una de dos):
+- Eliminar estos parámetros del contrato
+**o**
+- Marcar explícitamente como `TODO / post-MVP` y documentar que **no se usan**
 
-### Acciones
-- Eliminar `FlowFieldRegistry.h`
-- Quitar cualquier uso desde consola o debug
-- No auto-crear FlowFields fuera del sistema principal
+Objetivo: evitar ambigüedad conceptual del solver.
 
 ---
 
-## 3. FlowFieldConsoleLite — Limpiar comandos del pipeline viejo
+### 2.2 Duplicación de APIs (con / sin intent)
+Existen dos caminos:
+- `SolveTile*()` → default Players (pipeline viejo / compat)
+- `SolveTile*WithIntent()` → pipeline nuevo
 
-### Estado actual
-La consola todavía:
-- Expone comandos de **Capacity**
-- Usa `FlowFieldRegistry` para crear/consultar FlowFields
-- Valida estado usando objetos legacy (`FFlowField`)
+### Cambio requerido
+Dejar explícito que:
+- El pipeline nuevo **solo** usa las funciones `*WithIntent`
+- Las variantes sin intent quedan:
+  - deprecated
+  - compat
+  - o solo para tests
 
-### Contrato correcto (MVP)
-La consola debe:
-- ❌ No conocer Capacity
-- ❌ No instanciar FlowFields
-- ✅ Leer:
-  - `TileContext` (epochs, dirty flags)
-  - Metadata de `FlowFieldStorage`
-- ✅ Forzar cambios solo vía:
-  - `MarkStaticCostDirty`
-  - `MarkGoalsDirty(Intent)`
-
-### Acciones
-- Eliminar comandos:
-  - `SetBaseCapacity`
-  - `SetCurrentCount`
-  - `ClearCapacity`
-- Reemplazar validaciones por:
-  - checks de epochs
-  - estado baked / dirty
-- Si existe “rebuild now”:
-  - que **solo marque dirty**
-  - nunca ejecute solve directo
+Objetivo: evitar escrituras accidentales al intent `Players`.
 
 ---
 
-## 4. Goals — Estado aceptable (pero dejar explícito)
+## 3. FlowFieldConsoleLite.cpp — Dirty global incompleto
 
-### Estado actual
-- Goals viven en el Subsystem
-- `FlowFieldSystem` los escribe
-- `FFlowField::Rebuild()` los consume
-
-Esto **está OK para MVP**, pero parece legacy si no se documenta.
-
-### Acción recomendada
-- Agregar comentario/TODO explícito:
-  - Goals son globales **solo en MVP**
-  - El contrato final es por intent (y potencialmente por tile)
-- (Opcional) separar `GoalsByIntent`
-
-> No es obligatorio refactorizar ahora.
+### 3.1 `grid.occ.set`
+✔ Correcto  
+- Marca dirty de costos estáticos
+- Calcula TileXY correctamente
 
 ---
 
-## 5. Regla de coherencia que falta sellar (IMPORTANTE)
+### 3.2 `grid.occ.clear`
+❌ Incompleto para el pipeline nuevo
 
-### Regla del pipeline nuevo
-Antes de resolver un FlowField:
-- `TileStaticData.BakedStaticCostEpoch`
-  **debe coincidir con**
-- `TileContext.StaticCostEpoch`
+Actualmente:
+- Limpia el grid
+- No invalida tiles
+- No avanza epochs
+- No marca dirty
 
-### Acción
-- Dejar esto explícito:
-  - comentario
-  - check debug
-  - assert opcional
+### Cambio requerido
+Al limpiar ocupación global:
+- Marcar dirty de costos estáticos para los tiles afectados  
+  **o**
+- Disparar una invalidación/rebuild global vía sistema de epochs
 
-Esto garantiza:
-- bake → solve siempre en orden correcto
-- nunca se resuelve con datos stale
-
----
-
-## Definition of Done — Pipeline viejo eliminado
-
-El pipeline viejo se considera **completamente eliminado** cuando:
-
-- [ ] El solver no incluye heat, capacity ni occupancy live
-- [ ] No existe `FlowFieldRegistry`
-- [ ] La consola no toca Capacity ni crea FlowFields
-- [ ] El rebuild ocurre solo por epochs + dirty flags
-- [ ] El solver consume solo `FinalCost_Static`
-- [ ] La coherencia bake → solve está explícita
+Objetivo: que los flowfields reflejen el estado real del grid luego del clear.
 
 ---
 
-## Estado final esperado
+### 3.3 Limpieza de comandos/documentación
+En comentarios de ayuda todavía aparecen:
+- comandos de capacity / pipeline viejo
 
-- Arquitectura clara
-- Responsabilidades bien separadas
-- Pipeline determinista
-- MVP sólido y extensible
-- Sin residuos legacy ocultos
+### Cambio requerido
+- Eliminar referencias a comandos que ya no existen
+- Dejar la consola alineada con el pipeline actual
 
-> A partir de este punto, cualquier feature nueva (capacity, heat, repulsion, multiplayer) entra **como extensión**, no como parche.
+---
+
+## 4. Estado final esperado
+
+Una vez aplicados estos cambios:
+- No quedan loops de rebuild
+- El estado “sin goals” está bien definido
+- El solver tiene un contrato claro (MVP)
+- La consola no deja el sistema en estado inconsistente
+- No quedan rastros funcionales del pipeline viejo
+
+Esto cierra formalmente la eliminación del pipeline anterior.

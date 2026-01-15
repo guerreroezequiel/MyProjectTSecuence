@@ -51,7 +51,9 @@ void FFlowField::Rebuild(FTileContext& Context, EFlowIntent Intent)
     const Grid::Flow::FGoalSet& Goals = Subsystem->Goals;
     if (Goals.GoalCells.Num() == 0)
     {
-        // Sin metas, no hay nada que resolver
+        // Sin metas: marcar como construido con los epochs actuales para evitar loops de rebuild
+        Grid::Flow::SetBuiltMeta(Context.GetTileXY(), Intent, Context.GetStaticCostEpoch(), Context.GetGoalsEpoch(Intent));
+        Context.IncrementFlowEpoch(Intent);
         return;
     }
 

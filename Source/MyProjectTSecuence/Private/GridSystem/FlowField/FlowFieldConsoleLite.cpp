@@ -20,13 +20,15 @@
 #include "DrawDebugHelpers.h"
 #include "Containers/Ticker.h"
 
-// Minimal console: Occupancy and Flow debug (no Capacity, no FlowFieldRegistry)
+// Minimal console: Occupancy and Flow debug (no FlowFieldRegistry)
 // Commands:
-// - grid.cap.set_base x y v
-// - grid.cap.set_count x y v
-// - grid.cap.clear
 // - grid.occ.set x y state (0=Empty,1=Obstacle,2=Portal)
 // - grid.occ.clear
+// - grid.flow.set_goal x y
+// - ff.valid tx ty
+// - tile.info tx ty
+// - tile.arrows.on / tile.arrows.off
+// - grid.flow.arrow.spawn x y
 
 // Globals for tile border debug tick
 static bool GTileBordersEnabled = false;
@@ -259,8 +261,6 @@ static FAutoConsoleCommand GCmdTileArrowsOff(
         UE_LOG(LogTemp, Log, TEXT("Tile arrows OFF (cleared)"));
     })
 );
-// grid.cap.set_base x y v
-// Removed capacity commands (grid.cap.*) per new pipeline
 // grid.flow.arrow.spawn x y
 static FAutoConsoleCommand GCmdGridFlowArrowSpawn(
     TEXT("grid.flow.arrow.spawn"),
@@ -358,11 +358,7 @@ static FAutoConsoleCommand GCmdGridFlowShowArrows(
     })
 );
 
-// grid.cap.set_count x y v
-// Removed capacity commands (grid.cap.*) per new pipeline
-
-// grid.cap.clear
-// Removed capacity commands (grid.cap.*) per new pipeline
+ 
 
 // grid.occ.set x y state
 static FAutoConsoleCommand GCmdGridOccSet(
@@ -414,8 +410,23 @@ static FAutoConsoleCommand GCmdGridOccClear(
     TEXT("Clear entire occupancy grid"),
     FConsoleCommandDelegate::CreateStatic([]()
     {
+        // Limpiar ocupación global
         Grid::ClearAll();
-        UE_LOG(LogTemp, Log, TEXT("Occupancy cleared"));
+
+        // Marcar todos los tiles como StaticCostDirty (pipeline nuevo)
+        const int32 Dim = GridConfig::WorldDim;
+        for (int32 ty = 0; ty < Dim; ++ty)
+        {
+            for (int32 tx = 0; tx < Dim; ++tx)
+            {
+                const FIntPoint TileXY(tx, ty);
+                if (TSharedPtr<FTileContext> Ctx = Grid::Tiles::EnsureTileContext(TileXY); Ctx.IsValid())
+                {
+                    Ctx->MarkStaticCostDirty();
+                }
+            }
+        }
+        UE_LOG(LogTemp, Log, TEXT("Occupancy cleared; all tiles flagged StaticCostDirty"));
     })
 );
 
