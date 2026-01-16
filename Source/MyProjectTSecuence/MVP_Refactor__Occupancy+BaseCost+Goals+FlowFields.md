@@ -44,31 +44,16 @@
 
 ---
 
-## 2) Estructura macro por tile: TileContext
-### 2.1 Qué vive dentro (mínimo)
-**Grids**
-- OccupancyHardGrid
-- BaseCostGrid
-- FinalCost_StaticGrid
-
-**Goals**
-- Goals_Players (sourceCells[])
-- Goals_Influences (sourceCells[])
-- Goals_Ambient (sourceCells[])
-
-**FlowFields**
-- FF_Players
-- FF_Influences
-- FF_Ambient
-
+## 2) Estructura por tile (separación de responsabilidades)
+### 2.1 TileContext — metadatos (mínimo)
 **Epochs**
 - StaticCostEpoch
 - GoalsEpoch_Players
 - GoalsEpoch_Influences
 - GoalsEpoch_Ambient
-- FlowEpoch_Players
-- FlowEpoch_Influences
-- FlowEpoch_Ambient
+- FlowEpoch_Players (debug)
+- FlowEpoch_Influences (debug)
+- FlowEpoch_Ambient (debug)
 
 **DirtyFlags**
 - bStaticCostDirty
@@ -76,15 +61,36 @@
 - bGoalsDirty_Influences
 - bGoalsDirty_Ambient
 
-### 2.2 Responsabilidad del TileContext
-- Ser el “contenedor” único de estado macro por tile.
-- No tomar decisiones de gameplay.
-- No mover entidades.
-- No mezclar intenciones (mantener 3 FF separados).
+> No contiene datos pesados ni buffers. Solo metadatos/versionado.
+
+### 2.2 TileStaticData — caches estáticos (por tile)
+**Grids**
+- OccupancyHardGrid
+- BaseCostGrid
+- FinalCost_StaticGrid
+
+**Baked**
+- BakedStaticCostEpoch (época con la que se horneó FinalCost_Static)
+
+> Se actualiza cuando `StaticCostEpoch` avanza y se rehace `FinalCost_Static`.
+
+### 2.3 FlowFieldStorage — caches runtime (por intención)
+**FlowFields (por tile/intención)**
+- FF_Players: DistanceGrid + DirectionGrid + BuiltStaticCostEpoch + BuiltGoalsEpoch
+- FF_Influences: idem
+- FF_Ambient: idem
+
+> Almacenamiento de lectura (ECS/Systems consumen direcciones). No guarda estado por entidad.
+
+### 2.4 Responsabilidades
+- TileContext: versionado (epochs) + suciedad (dirty) — liviano.
+- TileStaticData: datos estáticos cacheados — costo de memoria por tile.
+- FlowFieldStorage: resultados de solver por intención — cache runtime por tile/intent.
 
 **Criterio de completitud**
-- Podés loggear: epochs + dirty flags + tamaños de grids.
-- Podés activar/desactivar visualización de cada FF por separado.
+- Podés loggear: epochs y dirty flags desde TileContext.
+- Podés inspeccionar tamaños de grids en TileStaticData.
+- Podés visualizar direcciones desde FlowFieldStorage.
 
 ---
 
@@ -104,9 +110,10 @@ Marcan `bStaticCostDirty = true`:
 - Cambios en BaseCost
 - Inicialización del tile
 
-### 3.4 Epoch
-Cuando se reconstruye FinalCost_Static:
-- `StaticCostEpoch++`
+### 3.4 Epoch y datos horneados
+Cuando se reconstruye `FinalCost_Static`:
+- `StaticCostEpoch++` en TileContext
+- `BakedStaticCostEpoch = StaticCostEpoch` en TileStaticData
 - `bStaticCostDirty = false`
 
 **Criterio de completitud**
@@ -130,8 +137,10 @@ Cuando se reconstruye FinalCost_Static:
 
 ### 4.4 Epochs
 Cuando se actualizan goals de una intención:
-- `GoalsEpoch_Intent++`
+- `GoalsEpoch_Intent++` en TileContext
 - `bGoalsDirty_Intent = false`
+
+> Ownership: vive en un System por tile (no en TileContext). Emite cambios que impactan epochs/dirty.
 
 **Criterio de completitud**
 - GoalsEpoch_Players sube cuando el player cambia de celda.
@@ -140,7 +149,7 @@ Cuando se actualizan goals de una intención:
 ---
 
 ## 5) FlowFields (3 intenciones, cache determinista)
-### 5.1 Qué contiene cada FlowField
+### 5.1 Qué contiene cada FlowField (FlowFieldStorage)
 - DistanceGrid (o equivalente)
 - DirectionGrid (vector por celda)
 - “BuiltWith”:
@@ -166,13 +175,14 @@ Un FF es válido si:
 ### 6.1 Orden (por tile)
 1) Recolectar cambios → marcar dirty
 2) Si `bStaticCostDirty`:
-   - Rebuild FinalCost_Static
-   - StaticCostEpoch++
+   - Rebuild FinalCost_Static (TileStaticData)
+   - StaticCostEpoch++ (TileContext)
+   - BakedStaticCostEpoch = StaticCostEpoch (TileStaticData)
 3) Si `bGoalsDirty_*`:
-   - Update goals del intent
-   - GoalsEpoch_Intent++
+   - Update goals del intent (GoalsRegistry en System)
+   - GoalsEpoch_Intent++ (TileContext)
 4) Validar FFs (Players/Influences/Ambient)
-5) Rebuild FF inválidos con prioridad:
+5) Rebuild FF inválidos (FlowFieldStorage) con prioridad:
    - FF_Players
    - FF_Influences
    - FF_Ambient

@@ -103,3 +103,4 @@ void UGridEpochSubsystem::RequestDirtyRebuildAll()
 	// TODO: implementar escaneo de tiles del mundo y marcarlos sucios.
 	// Ejemplo (pseudo): Grid::Flow::MarkTilesDirty(MinTile, MaxTile);
 }
+                                                                                                                                
