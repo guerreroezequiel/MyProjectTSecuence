@@ -14,6 +14,7 @@ UMoveIntegrateProcessor::UMoveIntegrateProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    UE_LOG(LogTemp, Log, TEXT("MoveIntegrateProcessor: Initialized (Phase=PrePhysics)"));
 }
 
 void UMoveIntegrateProcessor::ConfigureQueries()

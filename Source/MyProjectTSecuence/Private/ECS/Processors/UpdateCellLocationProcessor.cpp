@@ -14,6 +14,7 @@ UUpdateCellLocationProcessor::UUpdateCellLocationProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    UE_LOG(LogTemp, Log, TEXT("UpdateCellLocationProcessor: Initialized (Phase=PrePhysics)"));
 }
 
 void UUpdateCellLocationProcessor::ConfigureQueries()

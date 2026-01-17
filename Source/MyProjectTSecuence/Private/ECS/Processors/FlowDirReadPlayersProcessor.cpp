@@ -13,6 +13,7 @@ UFlowDirReadPlayersProcessor::UFlowDirReadPlayersProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    UE_LOG(LogTemp, Log, TEXT("FlowDirReadPlayersProcessor: Initialized (Phase=PrePhysics)"));
 }
 
 void UFlowDirReadPlayersProcessor::ConfigureQueries()
