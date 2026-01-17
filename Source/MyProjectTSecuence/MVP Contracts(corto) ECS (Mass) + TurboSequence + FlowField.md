@@ -8,6 +8,11 @@ Spawnear entidades Mass por consola y que **todas**:
 
 Sin estados, sin idle, sin blending, sin avoidance.
 
+## Pluggins
+- MassEntity
+- MassGameplay
+
+
 ---
 
 ## 1) Datos ECS mínimos
