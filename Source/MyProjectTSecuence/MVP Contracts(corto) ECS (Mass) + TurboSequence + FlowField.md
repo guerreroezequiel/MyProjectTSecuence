@@ -1,213 +1,118 @@
-# MVP — Resumen Ejecutivo y Orden de Implementación  
-**ECS (Mass) + FlowField + TurboSequence**  
-**Escalable a 10k–50k entidades | Enfoque por celda | Multiplayer-ready (diseño)**
+# MVP Ultra-min — Mass ECS + leer FlowField (Intent = Players) + consola spawn
+
+## Objetivo
+Spawnear entidades Mass por consola y que **todas**:
+1) calculen `TileXY + CellIndex`
+2) lean **FlowField Intent = Players**
+3) muevan su posición siguiendo `DirField`
+
+Sin estados, sin idle, sin blending, sin avoidance.
 
 ---
 
-## 1. Qué es este sistema (resumen corto)
+## 1) Datos ECS mínimos
 
-Este MVP define un **pipeline claro y eficiente** para manejar hordas masivas usando:
+### Tag
+- `FZombiTag` (o `FTestFFTag`) para filtrar la query.
 
-- **ECS (Mass)** como fuente de verdad (lógica y movimiento)
-- **FlowField** como guía de movimiento **por celda**
-- **TurboSequence** solo para render y animación masiva
+### Fragments
+1) `FZombiCoreFragment` (o un core mínimo)
+- `FVector Position`
+- `FRotator Rotation`
 
-El diseño prioriza:
-- costo **por tile/celda**, no por entidad
-- determinismo (pensado para multiplayer)
-- desacople total entre gameplay y render
+2) `FCellLocationFragment`
+- `FIntPoint TileXY`
+- `int32 CellIndex`
+- `bool bValid`
+
+3) `FFlowReadFragment`
+- `FVector DirWS`
+- `int32 EpochSeen`
+- `bool bValid`
+
+4) `FMoveFragment`
+- `float Speed`
 
 ---
 
-## 2. Principios clave (no negociables)
+## 2) Contrato mínimo con FlowFieldStorage
 
-- **ECS decide**  
-  Estados, intención, movimiento y animación lógica.
+Necesitamos **una sola llamada** para leer el campo del tile:
 
-- **FlowField orienta**  
-  Da direcciones macro por celda. No conoce entidades.
-
-- **TurboSequence muestra**  
-  Solo visual. No toma decisiones de gameplay.
+`TryGetFieldView(TileXY, EFlowIntent::Players) -> { DirFieldPtr, Epoch, bValid }`
 
 Reglas:
-- ❌ No sample caro por entidad  
-- ❌ No RNG global  
-- ❌ No sync visual innecesario  
-- ✅ Dirty flags + LOD por tile  
-- ✅ Seeds deterministas  
+- `DirFieldPtr` es válido durante el tick (read-only).
+- Si no existe / no está built / tile cold sin build => `bValid=false`.
 
 ---
 
-## 3. Flujo real de una entidad (paso a paso)
+## 3) Processors mínimos (en orden)
 
-1. **Transform → TileXY + CellIndex**  
-   Solo si la entidad cambia de celda.
+> Todos en `EMassProcessingPhase::PrePhysics` y con `bAutoRegisterWithProcessingPhases=true`.
 
-2. **Lectura de FlowField (por celda)**  
-   - `Dir = DirField[cellIndex]`
-   - Validación por `Epoch`
-   - Sin cálculos pesados
+### A) UpdateCellLocationProcessor
+**Core(Position) -> CellLocation(TileXY, CellIndex, bValid)**
 
-3. **Dirección → Intención**
-   - Idle / Walk / Run
-   - Velocidad y dirección deterministas
+- Convierte `Position` a `TileXY`
+- Convierte `Position` a `CellXY` dentro del tile
+- Calcula `CellIndex` tile-local
 
-4. **Integración de movimiento**
-   - Simple
-   - Sin física
-   - Preferible FixedDeltaTime
-
-5. **Derivación de estado de animación**
-   - Estado abstracto
-   - Seed determinista
-
-6. **Sync visual**
-   - Solo si cambió algo (Dirty)
-   - Respetando LOD del tile
+Si la posición está fuera del mundo: `bValid=false`.
 
 ---
 
-## 4. Qué vive dónde (ultra resumido)
+### B) FlowDirReadPlayersProcessor
+**CellLocation -> FlowRead**
 
-### ECS (Mass)
-- Transform
-- MoveIntent
-- SimMovement
-- AnimState
-- Determinism
-- DirtyFlags
-
-### FlowField / Grid
-- DirectionField por celda
-- Epochs
-- HOT / WARM / COLD
-
-### TurboSequence
-- Render
-- Animación
-- Instancing
-- LOD visual
+- Si `CellLocation.bValid==false` => `FlowRead.bValid=false`
+- `view = FlowFieldStorage.TryGetFieldView(TileXY, Players)`
+- Si `view.bValid` y `CellIndex` en rango:
+  - `DirWS = view.DirFieldPtr[CellIndex]`
+  - `EpochSeen = view.Epoch`
+  - `bValid=true`
+- Si no:
+  - `bValid=false`
 
 ---
 
-## 5. Orden recomendado de implementación
+### C) MoveIntegrateProcessor
+**FlowRead + Move + Core -> Core(Position/Rotation)**
 
-### 🥇 Paso 1 — Grid + FlowField (sin entidades)
-Antes de tocar ECS:
-
-- TileXY y CellIndex bien definidos
-- DirectionField por celda funcionando
-- Epoch por tile/intención
-- API: `TryGetFieldView(TileXY, Intent)`
-
-**Objetivo:**  
-Poder pedir *“dame la dirección de esta celda”* de forma determinista.
+- Si `FlowRead.bValid`:
+  - `Vel = Normalize(DirWS) * Speed`
+  - `Position += Vel * DeltaSeconds`
+  - `Rotation` mira hacia `Vel` si `|Vel| > EPS`
+- Si no:
+  - no mueve (o vel=0)
 
 ---
 
-### 🥈 Paso 2 — UpdateCellLocationSystem
-Primer system ECS real:
+## 4) Spawn por consola (mínimo)
 
-- Lee Transform
-- Calcula TileXY + CellIndex
-- Escribe solo si cambió de celda
+### Subsystem (Spawn/Clear)
+- `SpawnZombis(int32 Count, float Radius)`
+  - crea `Count` entidades con:
+    - `Core.Position = PlayerPos + RandomPointInCircle(Radius)` *(esto es “random de spawn”, no de movimiento)*
+    - `Move.Speed = default`
+    - `CellLocation.bValid=false` (se completa en el primer tick)
+    - `FlowRead.bValid=false`
+    - Tag `FZombiTag`
 
-**Objetivo:**  
-Las entidades saben **dónde están en el grid**.
+- `ClearZombis()`
 
----
-
-### 🥉 Paso 3 — FlowDirReadSystem
-- Lee FlowCell + FlowQuery
-- Lee FlowField (RO)
-- Obtiene Dir + Epoch + bValid
-
-**Objetivo:**  
-Dirección **por celda**, sin lógica extra.
+### Comandos
+- `ecs.spawn <count> <radius>`
+- `ecs.clear`
 
 ---
 
-### 🏃 Paso 4 — MoveIntentSystem
-- Convierte dirección → intención
-- Maneja fallback (Idle si inválido)
-- No mueve entidades
-
-**Objetivo:**  
-Separar **intención** de **resultado**.
-
----
-
-### 🧱 Paso 5 — IntegrateMovementSystem
-- Aplica movimiento simple
-- Actualiza Transform y Velocity
-- Marca Dirty con reglas claras
-
-**Objetivo:**  
-Movimiento barato, estable y reproducible.
+## 5) Definition of Done
+- `ecs.spawn 500 2000` crea entidades.
+- En el tick:
+  - se calcula tile/cell
+  - se lee **Players** flowfield
+  - las entidades se mueven hacia el/los goals de Players.
+- `ecs.clear` borra todo.
 
 ---
-
-### 🎭 Paso 6 — AnimStateSystem
-- Deriva Idle / Walk / Run
-- Usa seeds deterministas
-- Marca Dirty solo si cambia
-
-**Objetivo:**  
-Animación coherente sin depender de TurboSequence.
-
----
-
-### 🎨 Paso 7 — TurboSequenceSyncSystem
-- Lee Transform + AnimState
-- Respeta Dirty + LOD
-- **No modifica ECS**
-
-**Objetivo:**  
-Render masivo sin romper performance.
-
----
-
-## 6. Regla de oro para no desviarse
-
-Cuando aparezca una duda, preguntarse:
-
-> **¿Esto depende de la entidad o de la celda/tile?**
-
-- Si es **por entidad** → debe ser liviano.
-- Si es **por celda/tile** → ahí puede vivir lo pesado.
-- Si es **visual** → va a TurboSequence, nunca a ECS.
-
----
-
-## 7. En qué NO pensar todavía (fuera del MVP)
-
-- Avoidance fino
-- Colisiones físicas
-- Steering complejo
-- Replicación real
-- Combate
-
-Todo eso **se apoya sobre este sistema**, no forma parte del MVP.
-
----
-
-## 8. Cierre
-
-Este MVP define una base:
-
-- simple
-- determinista
-- altamente escalable
-- sin refactors futuros grandes
-
-Una vez implementado, cualquier feature nueva
-(hordas inteligentes, multiplayer, avoidance, combate)
-**se enchufa arriba**, no rompe contratos.
-
----
-
-### Próximo paso lógico (cuando estés listo)
-Definir el **contrato de decisión de `FlowIntent`**
-(Players / Ambient / Influences)  
-sin introducir random per-entity.
