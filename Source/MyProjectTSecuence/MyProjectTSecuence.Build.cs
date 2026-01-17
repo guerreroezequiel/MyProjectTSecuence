@@ -10,7 +10,16 @@ public class MyProjectTSecuence : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { 
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"MassEntity", "GameplayDebugger", "TurboSequence_Lf", 
+			"MassEntity", 
+			"MassCommon",
+			"MassSpawner",
+			"MassMovement",
+			"MassActors",
+			"MassRepresentation",
+			"MassSignals",
+			"MassSimulation",
+			"GameplayDebugger", 
+			"TurboSequence_Lf", 
 			"UMG", "Slate", "SlateCore"
         });
 
