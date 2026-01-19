@@ -7,7 +7,6 @@
 #include "MassMovementFragments.h"
 #include "ECS/Fragments/FlowReadFragment.h"
 #include "ECS/Fragments/MoveFragment.h"
-#include "ECS/Fragments/ZombiCoreFragment.h"
 #include "ECS/Tags/ZombiTag.h"
 
 UMoveIntegrateProcessor::UMoveIntegrateProcessor()
@@ -20,7 +19,6 @@ UMoveIntegrateProcessor::UMoveIntegrateProcessor()
 void UMoveIntegrateProcessor::ConfigureQueries()
 {
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FZombiCoreFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FFlowReadFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMoveFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddTagRequirement<FZombiTag>(EMassFragmentPresence::All);
@@ -34,7 +32,6 @@ void UMoveIntegrateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
     EntityQuery.ForEachEntityChunk(EntityManager, Context, [DeltaTime](FMassExecutionContext& Context)
     {
         const TArrayView<FTransformFragment> TransformFragments = Context.GetMutableFragmentView<FTransformFragment>();
-        const TArrayView<FZombiCoreFragment> CoreFragments = Context.GetMutableFragmentView<FZombiCoreFragment>();
         const TConstArrayView<FFlowReadFragment> FlowReadFragments = Context.GetFragmentView<FFlowReadFragment>();
         const TConstArrayView<FMoveFragment> MoveFragments = Context.GetFragmentView<FMoveFragment>();
         
@@ -42,7 +39,6 @@ void UMoveIntegrateProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FTransformFragment& Transform = TransformFragments[i];
-            FZombiCoreFragment& Core = CoreFragments[i];
             const FFlowReadFragment& FlowRead = FlowReadFragments[i];
             const FMoveFragment& Move = MoveFragments[i];
             

@@ -2,6 +2,7 @@
 #include "GridSystem/Core/GridWorld.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
 #include "GridSystem/Core/GridEpochSubsystem.h"
+#include "GridSystem/FlowField/FlowFieldStorageSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
@@ -76,8 +77,25 @@ FVector2D UFlowFieldMovementComponent::GetFlowDirectionAtPosition(const FVector&
     // Obtener coordenada de celda
     const FIntPoint CellCoord = GetCellCoordinate(WorldPosition);
     
-    // Leer dirección del FlowField
-    CachedFlowDirection = Grid::Flow::ReadDir(CellCoord);
+    // Leer dirección del FlowField desde el Subsystem por-World (snapshots inmutables)
+    CachedFlowDirection = FVector2D::ZeroVector;
+    if (UWorld* World = GetWorld())
+    {
+        if (UFlowFieldStorageSubsystem* StorageSubsystem = UFlowFieldStorageSubsystem::Get(World))
+        {
+            const FIntPoint TileXY = GridWorld::CellToTileXY(CellCoord);
+            const FIntPoint LocalXY = GridWorld::LocalCellInTile(CellCoord);
+            const Grid::Flow::FFieldView View = StorageSubsystem->TryGetFieldView(TileXY, EFlowIntent::Players);
+            if (View.bValid && View.DirPtr)
+            {
+                const int32 Idx = Grid::Flow::LocalIndex(LocalXY);
+                if (View.DirPtr->IsValidIndex(Idx))
+                {
+                    CachedFlowDirection = (*View.DirPtr)[Idx];
+                }
+            }
+        }
+    }
     
     return CachedFlowDirection;
 }

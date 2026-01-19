@@ -14,7 +14,19 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+// TurboSequence
+#include "TurboSequence_Lf/Public/TurboSequence_Manager_Lf.h"
+#include "TurboSequence_Lf/Public/TurboSequence_MinimalData_Lf.h"
+#include "TurboSequence_Lf/Public/TurboSequence_MeshAsset_Lf.h"
+#include "ECS/Fragments/TurboSequenceInstanceFragment.h"
 
+namespace
+{
+    // Default TS Mesh Asset can be overridden at runtime via console command Entity.SetTSAsset <ObjectPath>
+    static TSoftObjectPtr<UTurboSequence_MeshAsset_Lf> GDefaultTSAsset = TSoftObjectPtr<UTurboSequence_MeshAsset_Lf>(
+        FSoftObjectPath(TEXT("/Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/Characters/Mannequins/TurboSequence/TS_Zombie_MeshAsset.TS_Zombie_MeshAsset'"))
+    );
+}
 TArray<FAutoConsoleCommand*> UEntityDebugSpawnerSubsystem::ConsoleCommands;
 
 void UEntityDebugSpawnerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -71,7 +83,8 @@ void UEntityDebugSpawnerSubsystem::SetupArchetype()
         FCellLocationFragment::StaticStruct(),
         FFlowReadFragment::StaticStruct(),
         FMoveFragment::StaticStruct(),
-        FZombiCoreFragment::StaticStruct()
+        FZombiCoreFragment::StaticStruct(),
+        FTurboSequenceInstanceFragment::StaticStruct()
     };
     // Tags required by processors
     const UScriptStruct* RequiredTag = FZombiTag::StaticStruct();
@@ -133,6 +146,10 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
             FInstancedStruct CoreIS; CoreIS.InitializeAs<FZombiCoreFragment>();
             FragmentList.Add(CoreIS);
 
+            // Ensure the TurboSequence fragment is present even in fallback
+            FInstancedStruct TSIS; TSIS.InitializeAs<FTurboSequenceInstanceFragment>();
+            FragmentList.Add(TSIS);
+
             const FMassEntityHandle H = EntityManager.CreateEntity(FragmentList);
             if (H.IsValid())
             {
@@ -148,12 +165,10 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
         }
     }
 
-    for (int32 i = 0; i < Count; ++i)
+    // Iterate over actually created entities to ensure all get initialized
+    const int32 NumSpawned = NewEntities.Num();
+    for (int32 i = 0; i < NumSpawned; ++i)
     {
-        if (!NewEntities.IsValidIndex(i))
-        {
-            break;
-        }
         const float Angle = FMath::FRand() * 2.0f * PI;
         const float Distance = FMath::FRand() * Radius;
         const FVector SpawnLocation = Origin + FVector(FMath::Cos(Angle) * Distance, FMath::Sin(Angle) * Distance, 0.0f);
@@ -179,12 +194,23 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
         // Ensure required tag is present so processors pick up the entity
         EntityManager.AddTagToEntity(NewEntities[i], FZombiTag::StaticStruct());
 
+        // Initialize TurboSequence fragment so the TS sync processor can create the visual instance
+        FTurboSequenceInstanceFragment& TS = View.GetFragmentData<FTurboSequenceInstanceFragment>();
+        TS.bInstanceCreated = false;
+        TS.MeshData = FTurboSequence_MinimalMeshData_Lf(false);
+        // Assign MeshAsset from configurable default (can be changed via Entity.SetTSAsset)
+        TS.MeshAsset = GDefaultTSAsset.LoadSynchronous();
+        if (!TS.MeshAsset)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SpawnEntities: Default TS Mesh Asset is not set or failed to load. Entity will skip TS creation until set."));
+        }
+
         SpawnedEntities.Add(NewEntities[i]);
 
         UE_LOG(LogTemp, Verbose, TEXT("SpawnEntities: entity[%d] valid=%d index=%d"), i, NewEntities[i].IsValid() ? 1 : 0, NewEntities[i].Index);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("SpawnEntities: spawned %d"), Count);
+    UE_LOG(LogTemp, Log, TEXT("SpawnEntities: spawned %d (initialized %d)"), Count, NumSpawned);
 
     // Enable debug spheres to visualize positions immediately
     SetDebugVisualization(true);
@@ -205,6 +231,15 @@ void UEntityDebugSpawnerSubsystem::ClearAllEntities()
     {
         if (Entity.IsValid())
         {
+            // Remove TurboSequence instance if present
+            FMassEntityView View(EntityManager, Entity);
+            if (const FTurboSequenceInstanceFragment* TS = View.GetFragmentDataPtr<FTurboSequenceInstanceFragment>())
+            {
+                if (TS->bInstanceCreated && TS->MeshData.IsMeshDataValid())
+                {
+                    ATurboSequence_Manager_Lf::RemoveSkinnedMeshInstance_GameThread(TS->MeshData, GetWorld());
+                }
+            }
             EntityManager.DestroyEntity(Entity);
         }
     }
@@ -327,6 +362,31 @@ void UEntityDebugSpawnerSubsystem::RegisterConsoleCommands()
         FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteReRegister)
     );
     ConsoleCommands.Add(ReregisterCmd);
+    
+    auto SetTSAssetCmd = new FAutoConsoleCommand(
+        TEXT("Entity.SetTSAsset"),
+        TEXT("Set default TurboSequence Mesh Asset for future spawns. Usage: Entity.SetTSAsset <ObjectPath> (e.g. /Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/...')"),
+        FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+        {
+            if (Args.Num() < 1)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Entity.SetTSAsset: missing <ObjectPath>"));
+                return;
+            }
+            const FString& Path = Args[0];
+            // Load synchronously to validate path using StaticLoadObject
+            UTurboSequence_MeshAsset_Lf* Loaded = Cast<UTurboSequence_MeshAsset_Lf>(StaticLoadObject(UTurboSequence_MeshAsset_Lf::StaticClass(), nullptr, *Path));
+            if (!Loaded)
+            {
+                UE_LOG(LogTemp, Error, TEXT("Entity.SetTSAsset: failed to load asset at path: %s"), *Path);
+                return;
+            }
+            // Assign by path to avoid deprecated operator= warnings
+            GDefaultTSAsset = TSoftObjectPtr<UTurboSequence_MeshAsset_Lf>(FSoftObjectPath(Path));
+            UE_LOG(LogTemp, Log, TEXT("Entity.SetTSAsset: set default TS asset to %s"), *Path);
+        })
+    );
+    ConsoleCommands.Add(SetTSAssetCmd);
     UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister"));
 }
 

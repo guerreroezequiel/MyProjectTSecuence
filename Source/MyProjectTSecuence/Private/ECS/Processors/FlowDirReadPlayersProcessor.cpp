@@ -1,9 +1,11 @@
 // Copyright 2024 MyProjectTSec
 
 #include "ECS/Processors/FlowDirReadPlayersProcessor.h"
+#include "ECS/Processors/MoveIntegrateProcessor.h"
 #include "MassExecutionContext.h"
 #include "MassEntitySubsystem.h"
 #include "GridSystem/FlowField/FlowFieldStorage.h"
+#include "GridSystem/FlowField/FlowFieldStorageSubsystem.h"
 #include "GridSystem/FlowField/FlowFieldTypes.h"
 #include "ECS/Fragments/FlowReadFragment.h"
 #include "ECS/Fragments/CellLocationFragment.h"
@@ -13,6 +15,8 @@ UFlowDirReadPlayersProcessor::UFlowDirReadPlayersProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
+    // Debe ejecutar antes que MoveIntegrateProcessor
+    ExecutionOrder.ExecuteBefore.Add(UMoveIntegrateProcessor::StaticClass()->GetFName());
     UE_LOG(LogTemp, Log, TEXT("FlowDirReadPlayersProcessor: Initialized (Phase=PrePhysics)"));
 }
 
@@ -26,7 +30,10 @@ void UFlowDirReadPlayersProcessor::ConfigureQueries()
 
 void UFlowDirReadPlayersProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext& Context)
+    UWorld* World = EntityManager.GetWorld();
+    UFlowFieldStorageSubsystem* StorageSubsystem = UFlowFieldStorageSubsystem::Get(World);
+
+    EntityQuery.ForEachEntityChunk(EntityManager, Context, [StorageSubsystem](FMassExecutionContext& Context)
     {
         const TConstArrayView<FCellLocationFragment> CellLocationFragments = Context.GetFragmentView<FCellLocationFragment>();
         const TArrayView<FFlowReadFragment> FlowReadFragments = Context.GetMutableFragmentView<FFlowReadFragment>();
@@ -36,39 +43,32 @@ void UFlowDirReadPlayersProcessor::Execute(FMassEntityManager& EntityManager, FM
         {
             const FCellLocationFragment& CellLocation = CellLocationFragments[i];
             FFlowReadFragment& FlowRead = FlowReadFragments[i];
-            
+
             // Inicializar como no válido por defecto
             FlowRead.bValid = false;
-            
+
             if (CellLocation.bValid)
             {
-                // Convertir de TileXY + CellIndex a coordenadas de celda globales
-                // Primero obtenemos las coordenadas locales dentro del tile
-                const int32 LocalX = CellLocation.CellIndex % GridConfig::TileDim;
-                const int32 LocalY = CellLocation.CellIndex / GridConfig::TileDim;
-                const FIntPoint LocalCellXY(LocalX, LocalY);
-                
-                // Convertir a coordenadas de celda globales
-                const FIntPoint GlobalCellXY(
-                    CellLocation.TileXY.X * GridConfig::TileDim + LocalCellXY.X,
-                    CellLocation.TileXY.Y * GridConfig::TileDim + LocalCellXY.Y
-                );
-                
-                // Obtener la dirección del flujo para la celda actual
-                const FVector2D FlowDir = Grid::Flow::ReadDir(GlobalCellXY, EFlowIntent::Players);
-                
-                if (!FlowDir.IsNearlyZero())
+                // Obtener una vista del campo por Tile e Intent via Subsystem
+                Grid::Flow::FFieldView View;
+                if (StorageSubsystem)
                 {
-                    // Actualizar la dirección del flujo (normalizada)
-                    FlowRead.DirWS = FVector(FlowDir.X, FlowDir.Y, 0.0f).GetSafeNormal();
-                    
-                    // Intentar obtener el epoch del campo de flujo
-                    int32 StaticCostEpoch, GoalsEpoch;
-                    Grid::Flow::GetBuiltMeta(CellLocation.TileXY, EFlowIntent::Players, StaticCostEpoch, GoalsEpoch);
-                    
-                    // Usar el máximo de los dos epochs como referencia
-                    FlowRead.EpochSeen = FMath::Max(StaticCostEpoch, GoalsEpoch);
-                    FlowRead.bValid = true;
+                    View = StorageSubsystem->TryGetFieldView(CellLocation.TileXY, EFlowIntent::Players);
+                }
+                if (View.bValid && View.DirPtr)
+                {
+                    const TArray<FVector2D>& DirField = *View.DirPtr;
+                    const int32 Idx = CellLocation.CellIndex;
+                    if (DirField.IsValidIndex(Idx))
+                    {
+                        const FVector2D FlowDir = DirField[Idx];
+                        if (!FlowDir.IsNearlyZero())
+                        {
+                            FlowRead.DirWS = FVector(FlowDir.X, FlowDir.Y, 0.0f).GetSafeNormal();
+                            FlowRead.EpochSeen = View.Epoch; // usar epoch combinado del storage
+                            FlowRead.bValid = true;
+                        }
+                    }
                 }
             }
         }

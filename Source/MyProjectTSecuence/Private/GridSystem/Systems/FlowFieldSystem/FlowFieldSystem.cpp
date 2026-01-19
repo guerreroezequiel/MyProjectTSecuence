@@ -10,6 +10,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "GridSystem/Core/GridEpochSubsystem.h"
+#include "GridSystem/FlowField/FlowFieldStorageSubsystem.h"
 
 UFlowFieldSystem::UFlowFieldSystem()
 {
@@ -95,6 +96,20 @@ void UFlowFieldSystem::RebuildFlowField(const TSharedPtr<FTileContext>& Tile, EF
     // - Actualizar visualización
     
     UE_LOG(LogTemp, Verbose, TEXT("FlowField reconstruido para Intent: %d"), static_cast<int32>(Intent));
+
+    // Publicar snapshot inmutable en el Subsystem per-World
+    if (UWorld* World = GetWorld())
+    {
+        if (UFlowFieldStorageSubsystem* StorageSubsystem = UFlowFieldStorageSubsystem::Get(World))
+        {
+            const FIntPoint TileXYCtx = Tile->GetTileXY();
+            const Grid::Flow::FFieldView View = Grid::Flow::TryGetFieldView(TileXYCtx, Intent);
+            if (View.bValid && View.DirPtr)
+            {
+                StorageSubsystem->Publish(TileXYCtx, Intent, *View.DirPtr, View.StaticCostEpoch, View.GoalsEpoch);
+            }
+        }
+    }
 }
 
 void UFlowFieldSystem::InitializeWorldTiles()
