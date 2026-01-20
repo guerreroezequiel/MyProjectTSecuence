@@ -11,6 +11,13 @@
 #include "ECS/Fragments/CellLocationFragment.h"
 #include "ECS/Tags/ZombiTag.h"
 
+// CVars: frames para reutilizar última dirección válida cuando snapshot no está disponible
+static TAutoConsoleVariable<int32> CVarFlowFallbackFrames(
+    TEXT("ts.Flow.FallbackFrames"),
+    5,
+    TEXT("If > 0, reuse last valid flow direction for up to N frames when current read is invalid"),
+    ECVF_Default);
+
 UFlowDirReadPlayersProcessor::UFlowDirReadPlayersProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
@@ -44,7 +51,7 @@ void UFlowDirReadPlayersProcessor::Execute(FMassEntityManager& EntityManager, FM
             const FCellLocationFragment& CellLocation = CellLocationFragments[i];
             FFlowReadFragment& FlowRead = FlowReadFragments[i];
 
-            // Inicializar como no válido por defecto
+            // Inicializar como no válido por defecto (lo ajustaremos más abajo)
             FlowRead.bValid = false;
 
             if (CellLocation.bValid)
@@ -67,9 +74,20 @@ void UFlowDirReadPlayersProcessor::Execute(FMassEntityManager& EntityManager, FM
                             FlowRead.DirWS = FVector(FlowDir.X, FlowDir.Y, 0.0f).GetSafeNormal();
                             FlowRead.EpochSeen = View.Epoch; // usar epoch combinado del storage
                             FlowRead.bValid = true;
+                            // Actualizar cache de última dirección válida
+                            FlowRead.CachedLastValidDirWS = FlowRead.DirWS;
+                            FlowRead.FallbackFramesLeft = CVarFlowFallbackFrames.GetValueOnAnyThread();
                         }
                     }
                 }
+            }
+
+            // Fallback si la lectura no fue válida pero tenemos cache utilizable
+            if (!FlowRead.bValid && FlowRead.FallbackFramesLeft > 0 && !FlowRead.CachedLastValidDirWS.IsNearlyZero())
+            {
+                FlowRead.DirWS = FlowRead.CachedLastValidDirWS;
+                FlowRead.bValid = true;
+                FlowRead.FallbackFramesLeft = FMath::Max(0, FlowRead.FallbackFramesLeft - 1);
             }
         }
     });

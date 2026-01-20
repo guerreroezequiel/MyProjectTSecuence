@@ -36,4 +36,12 @@ struct MYPROJECTTSECUENCE_API FFlowReadFragment : public FMassFragment
     /** Indica si la lectura es válida */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FlowField|Read")
     bool bValid = false;
+
+    /** Dirección válida más reciente para fallback cuando no hay snapshot o es cero */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlowField|Read")
+    FVector CachedLastValidDirWS = FVector::ZeroVector;
+
+    /** Cuántos frames podemos seguir usando la dirección en cache si no hay lectura válida */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FlowField|Read")
+    int32 FallbackFramesLeft = 0;
 };

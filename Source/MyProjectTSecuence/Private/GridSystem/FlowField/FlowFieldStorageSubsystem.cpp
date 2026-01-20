@@ -19,44 +19,62 @@ void UFlowFieldStorageSubsystem::Deinitialize()
 
 Grid::Flow::FFieldView UFlowFieldStorageSubsystem::TryGetFieldView(const FIntPoint& TileXY, EFlowIntent Intent) const
 {
-	// Intentar leer desde el storage per-World primero
 	Grid::Flow::FFieldView View;
-	if (const TMap<EFlowIntent, FFieldSnapshot>* ByIntent = Storage.Find(TileXY))
+	if (const TMap<EFlowIntent, TSharedPtr<const FFieldSnapshot>>* ByIntent = Storage.Find(TileXY))
 	{
-		if (const FFieldSnapshot* Snap = ByIntent->Find(Intent))
+		if (const TSharedPtr<const FFieldSnapshot>* SnapPtr = ByIntent->Find(Intent))
 		{
-			View.DirPtr = &Snap->Dir;
-			View.StaticCostEpoch = Snap->StaticCostEpoch;
-			View.GoalsEpoch = Snap->GoalsEpoch;
-			View.Epoch = FMath::Max(View.StaticCostEpoch, View.GoalsEpoch);
-			const bool bEpochsReady = (View.StaticCostEpoch >= 0) && (View.GoalsEpoch >= 0);
-			const int32 ExpectedCells = GridConfig::TileDim * GridConfig::TileDim;
-			const bool bSizeOK = (View.DirPtr && View.DirPtr->Num() == ExpectedCells);
-			View.bValid = bEpochsReady && bSizeOK;
-			if (View.bValid)
+			const TSharedPtr<const FFieldSnapshot>& Snap = *SnapPtr;
+			if (Snap.IsValid())
 			{
-				return View;
+				View.DirPtr = &Snap->Dir;
+				View.StaticCostEpoch = Snap->StaticCostEpoch;
+				View.GoalsEpoch = Snap->GoalsEpoch;
+				View.Epoch = FMath::Max(View.StaticCostEpoch, View.GoalsEpoch);
+				const bool bEpochsReady = (View.StaticCostEpoch >= 0) && (View.GoalsEpoch >= 0);
+				const int32 ExpectedCells = GridConfig::TileDim * GridConfig::TileDim;
+				const bool bSizeOK = (View.DirPtr && View.DirPtr->Num() == ExpectedCells);
+				View.bValid = bEpochsReady && bSizeOK;
 			}
 		}
 	}
-
-	// Fallback al storage global existente
-	return Grid::Flow::TryGetFieldView(TileXY, Intent);
+	return View;
 }
 
 void UFlowFieldStorageSubsystem::Publish(const FIntPoint& TileXY, EFlowIntent Intent, const TArray<FVector2D>& Dir, int32 StaticCostEpoch, int32 GoalsEpoch)
 {
-	FFieldSnapshot& Slot = Storage.FindOrAdd(TileXY).FindOrAdd(Intent);
-	Slot.Dir = Dir; // copia defensiva; optimizable con MoveTemp si el caller puede ceder propiedad
-	Slot.StaticCostEpoch = StaticCostEpoch;
-	Slot.GoalsEpoch = GoalsEpoch;
+	TSharedPtr<FFieldSnapshot> NewSnap = MakeShared<FFieldSnapshot>();
+	NewSnap->Dir = Dir;
+	NewSnap->StaticCostEpoch = StaticCostEpoch;
+	NewSnap->GoalsEpoch = GoalsEpoch;
+	Storage.FindOrAdd(TileXY).FindOrAdd(Intent) = NewSnap;
 }
 
 void UFlowFieldStorageSubsystem::Publish(const FIntPoint& TileXY, EFlowIntent Intent, const TArray<FVector2D>& Dir, const TArray<float>& Dist, int32 StaticCostEpoch, int32 GoalsEpoch)
 {
-	FFieldSnapshot& Slot = Storage.FindOrAdd(TileXY).FindOrAdd(Intent);
-	Slot.Dir = Dir;
-	Slot.Dist = Dist;
-	Slot.StaticCostEpoch = StaticCostEpoch;
-	Slot.GoalsEpoch = GoalsEpoch;
+	TSharedPtr<FFieldSnapshot> NewSnap = MakeShared<FFieldSnapshot>();
+	NewSnap->Dir = Dir;
+	NewSnap->Dist = Dist;
+	NewSnap->StaticCostEpoch = StaticCostEpoch;
+	NewSnap->GoalsEpoch = GoalsEpoch;
+	Storage.FindOrAdd(TileXY).FindOrAdd(Intent) = NewSnap;
+}
+
+void UFlowFieldStorageSubsystem::Publish(const FIntPoint& TileXY, EFlowIntent Intent, TArray<FVector2D>&& Dir, int32 StaticCostEpoch, int32 GoalsEpoch)
+{
+	TSharedPtr<FFieldSnapshot> NewSnap = MakeShared<FFieldSnapshot>();
+	NewSnap->Dir = MoveTemp(Dir);
+	NewSnap->StaticCostEpoch = StaticCostEpoch;
+	NewSnap->GoalsEpoch = GoalsEpoch;
+	Storage.FindOrAdd(TileXY).FindOrAdd(Intent) = NewSnap;
+}
+
+void UFlowFieldStorageSubsystem::Publish(const FIntPoint& TileXY, EFlowIntent Intent, TArray<FVector2D>&& Dir, TArray<float>&& Dist, int32 StaticCostEpoch, int32 GoalsEpoch)
+{
+	TSharedPtr<FFieldSnapshot> NewSnap = MakeShared<FFieldSnapshot>();
+	NewSnap->Dir = MoveTemp(Dir);
+	NewSnap->Dist = MoveTemp(Dist);
+	NewSnap->StaticCostEpoch = StaticCostEpoch;
+	NewSnap->GoalsEpoch = GoalsEpoch;
+	Storage.FindOrAdd(TileXY).FindOrAdd(Intent) = NewSnap;
 }

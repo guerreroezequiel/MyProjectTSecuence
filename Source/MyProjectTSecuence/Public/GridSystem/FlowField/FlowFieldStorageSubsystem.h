@@ -25,6 +25,10 @@ public:
 	// Overload opcional: publicar también Dist (cost-to-go) si está disponible
 	void Publish(const FIntPoint& TileXY, EFlowIntent Intent, const TArray<FVector2D>& Dir, const TArray<float>& Dist, int32 StaticCostEpoch, int32 GoalsEpoch);
 
+	// Overloads con move para evitar copias
+	void Publish(const FIntPoint& TileXY, EFlowIntent Intent, TArray<FVector2D>&& Dir, int32 StaticCostEpoch, int32 GoalsEpoch);
+	void Publish(const FIntPoint& TileXY, EFlowIntent Intent, TArray<FVector2D>&& Dir, TArray<float>&& Dist, int32 StaticCostEpoch, int32 GoalsEpoch);
+
 private:
 	// Snapshot inmutable por (TileXY, Intent) dentro de este World
 	struct FFieldSnapshot
@@ -35,6 +39,6 @@ private:
 		int32 GoalsEpoch = -1;
 	};
 
-	// Storage por World: TileXY -> (Intent -> Snapshot)
-	TMap<FIntPoint, TMap<EFlowIntent, FFieldSnapshot>> Storage;
+	// Storage por World: TileXY -> (Intent -> Snapshot inmutable por puntero)
+	TMap<FIntPoint, TMap<EFlowIntent, TSharedPtr<const FFieldSnapshot>>> Storage;
 };

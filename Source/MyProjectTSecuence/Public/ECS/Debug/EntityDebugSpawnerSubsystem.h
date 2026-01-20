@@ -42,15 +42,20 @@ public:
 	void ForceRegisterConsoleCommands();
 
 private:
-	// Console registration
-	static TArray<FAutoConsoleCommand*> ConsoleCommands;
-	static void RegisterConsoleCommands();
-	static void UnregisterConsoleCommands();
-	static void ExecuteSpawnEntities(const TArray<FString>& Args);
-	static void ExecuteClearEntities(const TArray<FString>& Args);
-	static void ExecuteToggleDebug(const TArray<FString>& Args);
-	static void ExecuteReRegister(const TArray<FString>& Args);
-	static UWorld* ResolveActiveWorld();
+    // Console registration
+    static TArray<FAutoConsoleCommand*> ConsoleCommands;
+    static void RegisterConsoleCommands();
+    static void UnregisterConsoleCommands();
+    static void ExecuteSpawnEntities(const TArray<FString>& Args);
+    static void ExecuteClearEntities(const TArray<FString>& Args);
+    static void ExecuteToggleDebug(const TArray<FString>& Args);
+    static void ExecuteReRegister(const TArray<FString>& Args);
+
+    // NUEVOS: declarar handlers de consola
+    static void ExecuteMarkTSForCleanup(const TArray<FString>& Args);
+    static void ExecuteClearEntitiesSafe(const TArray<FString>& Args);
+
+    static UWorld* ResolveActiveWorld();
 
 	// Internal helpers
 	void SetupArchetype();
