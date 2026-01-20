@@ -1,4 +1,5 @@
 #include "ECS/Processors/TurboSequenceSolveProcessor.h"
+#include "Misc/CoreMisc.h"
 
 #include "MassExecutionContext.h"
 #include "MassEntitySubsystem.h"
@@ -11,7 +12,7 @@ UTurboSequenceSolveProcessor::UTurboSequenceSolveProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
-    bRequiresGameThreadExecution = true;
+    //bRequiresGameThreadExecution = true;
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     // Ensure Solve runs after Sync within the same phase (expects FName)
     ExecutionOrder.ExecuteAfter.Add(UTurboSequenceSyncProcessor::StaticClass()->GetFName());
@@ -26,7 +27,7 @@ void UTurboSequenceSolveProcessor::ConfigureQueries()
 void UTurboSequenceSolveProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = EntityManager.GetWorld();
-    if (!World || !World->IsGameWorld() || World->bIsTearingDown || GIsRequestingExit)
+    if (!World || !World->IsGameWorld() || World->bIsTearingDown || IsEngineExitRequested())
     {
         return;
     }
@@ -59,7 +60,7 @@ void UTurboSequenceSolveProcessor::Execute(FMassEntityManager& EntityManager, FM
     FTurboSequence_UpdateContext_Lf UpdateCtx(0); // Group 0 por defecto
     
     // Validar Manager nuevamente antes de usarlo
-    if (Manager && Manager->IsValidLowLevel() && !Manager->IsPendingKill())
+    if (IsValid(Manager))
     {
         ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, World, UpdateCtx);
     }

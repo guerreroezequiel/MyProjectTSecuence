@@ -58,27 +58,8 @@ void UEntityDebugSpawnerSubsystem::Deinitialize()
         World->GetTimerManager().ClearTimer(DebugTimerHandle);
     }
 
-    // Remove any TS instances before destroying entities to avoid shutdown crashes
-    if (MassEntitySubsystem)
-    {
-        FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
-        for (const FMassEntityHandle& Entity : SpawnedEntities)
-        {
-            if (Entity.IsValid())
-            {
-                FMassEntityView View(EntityManager, Entity);
-                if (const FTurboSequenceInstanceFragment* TS = View.GetFragmentDataPtr<FTurboSequenceInstanceFragment>())
-                {
-                    if (TS->bInstanceCreated && TS->MeshData.IsMeshDataValid())
-                    {
-                        ATurboSequence_Manager_Lf::RemoveSkinnedMeshInstance_GameThread(TS->MeshData, GetWorld());
-                    }
-                }
-            }
-        }
-    }
-    // Destroy any spawned entities
-    if (MassEntitySubsystem)
+    // Destroy any spawned entities only if the Mass subsystem is still valid
+    if (IsValid(MassEntitySubsystem))
     {
         FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
         for (const FMassEntityHandle& Entity : SpawnedEntities)

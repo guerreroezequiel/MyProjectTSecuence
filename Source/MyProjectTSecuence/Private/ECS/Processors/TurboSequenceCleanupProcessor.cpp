@@ -1,4 +1,5 @@
 #include "ECS/Processors/TurboSequenceCleanupProcessor.h"
+#include "Misc/CoreMisc.h"
 
 #include "MassExecutionContext.h"
 #include "MassEntitySubsystem.h"
@@ -10,7 +11,7 @@ UTurboSequenceCleanupProcessor::UTurboSequenceCleanupProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PostPhysics; // GameThread, mismo que Sync/Solve
-    bRequiresGameThreadExecution = true;
+    //bRequiresGameThreadExecution = true;
     // Debe ejecutar antes que Solve para no procesar instancias que serán removidas
     ExecutionOrder.ExecuteBefore.Add(UTurboSequenceSolveProcessor::StaticClass()->GetFName());
     UE_LOG(LogTemp, Log, TEXT("TurboSequenceCleanupProcessor: Initialized (Phase=PostPhysics)"));
@@ -26,7 +27,7 @@ void UTurboSequenceCleanupProcessor::ConfigureQueries()
 void UTurboSequenceCleanupProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = EntityManager.GetWorld();
-    if (!World || !World->IsGameWorld() || World->bIsTearingDown || GIsRequestingExit)
+    if (!World || !World->IsGameWorld() || World->bIsTearingDown || IsEngineExitRequested())
     {
         return;
     }
@@ -55,7 +56,7 @@ void UTurboSequenceCleanupProcessor::Execute(FMassEntityManager& EntityManager, 
             FTurboSequenceInstanceFragment& TS = TSFragments[i];
             if (TS.bInstanceCreated && TS.MeshData.IsMeshDataValid())
             {
-                if (Manager && Manager->IsValidLowLevel() && !Manager->IsPendingKill())
+                if (IsValid(Manager))
                 {
                     ATurboSequence_Manager_Lf::RemoveSkinnedMeshInstance_GameThread(TS.MeshData, World);
                     UE_LOG(LogTemp, Log, TEXT("TS Cleanup: Removed instance for pending cleanup entity"));
@@ -73,7 +74,7 @@ void UTurboSequenceCleanupProcessor::Execute(FMassEntityManager& EntityManager, 
 
 void UTurboSequenceCleanupProcessor::RemoveTSInstanceIfValid(UWorld* World, FTurboSequenceInstanceFragment& TS) const
 {
-    if (!World || !World->IsGameWorld() || World->bIsTearingDown || GIsRequestingExit)
+    if (!World || !World->IsGameWorld() || World->bIsTearingDown || IsEngineExitRequested())
     {
         return;
     }

@@ -22,6 +22,7 @@
 // Utilities
 #include "EngineUtils.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/CoreMisc.h"
 
 // CVars para gating
 static TAutoConsoleVariable<float> CVarTsSyncEpsPos(
@@ -52,7 +53,7 @@ UTurboSequenceSyncProcessor::UTurboSequenceSyncProcessor()
 {
     bAutoRegisterWithProcessingPhases = true;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
-    bRequiresGameThreadExecution = true;
+    //bRequiresGameThreadExecution = true;
     // Ensure Cleanup runs before Sync within the same phase
     ExecutionOrder.ExecuteAfter.Add(UTurboSequenceCleanupProcessor::StaticClass()->GetFName());
     // Ensure Sync runs before Solve within the same phase
@@ -78,7 +79,7 @@ static float GetDeltaYawDegrees(float A, float B)
 void UTurboSequenceSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = EntityManager.GetWorld();
-    if (!World || !World->IsGameWorld() || World->bIsTearingDown || GIsRequestingExit)
+    if (!World || !World->IsGameWorld() || World->bIsTearingDown || IsEngineExitRequested())
     {
         return;
     }
@@ -221,7 +222,7 @@ void UTurboSequenceSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
                 if (bDoSync)
                 {
-                    if (Manager && Manager->IsValidLowLevel() && !Manager->IsPendingKill())
+                    if (IsValid(Manager))
                     {
                         ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_RawID_Concurrent(TS.MeshData.RootMotionMeshID, Xf, true);
                     }
