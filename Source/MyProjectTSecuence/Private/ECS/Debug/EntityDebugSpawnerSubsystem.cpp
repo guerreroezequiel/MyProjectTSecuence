@@ -14,22 +14,8 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
-// TurboSequence
-#include "TurboSequence_Lf/Public/TurboSequence_Manager_Lf.h"
-#include "TurboSequence_Lf/Public/TurboSequence_MinimalData_Lf.h"
-#include "TurboSequence_Lf/Public/TurboSequence_MeshAsset_Lf.h"
-#include "ECS/Fragments/TurboSequenceInstanceFragment.h"
 #include "ECS/Fragments/TileLODFragment.h"
-#include "ECS/Tags/TSPendingCleanupTag.h"
 
-
-namespace
-{
-    // Default TS Mesh Asset can be overridden at runtime via console command Entity.SetTSAsset <ObjectPath>
-    static TSoftObjectPtr<UTurboSequence_MeshAsset_Lf> GDefaultTSAsset = TSoftObjectPtr<UTurboSequence_MeshAsset_Lf>(
-        FSoftObjectPath(TEXT("/Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/Characters/Mannequins/TurboSequence/TS_Zombie_MeshAsset.TS_Zombie_MeshAsset'"))
-    );
-}
 TArray<FAutoConsoleCommand*> UEntityDebugSpawnerSubsystem::ConsoleCommands;
 
 void UEntityDebugSpawnerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -87,8 +73,7 @@ void UEntityDebugSpawnerSubsystem::SetupArchetype()
         FFlowReadFragment::StaticStruct(),
         FMoveFragment::StaticStruct(),
         FZombiCoreFragment::StaticStruct(),
-        FTurboSequenceInstanceFragment::StaticStruct(),
-        FTileLODFragment::StaticStruct() // <-- agregar
+        FTileLODFragment::StaticStruct()
     };
     // Tags required by processors
     const UScriptStruct* RequiredTag = FZombiTag::StaticStruct();
@@ -150,12 +135,8 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
             FInstancedStruct CoreIS; CoreIS.InitializeAs<FZombiCoreFragment>();
             FragmentList.Add(CoreIS);
 
-            // Ensure the TurboSequence fragment is present even in fallback
-            FInstancedStruct TSIS; TSIS.InitializeAs<FTurboSequenceInstanceFragment>();
-            FragmentList.Add(TSIS);
-
             FInstancedStruct LODIS; LODIS.InitializeAs<FTileLODFragment>();
-FragmentList.Add(LODIS);
+            FragmentList.Add(LODIS);
 
             const FMassEntityHandle H = EntityManager.CreateEntity(FragmentList);
             if (H.IsValid())
@@ -174,17 +155,6 @@ FragmentList.Add(LODIS);
 
     // Iterate over actually created entities to ensure all get initialized
     const int32 NumSpawned = NewEntities.Num();
-
-    // Cargar una sola vez el asset TS por batch (evita LoadSynchronous por entidad)
-    UTurboSequence_MeshAsset_Lf* DefaultTSAsset = GDefaultTSAsset.LoadSynchronous();
-    if (!DefaultTSAsset)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("SpawnEntities: Default TS Mesh Asset failed to load. TS instances will be skipped until set."));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log, TEXT("SpawnEntities: Using DefaultTSAsset %s"), *DefaultTSAsset->GetPathName());
-    }
 
     for (int32 i = 0; i < NumSpawned; ++i)
     {
@@ -213,38 +183,9 @@ FragmentList.Add(LODIS);
         // Ensure required tag is present so processors pick up the entity
         EntityManager.AddTagToEntity(NewEntities[i], FZombiTag::StaticStruct());
 
-        // Initialize TurboSequence fragment so the TS sync processor can create the visual instance
-        FTurboSequenceInstanceFragment& TS = View.GetFragmentData<FTurboSequenceInstanceFragment>();
-        TS.bInstanceCreated = false;
-        TS.MeshData = FTurboSequence_MinimalMeshData_Lf(false);
-
-        // Assign shared MeshAsset (cargado una sola vez por batch)
-        TS.MeshAsset = DefaultTSAsset;
-        if (!TS.MeshAsset)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("SpawnEntities: Default TS Mesh Asset is not set. Entity will skip TS creation until set."));
-        }
-        UE_LOG(LogTemp, Log, TEXT("SpawnEntities: entity[%d] TS.MeshAsset=%s"),i, TS.MeshAsset ? *TS.MeshAsset->GetPathName() : TEXT("NULL"));
         SpawnedEntities.Add(NewEntities[i]);
 
         UE_LOG(LogTemp, Verbose, TEXT("SpawnEntities: entity[%d] valid=%d index=%d"), i, NewEntities[i].IsValid() ? 1 : 0, NewEntities[i].Index);
-    }
-    // Fix-up: asegurar que todas las entidades tengan MeshAsset asignado
-    if (DefaultTSAsset)
-    {
-        for (int32 k = 0; k < NewEntities.Num(); ++k)
-        {
-            FMassEntityView ViewFix(EntityManager, NewEntities[k]);
-            if (!ViewFix.IsValid()) continue;
-            if (FTurboSequenceInstanceFragment* TSFix = ViewFix.GetFragmentDataPtr<FTurboSequenceInstanceFragment>())
-            {
-                if (TSFix->MeshAsset == nullptr)
-                {
-                    TSFix->MeshAsset = DefaultTSAsset;
-                    UE_LOG(LogTemp, Warning, TEXT("SpawnEntities: Fix-up applied: entity[%d] MeshAsset was NULL -> assigned default"), k);
-                }
-            }
-        }
     }
 
     UE_LOG(LogTemp, Log, TEXT("SpawnEntities: spawned %d (initialized %d)"), Count, NumSpawned);
@@ -268,15 +209,6 @@ void UEntityDebugSpawnerSubsystem::ClearAllEntities()
     {
         if (Entity.IsValid())
         {
-            // Remove TurboSequence instance if present
-            FMassEntityView View(EntityManager, Entity);
-            if (const FTurboSequenceInstanceFragment* TS = View.GetFragmentDataPtr<FTurboSequenceInstanceFragment>())
-            {
-                if (TS->bInstanceCreated && TS->MeshData.IsMeshDataValid())
-                {
-                    ATurboSequence_Manager_Lf::RemoveSkinnedMeshInstance_GameThread(TS->MeshData, GetWorld());
-                }
-            }
             EntityManager.DestroyEntity(Entity);
         }
     }
@@ -399,46 +331,6 @@ void UEntityDebugSpawnerSubsystem::RegisterConsoleCommands()
         FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteReRegister)
     );
     ConsoleCommands.Add(ReregisterCmd);
-    
-    auto SetTSAssetCmd = new FAutoConsoleCommand(
-        TEXT("Entity.SetTSAsset"),
-        TEXT("Set default TurboSequence Mesh Asset for future spawns. Usage: Entity.SetTSAsset <ObjectPath> (e.g. /Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/...')"),
-        FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
-        {
-            if (Args.Num() < 1)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Entity.SetTSAsset: missing <ObjectPath>"));
-                return;
-            }
-            const FString& Path = Args[0];
-            // Load synchronously to validate path using StaticLoadObject
-            UTurboSequence_MeshAsset_Lf* Loaded = Cast<UTurboSequence_MeshAsset_Lf>(StaticLoadObject(UTurboSequence_MeshAsset_Lf::StaticClass(), nullptr, *Path));
-            if (!Loaded)
-            {
-                UE_LOG(LogTemp, Error, TEXT("Entity.SetTSAsset: failed to load asset at path: %s"), *Path);
-                return;
-            }
-            // Assign by path to avoid deprecated operator= warnings
-            GDefaultTSAsset = TSoftObjectPtr<UTurboSequence_MeshAsset_Lf>(FSoftObjectPath(Path));
-            UE_LOG(LogTemp, Log, TEXT("Entity.SetTSAsset: set default TS asset to %s"), *Path);
-        })
-    );
-    ConsoleCommands.Add(SetTSAssetCmd);
-
-    auto MarkCleanupCmd = new FAutoConsoleCommand(
-    TEXT("Entity.MarkTSForCleanup"),
-    TEXT("Mark all spawned entities for TurboSequence cleanup via FTSPendingCleanupTag"),
-    FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteMarkTSForCleanup)
-    );
-    ConsoleCommands.Add(MarkCleanupCmd);
-
-    auto ClearSafeCmd = new FAutoConsoleCommand(
-        TEXT("Entity.ClearSafe"),
-        TEXT("Mark all spawned entities for TS cleanup and then destroy them"),
-        FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteClearEntitiesSafe)
-    );
-    ConsoleCommands.Add(ClearSafeCmd);
-
 
     UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister"));
 }
@@ -507,72 +399,4 @@ void UEntityDebugSpawnerSubsystem::ExecuteReRegister(const TArray<FString>& Args
     // static context, just call the static registration again
     UEntityDebugSpawnerSubsystem::RegisterConsoleCommands();
     UE_LOG(LogTemp, Log, TEXT("Entity.ReRegister -> done"));
-}
-
-
-void UEntityDebugSpawnerSubsystem::ExecuteMarkTSForCleanup(const TArray<FString>& Args)
-{
-    UWorld* World = UEntityDebugSpawnerSubsystem::ResolveActiveWorld();
-    if (!World) return;
-
-    if (auto* Subsystem = World->GetSubsystem<UEntityDebugSpawnerSubsystem>())
-    {
-        if (!Subsystem->MassEntitySubsystem)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Entity.MarkTSForCleanup: Mass subsystem not available"));
-            return;
-        }
-
-        FMassEntityManager& EntityManager = Subsystem->MassEntitySubsystem->GetMutableEntityManager();
-        int32 Marked = 0;
-        for (const FMassEntityHandle& Entity : Subsystem->SpawnedEntities)
-        {
-            if (!Entity.IsValid()) continue;
-            FMassEntityView View(EntityManager, Entity);
-            if (const FTurboSequenceInstanceFragment* TS = View.GetFragmentDataPtr<FTurboSequenceInstanceFragment>())
-            {
-                if (TS->bInstanceCreated && TS->MeshData.IsMeshDataValid())
-                {
-                    EntityManager.AddTagToEntity(Entity, FTSPendingCleanupTag::StaticStruct());
-                    ++Marked;
-                }
-            }
-        }
-        UE_LOG(LogTemp, Log, TEXT("Entity.MarkTSForCleanup: marked %d entities"), Marked);
-    }
-}
-
-void UEntityDebugSpawnerSubsystem::ExecuteClearEntitiesSafe(const TArray<FString>& Args)
-{
-    UWorld* World = UEntityDebugSpawnerSubsystem::ResolveActiveWorld();
-    if (!World) return;
-
-    if (auto* Subsystem = World->GetSubsystem<UEntityDebugSpawnerSubsystem>())
-    {
-        if (!Subsystem->MassEntitySubsystem)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Entity.ClearSafe: Mass subsystem not available"));
-            return;
-        }
-
-        FMassEntityManager& EntityManager = Subsystem->MassEntitySubsystem->GetMutableEntityManager();
-
-        // Marcar primero para cleanup TS
-        for (const FMassEntityHandle& Entity : Subsystem->SpawnedEntities)
-        {
-            if (!Entity.IsValid()) continue;
-            EntityManager.AddTagToEntity(Entity, FTSPendingCleanupTag::StaticStruct());
-        }
-
-        // Destruir entidades; el cleanup processor removerá las instancias antes del Solve
-        for (const FMassEntityHandle& Entity : Subsystem->SpawnedEntities)
-        {
-            if (Entity.IsValid())
-            {
-                EntityManager.DestroyEntity(Entity);
-            }
-        }
-        Subsystem->SpawnedEntities.Reset();
-        UE_LOG(LogTemp, Log, TEXT("Entity.ClearSafe: marked & destroyed all spawned entities"));
-    }
 }

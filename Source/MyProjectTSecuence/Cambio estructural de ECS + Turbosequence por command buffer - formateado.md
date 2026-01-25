@@ -1,227 +1,174 @@
-# TurboSequence + ECS (Mass) — Integración correcta y Online-Friendly
+# TurboSequence + Mass ECS — Implementación “oficial-style” (clean-room)
 
-> **Objetivo**
-> Definir la forma **correcta, robusta y escalable** de integrar **TurboSequence** con **ECS (Mass)**, evitando crashes en PIE, respetando el lifecycle del World y siendo compatible con multiplayer.
+Este diseño está construido **directamente** sobre la arquitectura recomendada en la doc oficial:
+- **Crear/registrar instancias** (GameThread)
+- **Actualizar todas las instancias en un loop grande** (ECS loop; puede ser multithread)
+- **Resolver (Solve) por Update Group** **una vez por frame** (GameThread)  
+y con **Update Groups auto-gestionados por vos** (self-managed). :contentReference[oaicite:0]{index=0}
 
-Este documento **no depende de tu implementación actual**: define el **patrón correcto** que usan los motores en producción cuando integran un sistema de render/animación externo con ECS.
-
----
-
-## 1. Estado real del arte (qué existe y qué no)
-
-### ❌ Lo que NO existe en internet
-- No hay ejemplo oficial de *TurboSequence + Mass*
-- No hay pipeline ECS publicado por el autor del plugin
-- No hay soporte multiplayer explícito
-
-### ✅ Lo que SÍ existe (implícito en el diseño del plugin)
-- TurboSequence es un **World-level render backend**
-- Usa un **Manager Actor** + **singleton global**
-- Está pensado para **batching masivo**, no para control por entidad
-
-👉 Conclusión:
-**TurboSequence NO es un “component system”**. Debe integrarse como **backend**, no como gameplay logic.
+> La wiki lo dice explícito: “ECS is totally fine… make sure to call SolveMeshes… one time per update group, one time a frame.” :contentReference[oaicite:1]{index=1}
 
 ---
 
-## 2. Principio fundamental (regla de oro)
+## 0) Contratos “oficiales” (no negociables)
 
-> **ECS describe intención.**  
-> **TurboSequence ejecuta en batch.**  
-> **Un único owner decide cuándo se llama al plugin.**
+### C0.1 — Solve por grupo, 1 vez por frame (GameThread)
+- Llamar `ATurboSequence_Manager_Lf::SolveMeshes_GameThread(DeltaTime, World, UpdateContext)`
+- **Una vez por UpdateGroup** y **una vez por frame**. :contentReference[oaicite:2]{index=2}
 
-Nadie fuera de ese owner debe llamar a TurboSequence.
+### C0.2 — Loop grande de updates antes del Solve
+La estructura recomendada es:
+1) “Game Thread Logic”
+2) **for loop** (todas las instancias, idealmente multithread)
+3) “Solve Update Group”
+4) “Game Thread Logic” :contentReference[oaicite:3]{index=3}
 
----
-
-## 3. Arquitectura correcta (visión general)
-
-[ECS / Mass]
-↓ (intención, datos)
-[Command Build Processor]
-↓ (colas de comandos)
-[TurboSequence World Subsystem] ← ÚNICO owner
-↓ (flush seguro)
-[TurboSequence Plugin]
+### C0.3 — Update Groups son self-managed
+- Agregar: `AddInstanceToUpdateGroup_Concurrent(GroupIndex, Instance)`
+- Remover: `RemoveInstanceFromUpdateGroup_Concurrent(GroupIndex, Instance)`  
+y **vos** tenés que add/remove cuando agregás/removés instancias. :contentReference[oaicite:4]{index=4}
 
 ---
 
-## 4. Responsabilidades claras por capa
+## 1) Clean-room: archivos nuevos (mínimos y correctos)
 
-### 4.1 ECS (Mass)
-- Mantiene **solo datos**
-- Decide:
-  - qué entidades necesitan TS
-  - cuándo deben actualizarse
-  - cuándo ya no deberían existir
-- **Nunca llama al plugin**
+### 1.1 Fragments (por entidad)
+**A) `FTurboSequenceFragment`**
+- `FTurboSequence_MeshSpawnData_Lf SpawnData` (o lo mínimo para spawn)
+- `TObjectPtr<UAnimSequence> Anim` (opcional si definís anim por entidad)
+- `FTurboSequence_AnimPlaySettings_Lf AnimSettings`
+- `FTurboSequence_MinimalMeshData_Lf Instance` (handle TS)
+- `int32 UpdateGroupIndex` (0..N)
+- `bool bHasInstance`
 
-#### Fragmentos típicos
-- `FTurboSequenceInstanceFragment`
-- `FTransformFragment`
-- `FTileLODFragment`
+> La doc muestra `FTurboSequence_MeshSpawnData_Lf` + `UAnimSequence` + `FTurboSequence_AnimPlaySettings_Lf` como el “setup mínimo”. :contentReference[oaicite:5]{index=5}
 
-#### Tags de intención (no ejecutan lógica)
-- `FTSNeedsCreateTag`
-- `FTSNeedsDestroyTag`
-- (opcional) `FTSDirtyTransformTag`
+**B) `FTurboSequenceDesiredTransformFragment` (opcional)**
+- Guardar transform “objetivo” si querés desacoplar del `TransformFragment`.
+- En MVP podés leer el `FTransformFragment` directo.
 
----
-
-### 4.2 Processors ECS
-
-#### A) Command Build Processor (PostPhysics, GameThread)
-
-Responsabilidad:
-- Recorrer entidades
-- Traducir estado ECS → **intención**
-- Escribir en colas de comandos del Subsystem
-
-Hace:
-- `RequestCreate`
-- `RequestUpdate`
-- `RequestDestroy`
-
-No hace:
-- ❌ Llamar a TurboSequence  
-- ❌ Resolver Manager  
-- ❌ Tocar singletons
+**C) Tags**
+- `FTurboSequenceTag` (marca entidades controladas por TS)
 
 ---
 
-### 4.3 World Owner (pieza central)
+## 2) Subsystem / Service (bridge mínimo)
 
-#### `UTurboSequenceWorldSubsystem`
-Este es el **único punto de contacto** con TurboSequence.
+### 2.1 `UTurboSequenceECSSubsystem`
+Responsabilidad: **solamente** proveer utilidades comunes (no “inventar” un pipeline alternativo).
 
-Contiene:
-- Estado del World
-- Referencia al Manager
-- Colas de comandos
-- Política de teardown
+Funciones:
+- `EnsureManager(World)` (si la doc/tu proyecto requiere encontrar al Manager; en TS la API es estática por clase en los ejemplos, pero el solve necesita `World`).
+- `SolveGroup(World, DeltaTime, GroupIndex)`  
+  Internamente:
+  - arma `FTurboSequence_UpdateContext_Lf UpdateContext; UpdateContext.GroupIndex = GroupIndex;`
+  - llama `SolveMeshes_GameThread(...)` :contentReference[oaicite:6]{index=6}
 
-```cpp
-enum class ETSWorldState
-{
-  Running,
-  ShuttingDown
-};
-```
-
-#### Colas
-- CreateCommands
-- UpdateCommands
-- DestroyCommands
-
-### 4.4 Flush único (la parte crítica)
-`TurboSequenceCommandFlushProcessor`
-
-_(PostPhysics, GameThread, último en orden)_
-
-Es el único lugar donde se llama al plugin.
-
-**Flujo**
-- Verificar estado del World (Running)
-- Validar World y Manager
-- Garantizar coherencia del singleton
-- Ejecutar comandos en orden: Destroy → Create → Update
-- Solve (1 vez por frame)
-- Limpiar colas
-
-Garantiza:
-- **Cero llamadas dispersas**
-- **Cero efectos colaterales en teardown**
+> Importante: en el estilo oficial, el “subsystem” no es obligatorio. Es una comodidad tuya para centralizar “solve por grupo” y config. Lo que **sí** es obligatorio es el orden: update-loop → solve. :contentReference[oaicite:7]{index=7}
 
 ---
 
-## 5. Manejo correcto del lifecycle (PIE-proof)
+## 3) Processors (la implementación ECS siguiendo la doc)
 
-### 5.1 Estado explícito del World
+### 3.1 `UTurboSequenceSpawnProcessor` (GameThread, una vez o cuando haga falta)
+Objetivo: “create instance + add to group + play animation” tal como el ejemplo mínimo.
 
-El Subsystem escucha:
-- `OnWorldBeginTearDown`
-- `OnWorldCleanup`
+Para entidades con:
+- `FTurboSequenceTag`
+- `FTurboSequenceFragment`
+- (y opcional `TransformFragment`)
 
-Cuando ocurre:
-- `State = ShuttingDown`
-- Se bloquea cualquier Flush
-- No se llama al plugin
+Reglas:
+1) Si `bHasInstance == false`:
+   - `Instance = AddSkinnedMeshInstance_GameThread(SpawnData, Transform, World)` :contentReference[oaicite:8]{index=8}
+   - si `Instance.IsMeshDataValid()`:
+     - `AddInstanceToUpdateGroup_Concurrent(GroupIndex, Instance)` :contentReference[oaicite:9]{index=9}
+     - `PlayAnimation_Concurrent(Instance, Anim, AnimSettings)` :contentReference[oaicite:10]{index=10}
+     - set `bHasInstance=true`
 
-Esto evita:
-- último frame peligroso
-- llamadas tardías al plugin
-- crashes por singleton inválido
+> Este es literalmente el “Most Minimal Setup” de la doc, trasladado a un loop ECS. :contentReference[oaicite:11]{index=11}
 
-### 5.2 Guards reales (no cosméticos)
+### 3.2 `UTurboSequenceUpdateProcessor` (ECS loop grande, puede ser multithread)
+Objetivo: aplicar “Game Thread Logic / ECS updates” antes del Solve.
 
-En el Flush (todos deben cumplirse):
-- `World->IsGameWorld()`
-- `!World->bIsTearingDown`
-- `!GIsRequestingExit`
-- `IsValid(Manager)`
-- `!Manager->IsPendingKill()`
-- `!Manager->HasAnyFlags(RF_BeginDestroyed | RF_FinishDestroyed)`
+Para entidades con:
+- `FTurboSequenceTag`
+- `FTurboSequenceFragment`
+- `TransformFragment`
 
-Y solo ahí.
+Reglas (mínimas):
+- Si `bHasInstance` y `Instance.IsMeshDataValid()`:
+  - “empujar” transform actual al TS instance (la función exacta depende del API de TS que uses en tu versión; el punto es que este loop es el lugar oficial para actualizar todas las instancias). :contentReference[oaicite:12]{index=12}
+- (Opcional) cambios de anim, IK, root motion, etc. también se piden aquí (antes del solve)
 
----
+> La doc no obliga a un nombre de función para transform update en esta página, pero sí fija la **estructura**: loop grande (multithreadable) y luego solve por grupo. :contentReference[oaicite:13]{index=13}
 
-## 6. Multiplayer / Online-Friendly
+### 3.3 `UTurboSequenceSolveProcessor` (GameThread, PostUpdate)
+Objetivo: ejecutar el Solve en el lugar correcto.
 
-**Qué NO se replica**
-- Instancias TurboSequence
-- Animaciones
-- MeshData
-- LOD de render
+Regla:
+- Para cada `GroupIndex` activo:
+  - `SolveMeshes_GameThread(DeltaTime, World, UpdateContext)` una vez por frame. :contentReference[oaicite:14]{index=14}
 
-**Qué SÍ**
-- Posición / rotación
-- Estado lógico (Idle / Chase / Dead)
-- Epochs / seeds deterministas (si aplica)
+Notas:
+- Si tenés 1 solo grupo (0): llamás una vez.
+- Si tenés Hot/Warm/Cold: llamás para cada grupo que quieras resolver este frame.
+- Si implementás lag/budget: recordá que la doc menciona que al usar grupos “lag” frames y podés tener que **acumular DeltaTime** para grupos que no se resuelven cada frame. :contentReference[oaicite:15]{index=15}
 
-TurboSequence es 100% client-side.
+### 3.4 `UTurboSequenceDestroyProcessor` (GameThread)
+Objetivo: cuando una entidad deja de existir o deja de ser TS-renderable:
+- remover de update group (self-managed)
+- remover la instancia TS
 
-Este patrón:
-- evita divergencias
-- es determinista
-- escala bien con cientos/miles de entidades
-
----
-
-## 7. Por qué este patrón es el correcto
-
-Señales claras del plugin:
-- Singleton global
-- API batch
-- Solve explícito
-- World-level manager
-
-Todo indica: “Usame como backend, no como componente”.
+Reglas:
+- Si `bHasInstance && Instance.IsMeshDataValid()`:
+  - `RemoveInstanceFromUpdateGroup_Concurrent(GroupIndex, Instance)` :contentReference[oaicite:16]{index=16}
+  - llamar a la función de “remove instance” correspondiente a tu versión (en el README se menciona “Remove instances” como feature; en el ejemplo mínimo no aparece el remove, pero el contrato de self-managed update groups sí exige el remove del group). :contentReference[oaicite:17]{index=17}
+  - `bHasInstance=false` y invalidar handle
 
 ---
 
-## 8. Beneficios inmediatos
+## 4) Orden de ejecución recomendado (Mass)
 
-- ❌ No más crashes al cerrar PIE
-- ✅ Un solo lugar para debug
-- ✅ Menos llamadas por frame
-- ✅ Fácil de perfilar
-- ✅ Escalable (10k–50k entidades)
-- ✅ Multiplayer-safe
+### Fase sugerida (alineada con doc)
+- **PostPhysics / PostUpdate**
+  1) `TurboSequenceSpawnProcessor` (solo para nuevas)
+  2) `TurboSequenceUpdateProcessor` (loop grande)
+  3) `TurboSequenceSolveProcessor` (solve por grupo 1 vez)
 
----
-
-## 9. Regla final
-
-Si un sistema de render/animación puede romper PIE, no es un bug: es una señal de mala integración.
-
-La solución correcta es arquitectónica, no defensiva.
+La doc expresa el concepto “update all → solve group” (y no al revés). :contentReference[oaicite:18]{index=18}
 
 ---
 
-## 10. Próximo paso recomendado
+## 5) Update Groups: versión mínima “correcta” y extendible
 
-Aplicar esta estructura a tu repo actual:
-- fusionar Cleanup / Sync / Solve
-- mover lógica al Subsystem
-- dejar ECS como declarativo
+### v1 (mínima)
+- `GroupIndex = 0` para todo.
+- Solve group 0 una vez por frame. :contentReference[oaicite:19]{index=19}
+
+### v2 (hordas)
+- Hot=0, Warm=1, Cold=2
+- Warm/Cold resuelven menos frecuente (lag aceptable a distancia), como describe la doc. :contentReference[oaicite:20]{index=20}
+- Si un grupo no se resuelve en un frame, **acumular DeltaTime** para ese grupo. :contentReference[oaicite:21]{index=21}
+
+---
+
+## 6) “Oficial” también implica: pipeline de assets / cache
+Si ves posiciones de vértices incorrectas, el autor recomienda usar el botón **Invalid Cache** cerca del control panel, cerrar UE y reabrir para regenerar meshes. :contentReference[oaicite:22]{index=22}
+
+---
+
+## 7) Qué NO hacemos en esta arquitectura (porque no está en el “oficial-style”)
+- No hacemos “flush global” basado en command-buffers como requisito (podés hacerlo, pero la doc recomienda explícitamente “loop grande → solve”). :contentReference[oaicite:23]{index=23}
+- No metemos “pending tags” como parte esencial: la destrucción se modela con “dejar de ser renderable” y el DestroyProcessor.
+- No llamamos Solve múltiples veces por frame (prohibido por contrato). :contentReference[oaicite:24]{index=24}
+
+---
+
+## 8) Resumen en 10 líneas (lo que tenés que implementar)
+1) Fragment TS con `SpawnData + Anim + Settings + Instance + GroupIndex + bHasInstance`.
+2) SpawnProcessor: `AddSkinnedMeshInstance_GameThread` → `AddInstanceToUpdateGroup` → `PlayAnimation`. :contentReference[oaicite:25]{index=25}
+3) UpdateProcessor: loop grande actualiza todas las instancias (transforms/anim/IK si aplica). :contentReference[oaicite:26]{index=26}
+4) SolveProcessor: `SolveMeshes_GameThread` por grupo, 1 vez por frame. :contentReference[oaicite:27]{index=27}
+5) DestroyProcessor: `RemoveInstanceFromUpdateGroup` + remove instance (y limpiar fragment). :contentReference[oaicite:28]{index=28}
+
