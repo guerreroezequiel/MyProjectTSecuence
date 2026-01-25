@@ -16,6 +16,7 @@
 #include "ECS/Fragments/FlowReadFragment.h"
 #include "ECS/Fragments/MoveFragment.h"
 #include "ECS/Tags/ZombiTag.h"
+#include "TurboSequence_MeshAsset_Lf.h"
 #include "EntityDebugSpawnerSubsystem.generated.h"
 
 UCLASS()
@@ -28,11 +29,26 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
+	UPROPERTY(EditAnywhere, Category = "EntityDebugSpawner|TurboSequence")
+	TObjectPtr<UTurboSequence_MeshAsset_Lf> DebugTurboSequenceMeshAsset = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "EntityDebugSpawner|TurboSequence")
+	TObjectPtr<UAnimSequence> DebugTurboSequenceAnim = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "EntityDebugSpawner|TurboSequence")
+	int32 DebugTurboSequenceUpdateGroupIndex = 0;
+
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner")
 	void SpawnEntities(int32 Count = 10, float Radius = 1000.0f, FVector Origin = FVector::ZeroVector);
 
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner")
 	void ClearAllEntities();
+
+	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|TurboSequence")
+	void EnableTurboSequenceOnSpawnedEntities();
+
+	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|TurboSequence")
+	void MarkSpawnedEntitiesHidden();
 
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|Debug")
 	void SetDebugVisualization(bool bEnable);
@@ -50,6 +66,7 @@ private:
     static void ExecuteClearEntities(const TArray<FString>& Args);
     static void ExecuteToggleDebug(const TArray<FString>& Args);
     static void ExecuteReRegister(const TArray<FString>& Args);
+	static void ExecuteEnableTurboSequence(const TArray<FString>& Args);
 
     // NUEVOS: declarar handlers de consola
     static void ExecuteMarkTSForCleanup(const TArray<FString>& Args);

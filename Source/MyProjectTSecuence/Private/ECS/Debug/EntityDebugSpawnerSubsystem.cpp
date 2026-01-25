@@ -15,6 +15,9 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "ECS/Fragments/TileLODFragment.h"
+#include "ECS/Fragments/TurboSequenceFragment.h"
+#include "ECS/Tags/TurboSequenceTag.h"
+#include "ECS/Tags/HiddenTag.h"
 
 TArray<FAutoConsoleCommand*> UEntityDebugSpawnerSubsystem::ConsoleCommands;
 
@@ -23,6 +26,28 @@ void UEntityDebugSpawnerSubsystem::Initialize(FSubsystemCollectionBase& Collecti
     Super::Initialize(Collection);
 
     UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem::Initialize"));
+
+    if (!IsValid(DebugTurboSequenceMeshAsset))
+    {
+        DebugTurboSequenceMeshAsset = LoadObject<UTurboSequence_MeshAsset_Lf>(
+            nullptr,
+            TEXT("/Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/Characters/Mannequins/TurboSequence/TS_Zombie_MeshAsset.TS_Zombie_MeshAsset'"),
+            nullptr,
+            LOAD_None,
+            nullptr
+        );
+    }
+
+    if (!IsValid(DebugTurboSequenceAnim))
+    {
+        DebugTurboSequenceAnim = LoadObject<UAnimSequence>(
+            nullptr,
+            TEXT("/Script/Engine.AnimSequence'/Game/Characters/Mannequins/TurboSequence/MM_Walk_Fwd.MM_Walk_Fwd'"),
+            nullptr,
+            LOAD_None,
+            nullptr
+        );
+    }
 
     // Intento inicial de cachear el Mass subsystem (puede no estar listo aún)
     if (UWorld* World = GetWorld())
@@ -73,7 +98,8 @@ void UEntityDebugSpawnerSubsystem::SetupArchetype()
         FFlowReadFragment::StaticStruct(),
         FMoveFragment::StaticStruct(),
         FZombiCoreFragment::StaticStruct(),
-        FTileLODFragment::StaticStruct()
+        FTileLODFragment::StaticStruct(),
+        FTurboSequenceFragment::StaticStruct()
     };
     // Tags required by processors
     const UScriptStruct* RequiredTag = FZombiTag::StaticStruct();
@@ -138,6 +164,9 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
             FInstancedStruct LODIS; LODIS.InitializeAs<FTileLODFragment>();
             FragmentList.Add(LODIS);
 
+            FInstancedStruct TSIS; TSIS.InitializeAs<FTurboSequenceFragment>();
+            FragmentList.Add(TSIS);
+
             const FMassEntityHandle H = EntityManager.CreateEntity(FragmentList);
             if (H.IsValid())
             {
@@ -182,6 +211,8 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
 
         // Ensure required tag is present so processors pick up the entity
         EntityManager.AddTagToEntity(NewEntities[i], FZombiTag::StaticStruct());
+
+        // TurboSequence queda deshabilitado al spawn: se habilita con Entity.EnableTS
 
         SpawnedEntities.Add(NewEntities[i]);
 
@@ -332,7 +363,21 @@ void UEntityDebugSpawnerSubsystem::RegisterConsoleCommands()
     );
     ConsoleCommands.Add(ReregisterCmd);
 
-    UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister"));
+    auto EnableTSCmd = new FAutoConsoleCommand(
+        TEXT("Entity.EnableTS"),
+        TEXT("Enable TurboSequence for all spawned debug entities"),
+        FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteEnableTurboSequence)
+    );
+    ConsoleCommands.Add(EnableTSCmd);
+
+    auto HideCmd = new FAutoConsoleCommand(
+        TEXT("Entity.Hide"),
+        TEXT("Mark all spawned debug entities with HiddenTag (triggers TS DestroyProcessor)"),
+        FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteMarkTSForCleanup)
+    );
+    ConsoleCommands.Add(HideCmd);
+
+    UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister, Entity.EnableTS, Entity.Hide"));
 }
 
 void UEntityDebugSpawnerSubsystem::UnregisterConsoleCommands()
@@ -399,4 +444,72 @@ void UEntityDebugSpawnerSubsystem::ExecuteReRegister(const TArray<FString>& Args
     // static context, just call the static registration again
     UEntityDebugSpawnerSubsystem::RegisterConsoleCommands();
     UE_LOG(LogTemp, Log, TEXT("Entity.ReRegister -> done"));
+}
+
+void UEntityDebugSpawnerSubsystem::EnableTurboSequenceOnSpawnedEntities()
+{
+    if (!MassEntitySubsystem)
+        return;
+
+    FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+
+    for (const FMassEntityHandle& Entity : SpawnedEntities)
+    {
+        if (!Entity.IsValid())
+            continue;
+
+        FMassEntityView View(EntityManager, Entity);
+        FTurboSequenceFragment& TSFrag = View.GetFragmentData<FTurboSequenceFragment>();
+        TSFrag.UpdateGroupIndex = DebugTurboSequenceUpdateGroupIndex;
+        TSFrag.Anim = DebugTurboSequenceAnim;
+        TSFrag.SpawnData = FTurboSequence_MeshSpawnData_Lf();
+        TSFrag.SpawnData.RootMotionMesh.Mesh = DebugTurboSequenceMeshAsset;
+
+        if (IsValid(TSFrag.SpawnData.RootMotionMesh.Mesh))
+        {
+            EntityManager.AddTagToEntity(Entity, FTurboSequenceTag::StaticStruct());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("EntityDebugSpawnerSubsystem: DebugTurboSequenceMeshAsset is not set/loaded. Skipping EnableTS for one entity."));
+        }
+    }
+}
+
+void UEntityDebugSpawnerSubsystem::ExecuteEnableTurboSequence(const TArray<FString>& Args)
+{
+    UWorld* World = ResolveActiveWorld();
+    if (!World) return;
+
+    if (auto* Subsystem = World->GetSubsystem<UEntityDebugSpawnerSubsystem>())
+    {
+        Subsystem->EnableTurboSequenceOnSpawnedEntities();
+        UE_LOG(LogTemp, Log, TEXT("Entity.EnableTS -> done"));
+    }
+}
+
+void UEntityDebugSpawnerSubsystem::MarkSpawnedEntitiesHidden()
+{
+    if (!MassEntitySubsystem)
+        return;
+
+    FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    for (const FMassEntityHandle& Entity : SpawnedEntities)
+    {
+        if (!Entity.IsValid())
+            continue;
+        EntityManager.AddTagToEntity(Entity, FHiddenTag::StaticStruct());
+    }
+}
+
+void UEntityDebugSpawnerSubsystem::ExecuteMarkTSForCleanup(const TArray<FString>& Args)
+{
+    UWorld* World = ResolveActiveWorld();
+    if (!World) return;
+
+    if (auto* Subsystem = World->GetSubsystem<UEntityDebugSpawnerSubsystem>())
+    {
+        Subsystem->MarkSpawnedEntitiesHidden();
+        UE_LOG(LogTemp, Log, TEXT("Entity.Hide -> done"));
+    }
 }
