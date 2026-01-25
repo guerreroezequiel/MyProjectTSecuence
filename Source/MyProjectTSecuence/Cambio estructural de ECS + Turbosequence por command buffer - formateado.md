@@ -35,7 +35,7 @@ y **vos** tenés que add/remove cuando agregás/removés instancias. :contentRef
 ### 1.1 Fragments (por entidad)
 **A) `FTurboSequenceFragment`**
 - `FTurboSequence_MeshSpawnData_Lf SpawnData` (o lo mínimo para spawn)
-- `TObjectPtr<UAnimSequence> Anim` (opcional si definís anim por entidad)
+- `TObjectPtr<UAnimSequence> Anim` (definís anim por entidad)
 - `FTurboSequence_AnimPlaySettings_Lf AnimSettings`
 - `FTurboSequence_MinimalMeshData_Lf Instance` (handle TS)
 - `int32 UpdateGroupIndex` (0..N)
