@@ -211,3 +211,132 @@ El sistema se considera completo cuando:
 - El solver consume exclusivamente `TileStaticData`.
 - No existen rebuilds forzados manuales.
 - El consumo de FlowFields está desacoplado del solver.
+
+---
+
+## 10. ECS (Mass) + TurboSequence — Contratos (MVP)
+**Rol:** Consumo por entidad de FlowField + movimiento determinista + sincronización de render/animación vía TurboSequence.
+
+### Fuentes de verdad
+- Headers públicos: `Source/MyProjectTSecuence/Public/ECS/*`
+- El FlowField se consume vía `FlowFieldStorage` (RO) y nunca se recalcula por entidad.
+
+### Ownership (regla base)
+- ECS/Mass es dueño del estado por entidad (Transform, velocidad, intención, vida).
+- FlowField es dueño del `DirectionField` por tile/celda (ECS solo lee snapshots).
+- TurboSequence es dueño del render/animación; ECS solo sincroniza instancias y transforms.
+
+---
+
+## 10.1 Tags (marcadores)
+**Rol:** Filtrado explícito de entidades para cada pipeline.
+
+### Contrato
+- `FZombiTag` (`Public/ECS/Tags/ZombiTag.h`) identifica el set principal del MVP.
+- `FTurboSequenceTag` (`Public/ECS/Tags/TurboSequenceTag.h`) habilita el pipeline de TurboSequence.
+- `FHiddenTag` (`Public/ECS/Tags/HiddenTag.h`) representa estado “no visible” a nivel ECS.
+- `FTSPendingCleanupTag` (`Public/ECS/Tags/TSPendingCleanupTag.h`) marca entidades para limpieza diferida (si se usa).
+
+### Reglas
+- Los Processors de TurboSequence no deben tocar entidades sin `FTurboSequenceTag`.
+- Si una entidad pierde `FTurboSequenceTag`, debe converger a “sin instancia TS” sin dejar handles colgados.
+
+---
+
+## 10.2 Fragments (contratos de datos)
+
+### 10.2.1 CellLocationFragment.h
+**Rol:** Ubicación en grilla por entidad.
+
+### Responsabilidades
+- Mantener `TileXY`, `CellIndex` y `bValid` (`Public/ECS/Fragments/CellLocationFragment.h`).
+
+### Contrato
+- `CellIndex` es tile-local.
+- `bValid=false` implica que no se puede consumir FlowField para esa entidad.
+
+### 10.2.2 FlowReadFragment.h
+**Rol:** Cache liviano del resultado de lectura del FlowField.
+
+### Responsabilidades
+- Almacenar `DirWS`, `EpochSeen`, `bValid` y fallback (`CachedLastValidDirWS`, `FallbackFramesLeft`) (`Public/ECS/Fragments/FlowReadFragment.h`).
+
+### Contrato
+- `EpochSeen` proviene del storage (fuente única) y se usa solo como validez/telemetría.
+- Si `bValid=false`, el consumer debe tener fallback seguro (Idle / 0 / cached dir según reglas del proyecto).
+
+### 10.2.3 MoveFragment.h
+**Rol:** Parámetros mínimos de movimiento.
+
+### Contrato
+- `Speed` (`Public/ECS/Fragments/MoveFragment.h`) es la velocidad base; el movimiento se integra en base a `DirWS`.
+
+### 10.2.4 TileLODFragment.h
+**Rol:** LOD de simulación por entidad (derivado de tile/criterios del proyecto).
+
+### Contrato
+- `ETileLOD` (`Hot/Warm/Cold`) (`Public/ECS/Fragments/TileLODFragment.h`) guía degradación de frecuencia/costo.
+
+### 10.2.5 TurboSequenceFragment.h
+**Rol:** Estado mínimo para representar una entidad con TurboSequence.
+
+### Responsabilidades
+- Mantener:
+  - `SpawnData`, `Anim`, `AnimSettings`, `Instance`, `UpdateGroupIndex`, `bHasInstance` (`Public/ECS/Fragments/TurboSequenceFragment.h`).
+
+### Invariante
+- `bHasInstance == true` es el único indicador permitido para tratar `Instance` como válido.
+
+---
+
+## 10.3 Processors (pipeline ECS)
+**Rol:** Ejecutar un pipeline determinista por frame (o por LOD) sin work pesado por entidad.
+
+### Orden lógico (MVP)
+1. `UUpdateCellLocationProcessor` (`Public/ECS/Processors/UpdateCellLocationProcessor.h`)
+2. `UFlowDirReadPlayersProcessor` (`Public/ECS/Processors/FlowDirReadPlayersProcessor.h`)
+3. `UMoveIntegrateProcessor` (`Public/ECS/Processors/MoveIntegrateProcessor.h`)
+4. `UTileLODUpdateProcessor` (`Public/ECS/Processors/TileLODUpdateProcessor.h`) (si aplica)
+
+### Contrato clave
+- `UFlowDirReadPlayersProcessor` solo lee `Intent::Players` en el MVP y escribe `FFlowReadFragment`.
+- `UMoveIntegrateProcessor` debe tener fallback seguro si `FFlowReadFragment.bValid == false`.
+
+---
+
+## 10.4 TurboSequenceECSSubsystem (bridge mínimo)
+**Rol:** Asegurar el Manager de TurboSequence y exponer el Solve por grupo.
+
+### Contrato
+- `EnsureManager_GameThread()` (`Public/ECS/Subsystems/TurboSequenceECSSubsystem.h`):
+  - Solo GameThread.
+  - Find/spawn + cache de `ATurboSequence_Manager_Lf`.
+- `SolveGroup_GameThread(DeltaTime, GroupIndex)`:
+  - Solo GameThread.
+  - Resuelve exactamente para ese `GroupIndex`.
+
+### Invariante
+- En cualquier frame donde se ejecute Solve, existe exactamente un `ATurboSequence_Manager_Lf` válido en el `World`.
+
+---
+
+## 10.5 TurboSequence Processors (lifecycle por entidad)
+**Rol:** Create/Update/Solve/Destroy de instancias TS siguiendo el modelo “Solve una vez por frame por grupo”.
+
+### Contrato (MVP)
+- Spawn: `UTurboSequenceSpawnProcessor` (`Public/ECS/Processors/TurboSequenceSpawnProcessor.h`).
+- Update: `UTurboSequenceUpdateProcessor` (`Public/ECS/Processors/TurboSequenceUpdateProcessor.h`).
+- Solve: `UTurboSequenceSolveProcessor` (`Public/ECS/Processors/TurboSequenceSolveProcessor.h`).
+- Destroy: `UTurboSequenceDestroyProcessor` (`Public/ECS/Processors/TurboSequenceDestroyProcessor.h`).
+
+### Reglas
+- Solve es **a lo sumo 1 vez por frame y por UpdateGroup**.
+- El orden lógico recomendado es: Spawn → Update → Solve → Destroy.
+
+---
+
+## 10.6 Debug (opcional)
+**Rol:** Herramientas de test/spawn y visualización.
+
+### Contrato
+- `UEntityDebugSpawnerSubsystem` (`Public/ECS/Debug/EntityDebugSpawnerSubsystem.h`) puede spawnear entidades de test y exponer control para debug.
