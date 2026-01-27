@@ -21,6 +21,7 @@
 #include "ECS/Fragments/TurboSequenceFragment.h"
 #include "ECS/Tags/TurboSequenceTag.h"
 #include "ECS/Tags/HiddenTag.h"
+#include "Engine/StaticMeshActor.h"
 
 TArray<FAutoConsoleCommand*> UEntityDebugSpawnerSubsystem::ConsoleCommands;
 
@@ -35,6 +36,17 @@ void UEntityDebugSpawnerSubsystem::Initialize(FSubsystemCollectionBase& Collecti
         DebugTurboSequenceMeshAsset = LoadObject<UTurboSequence_MeshAsset_Lf>(
             nullptr,
             TEXT("/Script/TurboSequence_Lf.TurboSequence_MeshAsset_Lf'/Game/Characters/Mannequins/TurboSequence/TS_Zombie_MeshAsset.TS_Zombie_MeshAsset'"),
+            nullptr,
+            LOAD_None,
+            nullptr
+        );
+    }
+
+    if (!IsValid(DebugVATStaticMesh))
+    {
+        DebugVATStaticMesh = LoadObject<UStaticMesh>(
+            nullptr,
+            TEXT("/Script/Engine.StaticMesh'/Game/Characters/Mannequins/AnimToTexture/SM_SM_MERGED_MAT_StaticZombie1.SM_SM_MERGED_MAT_StaticZombie1'"),
             nullptr,
             LOAD_None,
             nullptr
@@ -70,7 +82,20 @@ void UEntityDebugSpawnerSubsystem::Deinitialize()
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(DebugTimerHandle);
+        World->GetTimerManager().ClearTimer(VATTimerHandle);
     }
+
+    if (UWorld* World = GetWorld())
+    {
+        for (TWeakObjectPtr<AStaticMeshActor>& ActorPtr : VATActors)
+        {
+            if (ActorPtr.IsValid())
+            {
+                ActorPtr->Destroy();
+            }
+        }
+    }
+    VATActors.Reset();
 
     // Destroy any spawned entities only if the Mass subsystem is still valid
     if (IsValid(MassEntitySubsystem))
@@ -248,7 +273,20 @@ void UEntityDebugSpawnerSubsystem::ClearAllEntities()
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().ClearTimer(DebugTimerHandle);
+        World->GetTimerManager().ClearTimer(VATTimerHandle);
     }
+
+    if (UWorld* World = GetWorld())
+    {
+        for (TWeakObjectPtr<AStaticMeshActor>& ActorPtr : VATActors)
+        {
+            if (ActorPtr.IsValid())
+            {
+                ActorPtr->Destroy();
+            }
+        }
+    }
+    VATActors.Reset();
 
     FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
     for (const FMassEntityHandle& Entity : SpawnedEntities)
@@ -392,7 +430,14 @@ void UEntityDebugSpawnerSubsystem::RegisterConsoleCommands()
     );
     ConsoleCommands.Add(HideCmd);
 
-    UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister, Entity.EnableTS, Entity.Hide"));
+    auto EnableVATCmd = new FAutoConsoleCommand(
+        TEXT("Entity.EnableVAT"),
+        TEXT("Render VAT static mesh for all spawned debug entities. Usage: Entity.EnableVAT [StaticMeshPath]"),
+        FConsoleCommandWithArgsDelegate::CreateStatic(&UEntityDebugSpawnerSubsystem::ExecuteEnableVAT)
+    );
+    ConsoleCommands.Add(EnableVATCmd);
+
+    UE_LOG(LogTemp, Log, TEXT("EntityDebugSpawnerSubsystem: Commands ready -> Entity.Spawn, Entity.Clear, Entity.Debug, Entity.ReRegister, Entity.EnableTS, Entity.Hide, Entity.EnableVAT"));
 }
 
 void UEntityDebugSpawnerSubsystem::UnregisterConsoleCommands()
@@ -526,5 +571,127 @@ void UEntityDebugSpawnerSubsystem::ExecuteMarkTSForCleanup(const TArray<FString>
     {
         Subsystem->MarkSpawnedEntitiesHidden();
         UE_LOG(LogTemp, Log, TEXT("Entity.Hide -> done"));
+    }
+}
+
+void UEntityDebugSpawnerSubsystem::UpdateVATActors()
+{
+    UWorld* World = GetWorld();
+    if (!World || !MassEntitySubsystem)
+    {
+        return;
+    }
+
+    FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    const int32 N = FMath::Min(VATActors.Num(), SpawnedEntities.Num());
+    for (int32 Idx = 0; Idx < N; ++Idx)
+    {
+        AStaticMeshActor* Actor = VATActors[Idx].Get();
+        const FMassEntityHandle& Entity = SpawnedEntities[Idx];
+        if (!IsValid(Actor) || !Entity.IsValid())
+        {
+            continue;
+        }
+
+        FMassEntityView View(EntityManager, Entity);
+        if (const FTransformFragment* Transform = View.GetFragmentDataPtr<FTransformFragment>())
+        {
+            Actor->SetActorTransform(Transform->GetTransform());
+        }
+    }
+}
+
+void UEntityDebugSpawnerSubsystem::EnableVATOnSpawnedEntities(const FString& StaticMeshPath)
+{
+    UWorld* World = ResolveActiveWorld();
+    if (!World || !MassEntitySubsystem)
+    {
+        return;
+    }
+
+    UStaticMesh* MeshToUse = DebugVATStaticMesh;
+    if (!StaticMeshPath.IsEmpty())
+    {
+        if (UStaticMesh* Loaded = LoadObject<UStaticMesh>(nullptr, *StaticMeshPath, nullptr, LOAD_None, nullptr))
+        {
+            MeshToUse = Loaded;
+        }
+    }
+
+    if (!IsValid(MeshToUse))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Entity.EnableVAT: StaticMesh inválido (no cargó)"));
+        return;
+    }
+
+    FMassEntityManager& EntityManager = MassEntitySubsystem->GetMutableEntityManager();
+    if (VATActors.Num() < SpawnedEntities.Num())
+    {
+        VATActors.SetNum(SpawnedEntities.Num());
+    }
+
+    for (int32 i = 0; i < SpawnedEntities.Num(); ++i)
+    {
+        const FMassEntityHandle& Entity = SpawnedEntities[i];
+        if (!Entity.IsValid())
+        {
+            continue;
+        }
+
+        FMassEntityView View(EntityManager, Entity);
+        const FTransformFragment* TransformFrag = View.GetFragmentDataPtr<FTransformFragment>();
+        if (!TransformFrag)
+        {
+            continue;
+        }
+
+        AStaticMeshActor* Actor = VATActors[i].Get();
+        if (!IsValid(Actor))
+        {
+            Actor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), TransformFrag->GetTransform());
+            if (!IsValid(Actor))
+            {
+                continue;
+            }
+            VATActors[i] = Actor;
+            Actor->SetMobility(EComponentMobility::Movable);
+            if (UStaticMeshComponent* SMC = Actor->GetStaticMeshComponent())
+            {
+                SMC->SetStaticMesh(MeshToUse);
+                SMC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            }
+        }
+        else
+        {
+            Actor->SetActorTransform(TransformFrag->GetTransform());
+            if (UStaticMeshComponent* SMC = Actor->GetStaticMeshComponent())
+            {
+                if (SMC->GetStaticMesh() != MeshToUse)
+                {
+                    SMC->SetStaticMesh(MeshToUse);
+                }
+            }
+        }
+    }
+
+    UpdateVATActors();
+    World->GetTimerManager().ClearTimer(VATTimerHandle);
+    World->GetTimerManager().SetTimer(VATTimerHandle, this, &UEntityDebugSpawnerSubsystem::UpdateVATActors, 0.05f, true);
+}
+
+void UEntityDebugSpawnerSubsystem::ExecuteEnableVAT(const TArray<FString>& Args)
+{
+    UWorld* World = ResolveActiveWorld();
+    if (!World) return;
+
+    if (auto* Subsystem = World->GetSubsystem<UEntityDebugSpawnerSubsystem>())
+    {
+        FString Path;
+        if (Args.Num() > 0)
+        {
+            Path = Args[0];
+        }
+        Subsystem->EnableVATOnSpawnedEntities(Path);
+        UE_LOG(LogTemp, Log, TEXT("Entity.EnableVAT -> %s"), Path.IsEmpty() ? TEXT("default") : *Path);
     }
 }

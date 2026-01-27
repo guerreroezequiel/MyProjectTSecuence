@@ -11,7 +11,7 @@
 
 namespace
 {
-	constexpr float TurboSequenceYawOffsetDeg = -90.0f;
+	constexpr float TurboSequenceYawOffsetDeg_Spawn = -90.0f;
 }
 
 UTurboSequenceSpawnProcessor::UTurboSequenceSpawnProcessor()
@@ -62,7 +62,7 @@ void UTurboSequenceSpawnProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 			FTransform SpawnXf = Transforms[i].GetTransform();
 			FRotator R = SpawnXf.Rotator();
-			R.Yaw += TurboSequenceYawOffsetDeg;
+			R.Yaw += TurboSequenceYawOffsetDeg_Spawn;
 			SpawnXf.SetRotation(R.Quaternion());
 			Frag.Instance = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(Frag.SpawnData, SpawnXf, World);
 			if (Frag.Instance.IsMeshDataValid())

@@ -12,6 +12,7 @@
 #include "DrawDebugHelpers.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/GameModeBase.h"
+#include "Engine/StaticMesh.h"
 #include "ECS/Fragments/CellLocationFragment.h"
 #include "ECS/Fragments/FlowReadFragment.h"
 #include "ECS/Fragments/MoveFragment.h"
@@ -38,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "EntityDebugSpawner|TurboSequence")
 	int32 DebugTurboSequenceUpdateGroupIndex = 0;
 
+	UPROPERTY(EditAnywhere, Category = "EntityDebugSpawner|VAT")
+	TObjectPtr<UStaticMesh> DebugVATStaticMesh = nullptr;
+
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner")
 	void SpawnEntities(int32 Count = 10, float Radius = 1000.0f, FVector Origin = FVector::ZeroVector);
 
@@ -49,6 +53,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|TurboSequence")
 	void MarkSpawnedEntitiesHidden();
+
+	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|VAT")
+	void EnableVATOnSpawnedEntities(const FString& StaticMeshPath);
 
 	UFUNCTION(BlueprintCallable, Category = "EntityDebugSpawner|Debug")
 	void SetDebugVisualization(bool bEnable);
@@ -67,6 +74,7 @@ private:
     static void ExecuteToggleDebug(const TArray<FString>& Args);
     static void ExecuteReRegister(const TArray<FString>& Args);
 	static void ExecuteEnableTurboSequence(const TArray<FString>& Args);
+	static void ExecuteEnableVAT(const TArray<FString>& Args);
 
     // NUEVOS: declarar handlers de consola
     static void ExecuteMarkTSForCleanup(const TArray<FString>& Args);
@@ -77,6 +85,7 @@ private:
 	// Internal helpers
 	void SetupArchetype();
 	void UpdateDebugVisualization();
+	void UpdateVATActors();
 
 	// Cached Mass subsystem
 	UPROPERTY(Transient)
@@ -88,4 +97,6 @@ private:
 	float DebugSphereRadius = 50.0f;
 	FColor DebugSphereColor = FColor::Red;
 	FTimerHandle DebugTimerHandle;
+	FTimerHandle VATTimerHandle;
+	TArray<TWeakObjectPtr<class AStaticMeshActor>> VATActors;
 };

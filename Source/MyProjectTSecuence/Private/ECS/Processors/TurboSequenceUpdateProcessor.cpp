@@ -11,7 +11,7 @@
 
 namespace
 {
-	constexpr float TurboSequenceYawOffsetDeg = -90.0f;
+	constexpr float TurboSequenceYawOffsetDeg_Update = -90.0f;
 }
 
 UTurboSequenceUpdateProcessor::UTurboSequenceUpdateProcessor()
@@ -46,7 +46,7 @@ void UTurboSequenceUpdateProcessor::Execute(FMassEntityManager& EntityManager, F
 			{
 				FTransform Xf = Transforms[i].GetTransform();
 				FRotator R = Xf.Rotator();
-				R.Yaw += TurboSequenceYawOffsetDeg;
+				R.Yaw += TurboSequenceYawOffsetDeg_Update;
 				Xf.SetRotation(R.Quaternion());
 				ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(Frag.Instance, Xf, false);
 			}
