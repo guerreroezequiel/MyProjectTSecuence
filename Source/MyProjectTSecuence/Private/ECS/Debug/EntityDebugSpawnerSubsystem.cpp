@@ -14,6 +14,8 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "ECS/Fragments/ZombieStateFragment.h"
+#include "ECS/Fragments/AnimRequestFragment.h"
 #include "ECS/Fragments/TileLODFragment.h"
 #include "ECS/Fragments/TurboSequenceFragment.h"
 #include "ECS/Tags/TurboSequenceTag.h"
@@ -98,6 +100,8 @@ void UEntityDebugSpawnerSubsystem::SetupArchetype()
         FFlowReadFragment::StaticStruct(),
         FMoveFragment::StaticStruct(),
         FZombiCoreFragment::StaticStruct(),
+        FZombieStateFragment::StaticStruct(),
+        FAnimRequestFragment::StaticStruct(),
         FTileLODFragment::StaticStruct(),
         FTurboSequenceFragment::StaticStruct()
     };
@@ -160,6 +164,12 @@ void UEntityDebugSpawnerSubsystem::SpawnEntities(int32 Count, float Radius, FVec
 
             FInstancedStruct CoreIS; CoreIS.InitializeAs<FZombiCoreFragment>();
             FragmentList.Add(CoreIS);
+
+            FInstancedStruct StateIS; StateIS.InitializeAs<FZombieStateFragment>();
+            FragmentList.Add(StateIS);
+
+            FInstancedStruct AnimReqIS; AnimReqIS.InitializeAs<FAnimRequestFragment>();
+            FragmentList.Add(AnimReqIS);
 
             FInstancedStruct LODIS; LODIS.InitializeAs<FTileLODFragment>();
             FragmentList.Add(LODIS);

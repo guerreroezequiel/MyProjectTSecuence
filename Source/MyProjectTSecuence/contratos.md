@@ -287,6 +287,33 @@ El sistema se considera completo cuando:
 ### Invariante
 - `bHasInstance == true` es el único indicador permitido para tratar `Instance` como válido.
 
+### 10.2.6 ZombieStateFragment.h
+**Rol:** Estado gameplay mínimo por entidad (fuente de verdad para animación).
+
+### Responsabilidades
+- Mantener:
+  - `Loco` (`Idle|Walk|Run`)
+  - `Action` (`None|Attack|HitReact|Dead`)
+  - flags mínimos (ej. `bHasTarget`) (`Public/ECS/Fragments/ZombieStateFragment.h`).
+
+### Contrato
+- Se actualiza en **PrePhysics**.
+- No contiene lógica de TurboSequence.
+- Debe ser determinista (sin random por entidad).
+
+### 10.2.7 AnimRequestFragment.h
+**Rol:** Pedido de animación (Desired) para la capa TurboSequence con semántica “dirty”.
+
+### Responsabilidades
+- Mantener:
+  - `DesiredAnim`
+  - `DesiredPlayRate`
+  - `bDirty` (`Public/ECS/Fragments/AnimRequestFragment.h`).
+
+### Contrato
+- `bDirty=true` **solo** cuando cambia `DesiredAnim` o `DesiredPlayRate`.
+- El apply a TurboSequence debe limpiar `bDirty=false` cuando efectivamente aplicó.
+
 ---
 
 ## 10.3 Processors (pipeline ECS)
@@ -294,13 +321,15 @@ El sistema se considera completo cuando:
 
 ### Orden lógico (MVP)
 1. `UUpdateCellLocationProcessor` (`Public/ECS/Processors/UpdateCellLocationProcessor.h`)
-2. `UFlowDirReadPlayersProcessor` (`Public/ECS/Processors/FlowDirReadPlayersProcessor.h`)
-3. `UMoveIntegrateProcessor` (`Public/ECS/Processors/MoveIntegrateProcessor.h`)
-4. `UTileLODUpdateProcessor` (`Public/ECS/Processors/TileLODUpdateProcessor.h`) (si aplica)
+2. `UTileLODUpdateProcessor` (`Public/ECS/Processors/TileLODUpdateProcessor.h`) (si aplica)
+3. `UFlowDirReadPlayersProcessor` (`Public/ECS/Processors/FlowDirReadPlayersProcessor.h`)
+4. `UMoveIntegrateProcessor` (`Public/ECS/Processors/MoveIntegrateProcessor.h`)
+5. `UZombieStateUpdateProcessor` (`Public/ECS/Processors/ZombieStateUpdateProcessor.h`)
 
 ### Contrato clave
 - `UFlowDirReadPlayersProcessor` solo lee `Intent::Players` en el MVP y escribe `FFlowReadFragment`.
 - `UMoveIntegrateProcessor` debe tener fallback seguro si `FFlowReadFragment.bValid == false`.
+- `UZombieStateUpdateProcessor` lee velocidad/vida/validez de flow y escribe `FZombieStateFragment`.
 
 ---
 
@@ -326,12 +355,15 @@ El sistema se considera completo cuando:
 ### Contrato (MVP)
 - Spawn: `UTurboSequenceSpawnProcessor` (`Public/ECS/Processors/TurboSequenceSpawnProcessor.h`).
 - Update: `UTurboSequenceUpdateProcessor` (`Public/ECS/Processors/TurboSequenceUpdateProcessor.h`).
+- Anim Select: `UZombieAnimSelectProcessor` (`Public/ECS/Processors/ZombieAnimSelectProcessor.h`).
+- Anim Apply: `UTurboSequenceAnimApplyProcessor` (`Public/ECS/Processors/TurboSequenceAnimApplyProcessor.h`).
 - Solve: `UTurboSequenceSolveProcessor` (`Public/ECS/Processors/TurboSequenceSolveProcessor.h`).
 - Destroy: `UTurboSequenceDestroyProcessor` (`Public/ECS/Processors/TurboSequenceDestroyProcessor.h`).
 
 ### Reglas
 - Solve es **a lo sumo 1 vez por frame y por UpdateGroup**.
-- El orden lógico recomendado es: Spawn → Update → Solve → Destroy.
+- El orden lógico recomendado es: Spawn → Update → AnimSelect → AnimApply → Solve → Destroy.
+- `UTurboSequenceAnimApplyProcessor` solo llama `PlayAnimation_Concurrent` si `FAnimRequestFragment.bDirty == true`.
 
 ---
 
