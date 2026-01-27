@@ -55,8 +55,18 @@ void UTurboSequenceAnimApplyProcessor::Execute(FMassEntityManager& EntityManager
 			}
 
 			TS.AnimSettings.AnimationSpeed = Req.DesiredPlayRate;
-			ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(TS.Instance, Req.DesiredAnim, TS.AnimSettings);
-			TS.Anim = Req.DesiredAnim;
+
+			const bool bSameAnim = (TS.Anim == Req.DesiredAnim);
+			if (bSameAnim && TS.AnimData.IsAnimCollectionValid())
+			{
+				ATurboSequence_Manager_Lf::TweakAnimationCollection_Concurrent(TS.AnimSettings, TS.AnimData);
+			}
+			else
+			{
+				TS.AnimData = ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(TS.Instance, Req.DesiredAnim, TS.AnimSettings);
+				TS.Anim = Req.DesiredAnim;
+			}
+
 			Req.bDirty = false;
 		}
 	});

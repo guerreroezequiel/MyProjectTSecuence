@@ -9,6 +9,11 @@
 #include "MassExecutionContext.h"
 #include "TurboSequence_Manager_Lf.h"
 
+namespace
+{
+	constexpr float TurboSequenceYawOffsetDeg = -90.0f;
+}
+
 UTurboSequenceUpdateProcessor::UTurboSequenceUpdateProcessor()
 {
 	bAutoRegisterWithProcessingPhases = true;
@@ -39,7 +44,11 @@ void UTurboSequenceUpdateProcessor::Execute(FMassEntityManager& EntityManager, F
 			FTurboSequenceFragment& Frag = TSFrags[i];
 			if (Frag.bHasInstance && Frag.Instance.IsMeshDataValid())
 			{
-				ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(Frag.Instance, Transforms[i].GetTransform(), false);
+				FTransform Xf = Transforms[i].GetTransform();
+				FRotator R = Xf.Rotator();
+				R.Yaw += TurboSequenceYawOffsetDeg;
+				Xf.SetRotation(R.Quaternion());
+				ATurboSequence_Manager_Lf::SetMeshWorldSpaceTransform_Concurrent(Frag.Instance, Xf, false);
 			}
 		}
 	});

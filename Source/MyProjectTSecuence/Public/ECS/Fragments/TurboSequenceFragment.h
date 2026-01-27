@@ -13,6 +13,7 @@ struct MYPROJECTTSECUENCE_API FTurboSequenceFragment : public FMassFragment
 	FTurboSequence_MeshSpawnData_Lf SpawnData;
 	TObjectPtr<UAnimSequence> Anim = nullptr;
 	FTurboSequence_AnimPlaySettings_Lf AnimSettings;
+	FTurboSequence_AnimMinimalCollection_Lf AnimData;
 	FTurboSequence_MinimalMeshData_Lf Instance;
 	int32 UpdateGroupIndex = 0;
 	bool bHasInstance = false;

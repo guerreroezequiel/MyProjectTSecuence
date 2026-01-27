@@ -9,6 +9,11 @@
 #include "MassExecutionContext.h"
 #include "TurboSequence_Manager_Lf.h"
 
+namespace
+{
+	constexpr float TurboSequenceYawOffsetDeg = -90.0f;
+}
+
 UTurboSequenceSpawnProcessor::UTurboSequenceSpawnProcessor()
 {
 	bAutoRegisterWithProcessingPhases = true;
@@ -55,12 +60,15 @@ void UTurboSequenceSpawnProcessor::Execute(FMassEntityManager& EntityManager, FM
 				continue;
 			}
 
-			const FTransform SpawnXf = Transforms[i].GetTransform();
+			FTransform SpawnXf = Transforms[i].GetTransform();
+			FRotator R = SpawnXf.Rotator();
+			R.Yaw += TurboSequenceYawOffsetDeg;
+			SpawnXf.SetRotation(R.Quaternion());
 			Frag.Instance = ATurboSequence_Manager_Lf::AddSkinnedMeshInstance_GameThread(Frag.SpawnData, SpawnXf, World);
 			if (Frag.Instance.IsMeshDataValid())
 			{
 				ATurboSequence_Manager_Lf::AddInstanceToUpdateGroup_Concurrent(Frag.UpdateGroupIndex, Frag.Instance);
-				ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(Frag.Instance, Frag.Anim, Frag.AnimSettings);
+				Frag.AnimData = ATurboSequence_Manager_Lf::PlayAnimation_Concurrent(Frag.Instance, Frag.Anim, Frag.AnimSettings);
 				Frag.bHasInstance = true;
 			}
 			else
